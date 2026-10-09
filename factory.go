@@ -42,7 +42,7 @@ type Factory struct {
 	// Optional behaviour. Zero values give the defaults.
 
 	Instructions        string                         // extra agent instructions, added to the engine's prompt
-	BranchName          func(t *tracker.Ticket) string // nil = "github.com/Tight-Line/heinzel/<key>-<slugged title>"
+	BranchName          func(t *tracker.Ticket) string // nil = "heinzel/<key>-<slugged title>"
 	EnvName             func(t *tracker.Ticket) string // nil = "hz-<factory>-<key>"; must be a DNS label
 	Gates               []Step                         // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step

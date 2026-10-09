@@ -1,6 +1,6 @@
 # Heinzel
 
-*Specification — draft v0.2*
+*Specification — draft v0.3*
 
 > *Heinzelmännchen: the little house gnomes said to have done all the work of
 > the citizens of Cologne during the night, so the inhabitants could be lazy
@@ -24,14 +24,14 @@ func main() {
 		Name:    "blanktracker",
 		Tracker: trello.New(trello.Options{Board: "5f1a2b3c4d", Token: heinzel.Env("TRELLO_TOKEN")}),
 		Repos: []heinzel.Repo{{
-			Name: "blanktracker", TargetBranch: "staging",
-			Forge: gitlab.New(gitlab.Options{Project: "acme/blanktracker", Token: heinzel.Env("GITLAB_TOKEN")}),
+			Name: "app", TargetBranch: "develop",
+			Forge: gitlab.New(gitlab.Options{Project: "blanktracker/app", Token: heinzel.Env("GITLAB_TOKEN")}),
 		}},
 		Agent:       claudecode.New(claudecode.Options{Model: "claude-opus-5-5"}),
 		Environment: digitalocean.New(digitalocean.Options{Region: "fra1", Size: "s-2vcpu-4gb"}),
 		Deployers: []heinzel.Deployer{
-			{Name: "api", Repo: "blanktracker", Deployer: dockercompose.New(dockercompose.Options{Dir: "api"})},
-			{Name: "web", Repo: "blanktracker", Deployer: mycompany.SPADeployer{}}, // the team's own code
+			{Name: "api", Repo: "app", Deployer: dockercompose.New(dockercompose.Options{Files: []string{"vibe.docker-compose.yaml"}})},
+			{Name: "web", Repo: "app", Deployer: mycompany.SPADeployer{}}, // the team's own code
 		},
 		Notifiers: []heinzel.Notifier{{On: notify.Finished, Notifier: slack.New(heinzel.Env("SLACK_WEBHOOK"))}},
 	})
@@ -59,6 +59,11 @@ factory, and tests it end to end, so a team never has to learn Heinzel itself.
 - Pluggable at every edge: trigger, tracker, forge, agent, environment, DNS,
   deploy, notify. Teams can write their own component for any of them without
   forking Heinzel.
+- **The factory adapts to the app, not the other way round.** Heinzel builds
+  and deploys an app the way the team already does: their compose files,
+  their build scripts, their hosting. Installing Heinzel on a project may need
+  a few small changes to the app, never a restructuring. Anything specific to
+  previews (an override file, a `.env` template) lives in the factory.
 - Type-safe configuration: a factory is Go code, so wiring mistakes are
   compile errors, and `Main` reports the rest (missing repos, missing
   environment variables, …) all at once before doing anything.
@@ -94,42 +99,65 @@ harder, so it's out of scope until we choose to revisit it.
 | Tracker | Trello | Jira | Jira |
 | Forge | GitLab | Forgejo (self-hosted) | GitHub |
 | Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser |
-| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS on a separate preview domain | Folder + nginx vhost on a shared server | New scratch org per ticket |
-| Deploy | API: `docker compose up` on the droplet over SSH. SPA: build with the preview API URL, `wrangler pages deploy` as a Pages preview | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data |
+| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket |
+| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data |
+| Human steps | add the environment's OAuth redirect URIs in Google Cloud Console | — | — |
 | Trigger | CLI + Trello Power-Up button | CLI | CLI (Jira trigger later) |
-| Notify | Trello comment + chat | Jira comment + chat | Jira comment + chat |
+| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat |
 
 Any design decision that makes one column awkward is wrong.
 
 ### Scenario A in more detail
 
-BlankTracker is one repository with two deployable parts: a Laravel API, and
-an SPA hosted on Cloudflare Pages. Production is `app.blanktracker.com`,
-staging is `dev.blanktracker.com`. A preview environment needs both parts, and
-each must know the other's URL: the SPA is built with the API URL, and the API
-needs the SPA URL for CORS and Sanctum.
+BlankTracker is one GitLab repository (`blanktracker/app`) holding a Laravel
+API with a Nova admin, and a Vue SPA, both at the repository root. Work merges
+into `develop`; `master` is production. Every deployed environment
+(production, staging, vibe) is three hostnames: the SPA on Cloudflare Workers
+static assets, and `api` and `nova`, which both reach one Docker Compose stack
+on a droplet. A preview environment looks like this:
 
 | Part | Where | URL |
 |---|---|---|
-| API | new droplet, `docker compose` | `https://<env>-api.blanktracker-preview.com` (A record to the droplet) |
-| SPA | Pages preview deploy, in a Pages project used only for previews | `https://<env>.blanktracker-preview.com` (CNAME to the preview's `pages.dev` URL, registered as a custom domain on the Pages project) |
+| API and Nova | new droplet, the repository's own `vibe.docker-compose.yaml` | `https://<env>-api.blanktracker.com`, `https://<env>-nova.blanktracker.com` (proxied A records to the droplet) |
+| SPA | preview alias `<env>` of `blanktracker-frontend-preview`, a Worker used only for previews | `https://<env>-blanktracker-frontend-preview.<account>.workers.dev` |
 
 - **All URLs are decided in `provision_environment`, before any deploy**
-  (`env.Environment.Endpoints`). So the two deployers don't depend on each
-  other's output, and their order doesn't matter.
-- **The SPA is built by Heinzel, not by Pages.** Pages settings apply to all
-  previews at once, so a Pages-side build can't get a different API URL per
-  branch.
-- **Previews use a separate domain, `blanktracker-preview.com`.** Sanctum cookie
-  auth needs the SPA and API on a shared parent domain. If previews lived
-  under `blanktracker.com`, browsers of anyone logged into production would
-  send production session cookies to preview code nobody has reviewed yet,
-  and previews could overwrite production's cookies. On a separate domain,
-  previews set `SESSION_DOMAIN=.blanktracker-preview.com` and only share
-  cookies with each other. Both names are one level below the domain, so
-  Cloudflare's free Universal SSL certificate covers them.
-- **Cloudflare proxies both records**, so it serves HTTPS and the droplet only
-  needs plain HTTP, or a free Cloudflare origin certificate.
+  (`env.Environment.Endpoints`). A Workers preview alias URL is predictable,
+  so the SPA's URL is too. The two deployers don't depend on each other's
+  output, and their order doesn't matter.
+- **The SPA is built by Heinzel, with the team's own script.** The deployer
+  runs `cloudflare-build.sh` with the variables Cloudflare's CI would set
+  (`API_URL`, `NOVA_URL`, `WORKERS_CI_COMMIT_SHA`) and uploads with
+  `--name blanktracker-frontend-preview`, so `wrangler.jsonc` is used as it is.
+  Workers Builds can't do this: it bakes one API URL into every branch.
+- **The SPA stays on `workers.dev`.** Preview aliases can't have a custom
+  domain, and the SPA doesn't need one: it authenticates with a Sanctum token,
+  not a cookie, and the API allows any origin.
+- **The API and Nova need hostnames in the production zone.** An HTTPS SPA
+  can't call a plain-HTTP API, and Google rejects redirect URIs on bare IPs.
+  Names are one level deep (`<env>-api`, not `api.<env>`), which Cloudflare's
+  free Universal SSL certificate covers. This is safe because production sets
+  no `SESSION_DOMAIN`, so its cookies are host-only and never reach a preview.
+  A Cloudflare token can't be limited to some records of a zone, so
+  `dns/cloudflare` refuses any name outside `hz-*`: a bug must not be able to
+  rewrite `api.blanktracker.com`.
+- **TLS to the droplet.** The zone is in Full (strict) mode with proxied
+  records, so the droplet needs a certificate Cloudflare trusts. One
+  Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
+  Heinzel host, and `deploy/dockercompose` adds a TLS proxy in front of the
+  stack's own nginx.
+- **Previews are cheap and quiet.** The compose stack reads `.env`, which the
+  deployer writes from a template in the factory: no third-party API keys,
+  `ONSOCIAL_DISABLED` and `SCRAPECREATORS_DISABLED` set, mail to the log. An
+  override file drops the `cron` service, because the nightly schedule calls
+  paid APIs. Postgres runs in the stack, seeded from the dump the repository
+  already uses for vibe.
+- **Google login needs a human.** Login is Google OAuth, through a dedicated
+  "previews" OAuth client. Google has no API for adding redirect URIs, so each
+  new environment produces a [human action](#human-actions) asking someone to
+  add its two callback URLs. The agent doesn't need Google login: it creates a
+  Sanctum token with `artisan tinker` over SSH.
+- **The app needs no changes.** See §12.4.
 
 ### Scenario C in more detail
 
@@ -176,6 +204,9 @@ The agent has three ways to handle a change, in order of preference:
   Step names are typed constants (`heinzel.StepDeploy`).
 - **Gate.** An optional pause before a step. The run waits in
   `awaiting_approval` until someone runs `approve`.
+- **Action.** Something a human must do for an environment that Heinzel
+  can't, such as registering its URLs with a third party. It may hold back a
+  later step until someone confirms it's done ([Human actions](#human-actions)).
 
 ### Pipeline
 
@@ -211,7 +242,7 @@ when no deployer implements `Retriever`).
 |---|---|---|
 | `fetch_ticket` | `Tracker.Fetch`; optionally move the ticket to "in progress" | `Ticket` |
 | `prepare_workspace` | clone every repo side by side, create the run branch in each from its target branch and push it, so the agent can push to it | `Branch`, base commits |
-| `provision_environment` | `Provisioner.Ensure`, then compute the factory's endpoint URLs and create their DNS records (`dns.Provider.Ensure`) | `Environment` (with `Endpoints`) |
+| `provision_environment` | `Provisioner.Ensure`, then compute the factory's endpoint URLs and create their DNS records (`dns.Provider.Ensure`). Collect the environment's [human actions](#human-actions) and emit `run.action_required` for each new one | `Environment` (with `Endpoints` and `Actions`) |
 | `deploy_base` | every deployer, in order, deploys its repo's unchanged branch, so the environment starts identical to the target branches | `Deployments` |
 | `implement` | `Agent.Implement` in the workspace (all repos), with `Task.Environment` set. The agent loops: edit, commit, push, deploy, test (see [Agent loop](#agent-loop)) | `Outcome`, `Deployments` (latest) |
 | `retrieve` | each deployer that implements `Retriever` pulls changes made directly in the environment (e.g. Salesforce clicks) into its repo's checkout. Skipped if none does | — |
@@ -250,8 +281,50 @@ records every deployment in the run state and only one process ever writes
 `run.json`.
 
 Notifications are **events**, not a step. The engine emits `run.started`,
-`run.succeeded`, `run.failed`, `run.needs_input` and `run.awaiting_approval`.
-Each notifier is subscribed to a set of these.
+`run.succeeded`, `run.failed`, `run.needs_input`, `run.awaiting_approval` and
+`run.action_required`. Each notifier is subscribed to a set of these.
+
+### Human actions
+
+*Planned for M1; not in the code yet.*
+
+Some environments can't be finished by software. BlankTracker's previews need
+their OAuth redirect URIs added in Google Cloud Console, which has no API for
+it. A Salesforce sandbox lease might need an admin's approval. Heinzel
+supports this as **actions**: requests for a human, raised while the
+environment is provisioned.
+
+```go
+// package env
+type Action struct {
+	ID     string `json:"id"`     // stable per environment; makes notifying and confirming idempotent
+	Title  string `json:"title"`
+	Body   string `json:"body"`   // CommonMark: exactly what to do
+	Before string `json:"before"` // step that waits until it's done; "" = notify only
+}
+// Environment.Actions []Action is set by the Provisioner, for needs of the provider.
+
+// package heinzel: needs of the app, added to the provisioner's.
+EnvironmentActions func(e *env.Environment) []env.Action // Factory field
+```
+
+1. At the end of `provision_environment`, the engine collects the actions
+   and emits `run.action_required` once for each one it hasn't announced
+   before. The run carries on, so the human works while the agent does.
+2. When the run reaches an action's `Before` step and nobody has confirmed the
+   action, the run waits in `awaiting_approval`, exactly like a gate.
+   `approve <run-id>` confirms every pending action. Later, a button in Trello
+   or Slack can do the same through the trigger's `Dispatcher`.
+3. Confirmations are kept per environment name. A new run that reuses the
+   environment doesn't ask again.
+4. The actions, and whether they're done, are listed in the MR description and
+   in `publish`'s report. `env destroy` prints them as a reminder to undo
+   them (remove the redirect URIs).
+
+Pick `Before` by who needs the result. The agent never needs Google login on
+a BlankTracker preview, so that action holds back only `publish`, which tells
+testers the environment is ready. An environment the agent can't use without
+the human holds back `implement`.
 
 ### Run status
 
@@ -263,7 +336,7 @@ stateDiagram-v2
     running --> succeeded
     running --> failed : error
     running --> needs_input : question
-    running --> awaiting_approval : gate
+    running --> awaiting_approval : gate or action
     failed --> running : resume
     needs_input --> running : resume
     awaiting_approval --> running : approve
@@ -296,7 +369,7 @@ and the plain data types around it.
 | [`tracker`](./tracker/tracker.go) | `Tracker` + optional `StageMover`, `Linker`, `AttachmentFetcher`; `Ticket`, `TicketRef`, `Stage` | core |
 | [`forge`](./forge/forge.go) | `Forge` + optional `ChangeRequestUpdater`; `GitRemote`, `ChangeRequest`, `ChangeRequestInput` | core |
 | [`agent`](./agent/agent.go) | `Agent`; `Task`, `Checkout`, `Outcome`, `Usage` | tracker, env |
-| [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`), `Host`, `SSHAccess` | — |
+| [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`), `Host`, `SSHAccess`, `Action` (*planned*) | — |
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
 | [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
@@ -311,7 +384,7 @@ imports them.
 ### Where components go
 
 A component lives under the interface it implements: `forge/gitlab`,
-`env/digitalocean`, `dns/cloudflare`, `deploy/cfpages`, `notify/ticket`. A
+`env/digitalocean`, `dns/cloudflare`, `deploy/cfworkers`, `notify/ticket`. A
 component that implements several interfaces lives under the one it's mainly
 about: `deploy/sshnginx` and `deploy/scratchorg` are also `env.Provisioner`s.
 Each component package has a `New(Options)` constructor, and a factory only
@@ -378,6 +451,11 @@ These rules keep the interfaces from fighting each other:
 9. **The public API is versioned.** Factories outside this repository depend on
    these interfaces, so they only change in a new minor version while we're
    at v0.x, and are frozen at v1.
+10. **Components take the app as it is.** A component's options point at what
+    the team already has (a compose file, a build script, a `wrangler.jsonc`)
+    and layer previews on top: files the component writes outside git,
+    environment variables, name overrides. A component that only works if the app is
+    restructured for it is the wrong component.
 
 ### Behaviour the types alone don't show
 
@@ -390,6 +468,14 @@ These rules keep the interfaces from fighting each other:
   left over. Anything it couldn't do goes in `Outcome.ManualSteps`. Browser
   access, MCP servers and skills are options of the agent component, not
   interface.
+- **The repo's own agent instructions.** Most `CLAUDE.md` / `AGENTS.md` files
+  are written for a person working with an agent by hand: "push to `vibe` to
+  deploy", "ask before every git operation". Heinzel can't expect teams to
+  change them. The agent component therefore gives Heinzel's workflow the
+  highest priority it can (for Claude Code: the system prompt, not the user
+  prompt) and says that it replaces any branching, deploying or
+  confirmation rules in the project's instructions. Everything else in them,
+  such as coding conventions and how to run the tests, still applies.
 - **Several repos.** Each repo has its own forge, so one factory can span
   GitLab and GitHub. The agent sees all checkouts (`Task.Repos`). Each
   deployer is bound to one repo and gets that repo's `Source`.
@@ -400,7 +486,10 @@ These rules keep the interfaces from fighting each other:
 - **DNS.** For each endpoint with a `DNSTarget`, the engine calls
   `dns.Provider.Ensure` with the endpoint URL's host. Records are identified
   by name, so teardown needs no stored state. Provider options like Cloudflare
-  proxying are component options.
+  proxying are component options. A provider working in a zone that also
+  holds production records takes a guard option (`AllowedNames: "hz-*"`) and
+  refuses every other name, because DNS tokens usually can't be scoped to
+  single records.
 - **Env + deploy in one component.** `deploy/sshnginx` and
   `deploy/scratchorg` implement both `env.Provisioner` and `deploy.Deployer`.
   The factory passes the same value to `Environment` and to a `Deployer`.
@@ -413,6 +502,10 @@ These rules keep the interfaces from fighting each other:
 - **Triggers belong to a factory.** Each trigger gets a `Dispatcher` scoped to
   its factory, and `serve` mounts its HTTP handlers under
   `/triggers/<factory>/<trigger>/`.
+- **Actions.** A provisioner, or the factory, asks a human to do something the
+  environment needs ([Human actions](#human-actions)). Unlike
+  `Outcome.ManualSteps`, which arrive at the end of a run, actions are raised
+  while the environment is set up, and can hold back a later step.
 - **Errors.** `core.NeedsInputError` makes the engine post the question on the
   ticket, set the run to `needs_input` and emit `run.needs_input`.
   `core.RetryableError` makes the engine retry the step with backoff. Any
@@ -430,14 +523,19 @@ lists every missing one at once and exits before doing anything.
 ### Scenario A: BlankTracker
 
 The component packages below are planned (§10); their options are a sketch.
+`EnvironmentActions` is planned too ([Human actions](#human-actions)).
 
 ```go
 package main
 
 import (
+	_ "embed"
+	"strings"
+
 	"github.com/Tight-Line/heinzel"
 	"github.com/Tight-Line/heinzel/agent/claudecode"
-	"github.com/Tight-Line/heinzel/deploy/cfpages"
+	"github.com/Tight-Line/heinzel/deploy"
+	"github.com/Tight-Line/heinzel/deploy/cfworkers"
 	"github.com/Tight-Line/heinzel/deploy/dockercompose"
 	"github.com/Tight-Line/heinzel/dns/cloudflare"
 	"github.com/Tight-Line/heinzel/env"
@@ -451,7 +549,23 @@ import (
 	"github.com/Tight-Line/heinzel/trigger/trellopowerup"
 )
 
-const previewDomain = "blanktracker-preview.com"
+const (
+	zone          = "blanktracker.com"
+	previewWorker = "blanktracker-frontend-preview" // a Worker used only for previews
+	workersDomain = "blanktracker.workers.dev"      // the account's workers.dev subdomain
+)
+
+// Settings for every preview: no third-party API keys, paid integrations
+// switched off, mail to the log. The deployer adds the per-environment values.
+//
+//go:embed preview.env
+var previewEnv string
+
+// Applied on top of the repository's vibe.docker-compose.yaml. Drops the cron
+// service, because the nightly schedule calls paid APIs.
+//
+//go:embed preview.override.yaml
+var previewOverride string
 
 func main() {
 	board := trello.New(trello.Options{
@@ -469,75 +583,126 @@ func main() {
 		Name:    "blanktracker",
 		Tracker: board,
 		Repos: []heinzel.Repo{{
-			Name:         "blanktracker",
-			TargetBranch: "staging",
+			Name:         "app",
+			TargetBranch: "develop",
 			Forge: gitlab.New(gitlab.Options{
-				Project: "acme/blanktracker",
+				Project: "blanktracker/app",
 				Token:   heinzel.Env("GITLAB_TOKEN"),
 			}),
 		}},
-		Agent:        claudecode.New(claudecode.Options{Model: "claude-opus-5-5", MaxTurns: 200}),
-		Instructions: "Laravel API in api/, SPA in web/. Run the tests of every part you change.",
+		Agent: claudecode.New(claudecode.Options{Model: "claude-opus-5-5", MaxTurns: 200}),
+		Instructions: "Run `./toolkit check` before you finish. Google login doesn't work for you on the " +
+			"environment: log in with a Sanctum token created with `artisan tinker` over SSH.",
+		EnvName: func(t *tracker.Ticket) string { return "hz-" + strings.ToLower(t.Key) }, // Trello shortLink
 
 		Environment: digitalocean.New(digitalocean.Options{
 			Token:              heinzel.Env("DO_TOKEN"),
 			Region:             "fra1",
-			Size:               "s-2vcpu-4gb",
+			Size:               "s-2vcpu-4gb", // the first build compiles every PHP extension
 			Image:              "docker-24-04",
 			SSHKeyFingerprints: []string{"ab:cd:…"},
 		}),
 		DNS: cloudflare.New(cloudflare.Options{
-			Token:   heinzel.Env("CLOUDFLARE_DNS_TOKEN"), // DNS edit on the preview zone only
-			Zone:    previewDomain,
-			Proxied: true,
+			Token:        heinzel.Env("CLOUDFLARE_DNS_TOKEN"),
+			Zone:         zone,
+			Proxied:      true,
+			AllowedNames: "hz-*", // the production zone: never touch any other record
 		}),
 		Endpoints: []heinzel.Endpoint{
 			{Name: "api", URL: previewURL("-api"), DNS: heinzel.HostAddress(0)},
-			{Name: "web", URL: previewURL(""), DNS: heinzel.CNAME(func(e *env.Environment) string {
-				return e.Name + ".blanktracker-previews.pages.dev"
-			})},
+			{Name: "nova", URL: previewURL("-nova"), DNS: heinzel.HostAddress(0)},
+			{Name: "web", URL: func(e *env.Environment) string {
+				return "https://" + e.Name + "-" + previewWorker + "." + workersDomain
+			}},
+		},
+		EnvironmentActions: func(e *env.Environment) []env.Action {
+			return []env.Action{{
+				ID:    "google-oauth",
+				Title: "Allow Google login on " + e.Name,
+				Body: "In Google Cloud Console, open the **BlankTracker previews** OAuth client and add " +
+					"these authorized redirect URIs:\n\n" +
+					"- " + e.Endpoints["api"] + "/auth/google/callback\n" +
+					"- " + e.Endpoints["api"] + "/api/auth/google/callback\n",
+				Before: string(heinzel.StepPublish), // only testers need it, the agent doesn't
+			}}
 		},
 		Deployers: []heinzel.Deployer{
-			{Name: "api", Repo: "blanktracker", Deployer: dockercompose.New(dockercompose.Options{
-				Dir:   "api",
-				Files: []string{"docker-compose.yml", "docker-compose.preview.yml"},
+			{Name: "api", Repo: "app", Deployer: dockercompose.New(dockercompose.Options{
+				Files:    []string{"vibe.docker-compose.yaml"}, // the team's own, unchanged
+				Override: previewOverride,
+				EnvFile:  previewEnv,
 				Env: func(e *env.Environment) map[string]string {
 					return map[string]string{
-						"APP_URL":        e.Endpoints["api"],
-						"FRONTEND_URL":   e.Endpoints["web"],
-						"SESSION_DOMAIN": "." + previewDomain,
+						"APP_URL":              e.Endpoints["api"],
+						"FRONTEND_URL":         e.Endpoints["web"],
+						"GOOGLE_REDIRECT_HOST": e.Endpoints["api"],
+						"GOOGLE_CLIENT_ID":     heinzel.Env("PREVIEW_GOOGLE_CLIENT_ID"),
+						"GOOGLE_CLIENT_SECRET": heinzel.Env("PREVIEW_GOOGLE_CLIENT_SECRET"),
 					}
 				},
-				PostDeploy: []dockercompose.Exec{{Service: "app", Command: "php artisan migrate --force --seed"}},
-			})},
-			{Name: "web", Repo: "blanktracker", Deployer: cfpages.New(cfpages.Options{
-				Dir:       "web",
-				AccountID: heinzel.Env("CLOUDFLARE_ACCOUNT_ID"),
-				Token:     heinzel.Env("CLOUDFLARE_PAGES_TOKEN"),
-				Project:   "blanktracker-previews", // previews only, not the production Pages project
-				Branch:    func(e *env.Environment) string { return e.Name }, // <env>.blanktracker-previews.pages.dev
-				Build:     "npm ci && npm run build",
-				Output:    "dist",
-				BuildEnv: func(e *env.Environment) map[string]string {
-					return map[string]string{"VITE_API_URL": e.Endpoints["api"]}
+				TLS: &dockercompose.TLS{ // Cloudflare Origin CA certificate for *.blanktracker.com
+					CertFile: heinzel.Env("ORIGIN_CERT_FILE"),
+					KeyFile:  heinzel.Env("ORIGIN_KEY_FILE"),
+					Upstream: "nginx:80",
 				},
-				CustomDomain: func(e *env.Environment) string { return e.Name + "." + previewDomain },
+				PostDeploy: []dockercompose.Exec{
+					{Service: "app", Command: "php artisan migrate --force"},
+					{Service: "app", Command: "php artisan optimize"},
+				},
+			})},
+			{Name: "web", Repo: "app", Deployer: cfworkers.New(cfworkers.Options{
+				AccountID:    heinzel.Env("CLOUDFLARE_ACCOUNT_ID"),
+				Token:        heinzel.Env("CLOUDFLARE_WORKERS_TOKEN"),
+				Worker:       previewWorker, // overrides the name in wrangler.jsonc; created on first use
+				PreviewAlias: func(e *env.Environment) string { return e.Name },
+				Build:        "npm ci && ./cloudflare-build.sh", // the team's own build script
+				BuildEnv: func(e *env.Environment, src *deploy.Source) map[string]string {
+					return map[string]string{ // what Cloudflare's CI would set
+						"API_URL":                e.Endpoints["api"] + "/api",
+						"NOVA_URL":               e.Endpoints["nova"] + "/nova",
+						"WORKERS_CI_COMMIT_SHA":  src.Commit,
+						"VITE_EMAIL_TRACKER_URL": "https://email-tracker.invalid", // empty would fall back to production
+					}
+				},
 			})},
 		},
 
 		Triggers: []heinzel.Trigger{{Name: "trello", Trigger: trellopowerup.New(trellopowerup.Options{
-			Secret: heinzel.Env("HEINZEL_TRELLO_SECRET"),
+			APIKey: heinzel.Env("TRELLO_POWERUP_API_KEY"),
+			Boards: []string{"5f1a2b3c4d"}, // only cards on these boards can start a run
 		})}},
 		Notifiers: []heinzel.Notifier{
-			{On: notify.Problems, Notifier: ticket.New(board)},
+			{On: notify.Problems, Notifier: ticket.New(board)}, // failures, questions and actions, on the card
+			{On: []notify.EventType{notify.EventRunActionRequired}, Notifier: slack.New(heinzel.Env("SLACK_OPS_WEBHOOK"))},
 			{On: notify.Finished, Notifier: slack.New(heinzel.Env("SLACK_DEV_WEBHOOK"))},
 		},
 	})
 }
 
 func previewURL(suffix string) func(*env.Environment) string {
-	return func(e *env.Environment) string { return "https://" + e.Name + suffix + "." + previewDomain }
+	return func(e *env.Environment) string { return "https://" + e.Name + suffix + "." + zone }
 }
+```
+
+`notify.Problems` includes `run.action_required`, so the card gets the Google
+action too. The Slack ops channel is where someone with Google Cloud Console
+access sees it.
+
+The two embedded files live next to `main.go` in the factory's repository:
+
+```yaml
+# preview.override.yaml
+services:
+  cron:
+    profiles: [disabled] # the nightly schedule calls paid APIs
+```
+
+```sh
+# preview.env (excerpt)
+ONSOCIAL_DISABLED=true
+SCRAPECREATORS_DISABLED=true
+MAIL_MAILER=log
+YOUTUBE_API_KEY=
 ```
 
 ### Scenario B: one component for environment and deploy
@@ -639,7 +804,7 @@ material the skill learns from.
 <factory> status [run-id]              # list runs or show one
 <factory> logs [-f] <run-id>
 <factory> resume <run-id>              # continue a failed, needs_input or interrupted run
-<factory> approve <run-id>             # pass the current gate and continue
+<factory> approve <run-id>             # pass the current gate, confirm pending actions, continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check                        # validate factories and test component credentials
 <factory> serve                        # HTTP triggers + worker pool (M2)
@@ -720,8 +885,8 @@ try the CLI without any accounts.
 | # | Deliverable |
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
-| M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfpages`, `notify/ticket`, and `examples/blanktracker` |
-| M2 | `serve` + `trigger/trellopowerup` + one chat notifier; `env up` |
+| M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions), and `examples/blanktracker` |
+| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up` |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
@@ -766,6 +931,11 @@ try the CLI without any accounts.
     `heinzel` binary could build a factory from YAML for teams that only use
     those. It would be a thin layer over the library, not a second
     configuration model.
+10. **Workers preview aliases at scale.** Scenario A gives every environment a
+    preview alias on one Worker and never deletes them. We haven't checked
+    whether Cloudflare limits how many aliases a Worker keeps, or whether a
+    later upload can push an old alias out. If it can, `deploy/cfworkers`
+    needs a Worker per environment instead, deleted on teardown.
 
 ---
 
@@ -791,12 +961,11 @@ environment links.
 | Piece | Implementation |
 |---|---|
 | Trigger | `trigger/trellopowerup`, listed in the factory's `Triggers`. `serve` mounts it under `/triggers/blanktracker/trello/` |
-| Power-Up assets | a static connector (`index.html` + JS) served from `embed.FS`. In the Trello Power-Up admin, the iframe connector URL is set to `https://<public_url>/triggers/blanktracker/trello/` |
+| Power-Up assets | a static connector (`index.html` + JS) served from `embed.FS`. In the Trello Power-Up admin, the iframe connector URL is set to `https://<public_url>/triggers/blanktracker/trello/`. Because the connector and the API share an origin, the button's request needs no CORS. BlankTracker's repository already has a generic version (`local-dev/trello-power-up/`); the trigger ships its own copy, so nothing is added to the app |
 | Button | the `card-buttons` capability calls `POST …/runs {cardId}`, which calls `Dispatcher.Submit` |
 | Badges | the `card-badges` / `card-detail-badges` capabilities poll `GET …/cards/{cardId}`, which calls `Dispatcher.Latest` |
 | Which factory | the trigger belongs to one factory, and its `Dispatcher` is scoped to it, so no board-to-factory mapping is needed |
-| Auth (v1) | a shared secret, entered once per board in the Power-Up settings and stored with `t.set('board','private',…)` |
-| Auth (later) | `t.getRestApi()` gets the member's Trello token; the server verifies that the member can see the card |
+| Auth | the Power-Up's code is public, so it holds no secret. `t.getRestApi().authorize({scope: 'read'})` gets the member's own Trello token, which is sent with the card ID. The server asks Trello for the card (401/404 are passed on, and the card's URL comes from Trello, never from the request), checks that the member belongs to the card's board, and that the board is in the trigger's `Boards` allowlist. The token is used for that check only, never logged or stored; the run records the member ID in `RequestedBy` |
 
 **Design points this case confirms.**
 
@@ -809,6 +978,75 @@ environment links.
 
 **Caveat.** Trello requires HTTPS for the connector. For local testing, put
 `serve` behind a tunnel (cloudflared/ngrok).
+
+### 12.3 A preview that needs a human: Google login
+
+**The setup.** BlankTracker logs users in with Google OAuth only. Google
+checks every redirect URI against a list on the OAuth client, accepts no
+wildcards, and offers no API to edit that list. Each preview has new
+hostnames, so until someone adds them, nobody can log in to it.
+
+**What Heinzel delivers.** As soon as the environment exists, a message on the
+Trello card and in a Slack channel says exactly which two URIs to add to the
+"BlankTracker previews" OAuth client. The run carries on. It waits only before
+`publish`, the step that tells testers the environment is ready, until
+someone runs `approve`.
+
+**How it maps.**
+
+| Piece | Implementation |
+|---|---|
+| The request | `Factory.EnvironmentActions` returns one `env.Action` built from `e.Endpoints["api"]`, with `Before: publish` |
+| Telling people | `run.action_required`, routed like any other event: `notify/ticket` for the card, `notify/slack` for whoever has Console access |
+| Waiting | the engine's gate machinery: `awaiting_approval` before `publish`, `approve` confirms |
+| The agent | not affected: it logs in with a Sanctum token from `artisan tinker` |
+| Teardown | `env destroy` prints the action as a reminder to remove the URIs |
+
+**Design points this case confirms.**
+
+- **This case needed an addition.** It's the first that didn't fit the
+  existing interfaces: `core.NeedsInputError` stops the run at once and can't
+  tell on resume whether the human acted, and `Outcome.ManualSteps` comes from
+  the agent, at the end. A request for a human that starts early and blocks
+  late is a concept of its own ([Human actions](#human-actions)).
+- **The app or the provider can ask.** Google login is BlankTracker's need,
+  not DigitalOcean's, so this action comes from the factory. A provider with
+  its own manual step (a sandbox lease an admin approves) sets
+  `Environment.Actions` instead.
+- **Waiting is per step.** Blocking at provisioning would leave the agent
+  idle for something it doesn't need.
+
+### 12.4 Installing Heinzel on an app that wasn't built for it
+
+**The setup.** BlankTracker as it really is, not as Scenario A first imagined
+it: API and SPA in one repository root, the SPA on Cloudflare Workers (not
+Pages), three hostnames per environment, no preview domain, a `CLAUDE.md`
+written for non-developers who drive Claude by hand, and a nightly schedule
+that spends money on third-party APIs.
+
+**What Heinzel delivers.** Previews with no changes to the app.
+
+**How it maps.**
+
+| What the app has | How the factory uses it |
+|---|---|
+| `vibe.docker-compose.yaml`, a self-contained stack with its own Postgres | used unchanged; an override from the factory drops `cron` |
+| `.env` read through `env_file` | written by `deploy/dockercompose` from a template in the factory, with no third-party keys |
+| `cloudflare-build.sh`, which reads `API_URL` and `NOVA_URL` | run by `deploy/cfworkers` with the variables Cloudflare's CI would set |
+| `wrangler.jsonc` naming production Workers | used as it is; `--name` points the upload at a previews-only Worker |
+| Production zone `blanktracker.com`, no `SESSION_DOMAIN` | preview hostnames `hz-*` in that zone, guarded by `AllowedNames` |
+| `CLAUDE.md`: "push to `vibe`", "ask before every git operation" | overridden by Heinzel's workflow in the agent's system prompt |
+
+**Design points this case confirms.**
+
+- **The factory adapts to the app** (§1, design rule 10). Every gap was
+  closed with a component option or a file in the factory, not a change to
+  the app.
+- **An app's own agent instructions will contradict Heinzel.** They were
+  written for a person at a keyboard. Handling that belongs in the agent
+  component, for every team, not in each repository.
+- **Preview hosting may sit next to production.** Guards against touching
+  production records belong in the components that hold the tokens.
 
 ### 12.2 The Salesforce team that only clicks
 
