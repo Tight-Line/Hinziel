@@ -531,7 +531,9 @@ spot: `Main` lists every missing one at once and exits before doing anything.
 
 ### Scenario A: BlankTracker
 
-The component packages below are planned (§10); their options are a sketch.
+Every component below exists except `trigger/trellopowerup` (M2).
+[`example_test.go`](./example_test.go) compiles this factory, minus the
+trigger, against the real packages.
 
 ```go
 package main
@@ -560,7 +562,7 @@ import (
 const (
 	zone          = "blanktracker.com"
 	previewWorker = "blanktracker-frontend-preview" // a Worker used only for previews
-	workersDomain = "blanktracker.workers.dev"      // the account's workers.dev subdomain
+	workers       = "blanktracker"                  // the account's workers.dev subdomain
 )
 
 // Settings for every preview: no third-party API keys, paid integrations
@@ -604,11 +606,12 @@ func main() {
 		EnvName: func(t *tracker.Ticket) string { return "hz-" + strings.ToLower(t.Key) }, // Trello shortLink
 
 		Environment: digitalocean.New(digitalocean.Options{
-			Token:              heinzel.Env("DO_TOKEN"),
-			Region:             "fra1",
-			Size:               "s-2vcpu-4gb", // the first build compiles every PHP extension
-			Image:              "docker-24-04",
-			SSHKeyFingerprints: []string{"ab:cd:…"},
+			Token:      heinzel.Env("DO_TOKEN"),
+			Region:     "fra1",
+			Size:       "s-2vcpu-4gb", // the first build compiles every PHP extension
+			Image:      "docker-24-04",
+			SSHKeys:    []string{"ab:cd:…"},          // fingerprints of keys in the DO account
+			SSHKeyPath: heinzel.Env("HEINZEL_SSH_KEY"), // the matching private key on the Heinzel host
 		}),
 		DNS: cloudflare.New(cloudflare.Options{
 			Token:        heinzel.Env("CLOUDFLARE_DNS_TOKEN"),
@@ -620,7 +623,7 @@ func main() {
 			{Name: "api", URL: previewURL("-api"), DNS: heinzel.HostAddress(0)},
 			{Name: "nova", URL: previewURL("-nova"), DNS: heinzel.HostAddress(0)},
 			{Name: "web", URL: func(e *env.Environment) string {
-				return "https://" + e.Name + "-" + previewWorker + "." + workersDomain
+				return cfworkers.PreviewURL(e.Name, previewWorker, workers)
 			}},
 		},
 		EnvironmentActions: func(e *env.Environment) []env.Action {
@@ -652,6 +655,7 @@ func main() {
 					CertFile: heinzel.Env("ORIGIN_CERT_FILE"),
 					KeyFile:  heinzel.Env("ORIGIN_KEY_FILE"),
 					Upstream: "nginx:80",
+					Network:  "blanktracker", // the network vibe.docker-compose.yaml puts nginx on
 				},
 				PostDeploy: []dockercompose.Exec{
 					{Service: "app", Command: "php artisan migrate --force"},
@@ -675,7 +679,7 @@ func main() {
 			})},
 		},
 
-		Triggers: []heinzel.Trigger{{Name: "trello", Trigger: trellopowerup.New(trellopowerup.Options{
+		Triggers: []heinzel.Trigger{{Name: "trello", Trigger: trellopowerup.New(trellopowerup.Options{ // M2
 			APIKey: heinzel.Env("TRELLO_POWERUP_API_KEY"),
 			Boards: []string{"5f1a2b3c4d"}, // only cards on these boards can start a run
 		})}},
@@ -881,7 +885,12 @@ try the CLI without any accounts.
   `env/envtest`, `deploy/deploytest`, … They check the contract (idempotency,
   `Destroy` on a missing env, a missing DNS record is not an error, …). Every
   component in this repository runs its suite against a real sandbox, guarded
-  by an env var such as `HEINZEL_IT_GITLAB=1`. Components written by teams or
+  by an env var such as `HEINZEL_IT_GITLAB=1`. Without it, a component's
+  tests run its suite against an `httptest` fake of its API, and remote
+  commands run locally through `remotetest.LocalSSH`. The switches:
+  `HEINZEL_IT_TRELLO`, `HEINZEL_IT_GITLAB`, `HEINZEL_IT_CLOUDFLARE`,
+  `HEINZEL_IT_DIGITALOCEAN`, `HEINZEL_IT_SLACK` and `HEINZEL_IT_CLAUDECODE`;
+  each test's skip message names the credentials it needs. Components written by teams or
   agents run the same suites, which is what makes writing your own component
   safe (§6).
 - BlankTracker, the guinea-pig project, is the end-to-end acceptance test.
@@ -893,7 +902,7 @@ try the CLI without any accounts.
 | # | Deliverable |
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
-| M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
+| M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
 | M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up` |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
