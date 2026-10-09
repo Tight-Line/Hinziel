@@ -8,6 +8,7 @@ import (
 	"github.com/Tight-Line/heinzel/agent"
 	"github.com/Tight-Line/heinzel/core"
 	"github.com/Tight-Line/heinzel/deploy"
+	"github.com/Tight-Line/heinzel/env"
 	"github.com/Tight-Line/heinzel/notify"
 	"github.com/Tight-Line/heinzel/run"
 )
@@ -48,6 +49,16 @@ func prompt(p *Project, r *run.Run, task *agent.Task) string {
 		fmt.Fprintf(&b, "\nYour environment %q is running the code from before your changes.\n", e.Name)
 		for _, name := range sortedKeys(e.Endpoints) {
 			fmt.Fprintf(&b, "- %s: %s\n", name, e.Endpoints[name])
+		}
+		var shells []string
+		for _, h := range e.Hosts {
+			if h.SSH != nil {
+				shells = append(shells, fmt.Sprintf("- %s: `%s`", h.Name, sshCommand(h)))
+			}
+		}
+		if len(shells) > 0 {
+			b.WriteString("\nYou can run commands on its hosts over SSH, for example to run tests where the app is deployed:\n")
+			b.WriteString(strings.Join(shells, "\n") + "\n")
 		}
 	}
 
@@ -221,4 +232,23 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+// sshCommand is the command that opens a shell on h, with its pinned host key.
+func sshCommand(h env.Host) string {
+	cmd := "ssh"
+	if h.SSH.KeyPath != "" {
+		cmd += " -i " + h.SSH.KeyPath
+	}
+	if h.SSH.KnownHostsPath != "" {
+		cmd += " -o UserKnownHostsFile=" + h.SSH.KnownHostsPath
+	}
+	if h.SSH.Port != 0 && h.SSH.Port != 22 {
+		cmd += fmt.Sprintf(" -p %d", h.SSH.Port)
+	}
+	target := h.Address
+	if h.SSH.User != "" {
+		target = h.SSH.User + "@" + target
+	}
+	return cmd + " " + target
 }
