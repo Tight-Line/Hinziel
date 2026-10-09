@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 // NeedsInputError: plugin (usually the agent) cannot proceed without a human.
 // Engine posts Question on the ticket, sets status needs_input, emits run.needs_input.
 type NeedsInputError struct{ Question string }
@@ -12,3 +14,16 @@ type RetryableError struct{ Err error }
 
 func (e *RetryableError) Error() string { return e.Err.Error() }
 func (e *RetryableError) Unwrap() error { return e.Err }
+
+// WaitError: the step is waiting on someone or something else, such as a CI
+// pipeline, a store build, an environment booking or an approval. It is not
+// a failure. The engine parks the run in the waiting status without holding
+// a process, and whoever drives the run (the CLI in the foreground, the
+// daemon) runs the step again after After. Steps are idempotent, so running
+// one again is how it checks whether the wait is over.
+type WaitError struct {
+	Reason string        // what it waits for, e.g. "CI to build orders@3f2a91c"
+	After  time.Duration // when to check again; 0 = one minute
+}
+
+func (e *WaitError) Error() string { return "waiting for " + e.Reason }

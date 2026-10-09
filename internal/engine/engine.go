@@ -22,6 +22,7 @@ import (
 const (
 	stepPending = "pending"
 	stepRunning = "running"
+	stepWaiting = "waiting"
 	stepDone    = "done"
 	stepSkipped = "skipped"
 	stepFailed  = "failed"
@@ -71,7 +72,7 @@ func New(st *store.FS, projects []*Project, opts Options) *Engine {
 func (e *Engine) Store() *store.FS { return e.store }
 
 // unfinished statuses block a new run for the same ticket.
-var unfinished = []run.Status{run.StatusQueued, run.StatusRunning, run.StatusAwaitingApproval, run.StatusNeedsInput, run.StatusFailed}
+var unfinished = []run.Status{run.StatusQueued, run.StatusRunning, run.StatusAwaitingApproval, run.StatusNeedsInput, run.StatusWaiting, run.StatusFailed}
 
 // Submit records a new queued run. It refuses if the ticket already has an
 // unfinished run, because both would fight over the same branch and environment.
@@ -141,20 +142,21 @@ func (e *Engine) Execute(ctx context.Context, id run.ID) error {
 	return x.pipeline(ctx)
 }
 
-// Resume makes a failed, needs_input or crashed run runnable again and
-// executes it. A needs_input run fetches its ticket again first, so the agent
-// sees the answer to its question.
+// Resume makes a failed, needs_input, waiting or crashed run runnable again
+// and executes it. A needs_input run fetches its ticket again first, so the
+// agent sees the answer to its question. A waiting run checks its step again
+// right away, whatever its next check time.
 func (e *Engine) Resume(ctx context.Context, id run.ID) error {
 	if err := e.prepare(ctx, id, func(r *run.Run) error {
 		switch r.Status {
-		case run.StatusFailed, run.StatusRunning:
+		case run.StatusFailed, run.StatusRunning, run.StatusWaiting:
 		case run.StatusNeedsInput:
 			resetStep(r, StepFetchTicket)
 		default:
-			return fmt.Errorf("run %s is %s; only failed, needs_input or interrupted runs can be resumed", r.ID, r.Status)
+			return fmt.Errorf("run %s is %s; only failed, needs_input, waiting or interrupted runs can be resumed", r.ID, r.Status)
 		}
 		for i := range r.Steps {
-			if r.Steps[i].Status == stepFailed || r.Steps[i].Status == stepRunning {
+			if s := r.Steps[i].Status; s == stepFailed || s == stepRunning || s == stepWaiting {
 				r.Steps[i].Status = stepPending
 			}
 		}
@@ -318,6 +320,7 @@ func (x *execution) pipeline(ctx context.Context) error {
 			return x.fail(ctx, rec, err)
 		}
 		rec.Status = stepDone
+		x.r.WaitingFor, x.r.WaitUntil = "", time.Time{}
 		if err := x.save(ctx); err != nil {
 			return err
 		}
@@ -361,6 +364,11 @@ func (x *execution) fail(ctx context.Context, rec *run.StepRecord, err error) er
 	rec.Error = err.Error()
 	x.r.Error = err.Error()
 
+	var wait *core.WaitError
+	if errors.As(err, &wait) {
+		return x.wait(ctx, rec, wait)
+	}
+
 	var needs *core.NeedsInputError
 	if errors.As(err, &needs) {
 		x.r.Status = run.StatusNeedsInput
@@ -382,6 +390,29 @@ func (x *execution) fail(ctx context.Context, rec *run.StepRecord, err error) er
 	x.moveTicket(ctx, tracker.StageBlocked)
 	x.emit(ctx, notify.EventRunFailed)
 	return fmt.Errorf("run %s failed at %s: %w", x.r.ID, rec.Name, err)
+}
+
+// wait parks the run: its step runs again after the wait, without this
+// process. A new reason is announced; checking again on the same one isn't.
+func (x *execution) wait(ctx context.Context, rec *run.StepRecord, w *core.WaitError) error {
+	after := w.After
+	if after <= 0 {
+		after = time.Minute
+	}
+	announce := w.Reason != x.r.WaitingFor
+	rec.Status, rec.Error = stepWaiting, ""
+	x.r.Error = ""
+	x.r.Status = run.StatusWaiting
+	x.r.WaitingFor = w.Reason
+	x.r.WaitUntil = x.e.opts.Now().Add(after)
+	if err := x.save(ctx); err != nil {
+		return err
+	}
+	x.logf(rec.Name, "waiting for %s; next check at %s", w.Reason, x.r.WaitUntil.UTC().Format(time.RFC3339))
+	if announce {
+		x.emit(ctx, notify.EventRunWaiting)
+	}
+	return nil
 }
 
 func (x *execution) skipReason(name string) string {

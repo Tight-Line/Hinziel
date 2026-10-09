@@ -93,6 +93,9 @@ func (c *cli) run(ctx context.Context, args []string) error {
 	}
 	fmt.Fprintf(c.out, "run %s\n", r.ID)
 	err = c.eng.Execute(ctx, r.ID)
+	if err == nil {
+		err = c.follow(ctx, r.ID)
+	}
 	c.report(ctx, r.ID)
 	return err
 }
@@ -119,6 +122,9 @@ func (c *cli) withRun(ctx context.Context, args []string, action func(context.Co
 	}
 	id := run.ID(args[0])
 	err := action(ctx, id)
+	if err == nil {
+		err = c.follow(ctx, id)
+	}
 	if _, loadErr := c.eng.Store().Load(ctx, id); loadErr == nil {
 		c.report(ctx, id)
 	}
@@ -154,6 +160,9 @@ func (c *cli) report(ctx context.Context, id run.ID) {
 		fmt.Fprintf(c.out, "  Continue with: approve %s\n", r.ID)
 	case run.StatusFailed:
 		fmt.Fprintf(c.out, "  failed at %s. Fix the cause, then: resume %s\n", r.CurrentStep, r.ID)
+	case run.StatusWaiting:
+		fmt.Fprintf(c.out, "  waiting for %s at %s; next check at %s. Continue with: resume %s\n",
+			r.WaitingFor, r.CurrentStep, r.WaitUntil.Local().Format(time.DateTime), r.ID)
 	}
 }
 
@@ -204,6 +213,9 @@ func (c *cli) detail(r *run.Run) {
 	}
 	if r.Error != "" {
 		fmt.Fprintf(w, "Error\t%s\n", firstLine(r.Error))
+	}
+	if r.Status == run.StatusWaiting {
+		fmt.Fprintf(w, "Waiting for\t%s (next check %s)\n", r.WaitingFor, r.WaitUntil.Local().Format(time.DateTime))
 	}
 	fmt.Fprintf(w, "Started\t%s\n", r.StartedAt.Local().Format(time.DateTime))
 	w.Flush()
@@ -343,4 +355,26 @@ func indentLines(s, prefix string) string {
 		lines[i] = prefix + l
 	}
 	return strings.Join(lines, "\n")
+}
+
+// follow keeps a waiting run going in the foreground: it sleeps until the
+// step's next check, then resumes it, until the run stops waiting. Ctrl-C
+// leaves the run waiting, to be resumed later.
+func (c *cli) follow(ctx context.Context, id run.ID) error {
+	for {
+		r, err := c.eng.Store().Load(ctx, id)
+		if err != nil || r.Status != run.StatusWaiting {
+			return nil
+		}
+		fmt.Fprintf(c.out, "waiting for %s; checking again at %s (Ctrl-C leaves it waiting: resume %s later)\n",
+			r.WaitingFor, r.WaitUntil.Local().Format(time.TimeOnly), id)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Until(r.WaitUntil)):
+		}
+		if err := c.eng.Resume(ctx, id); err != nil {
+			return err
+		}
+	}
 }

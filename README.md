@@ -242,7 +242,7 @@ ingress, so no per-environment DNS is needed.
 
 | Step | What happens | Fits today? |
 |---|---|---|
-| `prepare_workspace` | eight clones; the run branch in each | **No.** Pushing a branch to every repo triggers eight CI pipelines and leaves seven empty branches. Branches must be created lazily (D1). Eight full clones per run are slow: clone from a cached mirror per repo |
+| `prepare_workspace` | eight clones; the run branch in each | **Yes**, since branches became lazy (D1): only the repos the agent changes get a remote branch and CI runs. Still slow: eight full clones per run, where a cached mirror per repo would help |
 | `provision_environment` | namespace, secrets, database, kubeconfig | Yes. `Hosts` stays empty, as for a scratch org |
 | `deploy_base` | every service at its target branch's image | Yes, if a deployer can see every repo's commit (D3) |
 | `implement` | the agent edits `orders` and `proto`, runs unit tests locally, pushes, deploys, tests against the preview with `kubectl` | **Partly.** The agent has no way to reach a cluster (D2). Each deploy waits 15–40 minutes for CI, so the agent should test locally first and deploy sparingly; the default timeouts are too short (D5). It can't see why CI failed (D4) |
@@ -451,6 +451,8 @@ stateDiagram-v2
     running --> failed : error
     running --> needs_input : question
     running --> awaiting_approval : gate or action
+    running --> waiting : wait
+    waiting --> running : next check or resume
     failed --> running : resume
     needs_input --> running : resume
     awaiting_approval --> running : approve
@@ -458,7 +460,7 @@ stateDiagram-v2
 ```
 
 `cancel` moves any run that hasn't finished (`queued`, `running`,
-`awaiting_approval`, `failed`, `needs_input`) to `cancelled`; it's left out of
+`awaiting_approval`, `waiting`, `failed`, `needs_input`) to `cancelled`; it's left out of
 the diagram to keep it readable. `resume` and `approve` are the CLI commands of
 the same name.
 
@@ -466,6 +468,26 @@ the same name.
 from `needs_input` fetches the ticket again before re-running the step that
 stopped, so the agent sees the answer in the ticket's comments. Resuming from
 `failed` just re-runs the failed step.
+
+`waiting` means a step is waiting on someone or something else: a CI
+pipeline building an image, a store build, an environment booking, an
+approval in another system. The step returns `core.WaitError{Reason, After}`
+("not yet, look again in `After`"); it's not a failure. The run records what
+it waits for and when to check again, and no process stays attached to it.
+Whoever drives the run checks again by running the step again, which is
+safe because steps are idempotent:
+
+- the CLI's `run`, `resume` and `approve` keep following in the foreground
+  and check again at the time given; Ctrl-C leaves the run `waiting`, not
+  `failed`;
+- `resume` checks right away, whatever the time given;
+- the daemon (M2) will schedule the checks;
+- inside `implement`, the agent's `$HEINZEL_BIN deploy` waits inline instead,
+  since the agent is blocked on it anyway, within the step's timeout.
+
+A new reason emits `run.waiting`; checking again on the same one doesn't.
+How long to keep waiting before giving up is the component's decision: it
+returns an ordinary error when it stops expecting the wait to end.
 
 ---
 
@@ -479,7 +501,7 @@ and the plain data types around it.
 
 | Package | Defines | Imports (Heinzel) |
 |---|---|---|
-| [`core`](./core) | `Message`, `Link`, `NeedsInputError`, `RetryableError`, `Checker` | — |
+| [`core`](./core) | `Message`, `Link`, `NeedsInputError`, `RetryableError`, `WaitError`, `Checker`, `NeedTools` | — |
 | [`tracker`](./tracker/tracker.go) | `Tracker` + optional `StageMover`, `Linker`, `AttachmentFetcher`; `Ticket`, `TicketRef`, `Stage` | core |
 | [`forge`](./forge/forge.go) | `Forge` + optional `ChangeRequestUpdater`; `GitRemote`, `ChangeRequest`, `ChangeRequestInput` | core |
 | [`agent`](./agent/agent.go) | `Agent`; `Task`, `Checkout`, `Outcome`, `Usage` | tracker, env |
@@ -647,8 +669,10 @@ These rules keep the interfaces from fighting each other:
   while the environment is set up, and can hold back a later step.
 - **Errors.** `core.NeedsInputError` makes the engine post the question on the
   ticket, set the run to `needs_input` and emit `run.needs_input`.
-  `core.RetryableError` makes the engine retry the step with backoff. Any
-  other error fails the step and the run, which can then be resumed.
+  `core.RetryableError` makes the engine retry the step with backoff.
+  `core.WaitError` parks the run in `waiting` until the step is checked
+  again ([Run status](#run-status)). Any other error fails the step and the
+  run, which can then be resumed.
 
 ---
 
@@ -1010,9 +1034,10 @@ $HEINZEL_BIN retrieve                  # pull environment changes into the worki
 
 `--factory` is only needed when the binary holds more than one factory.
 `run`, `resume` and `approve` execute the run in the foreground, streaming its
-progress, until it finishes or pauses. A run executing in one process is
+progress, until it finishes or pauses; a `waiting` run is followed to its
+next check and beyond. A run executing in one process is
 locked; `resume` and `cancel` refuse it until that process stops (Ctrl-C
-leaves the run `failed`, ready to resume). A run whose process died is not
+leaves the run `failed`, ready to resume, or still `waiting` if it was). A run whose process died is not
 locked and resumes normally. Running in the background arrives with [`daemon`](#the-daemon).
 
 [`examples/demo`](./examples/demo) is a factory built entirely from fakes, to
@@ -1233,13 +1258,10 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     branches from, separate from the remote Heinzel pushes to, and forge
     components a `Fork` option that opens the change request from the fork
     to the upstream.
-13. **Waiting on others.** CI pipelines, app-store builds, environment
-    bookings and change approvals take minutes to days (D4, 12.5, 12.7). A
-    step should be able to answer "not yet, check again at T" (e.g.
-    `core.WaitError{Reason, RetryAt}`): the run waits in a new `waiting`
-    status without holding a process, the daemon re-runs the step at `T`,
-    and the CLI's `resume` checks right away. Idempotent steps make the
-    re-check safe. This replaces the long step timeouts proposed in D5.
+13. **Waiting on others** (resolved: `core.WaitError` and the `waiting`
+    status, see [Run status](#run-status)). CI pipelines, app-store builds,
+    environment bookings and change approvals take minutes to days (D4,
+    12.5, 12.7). Still open: the daemon's scheduling of the checks (M2).
 
 ### Per-environment certificates
 
@@ -1454,12 +1476,12 @@ an install link, and its endpoint a store link. Build signing stays in CI,
 where the keys already live, so Heinzel never holds them.
 
 **What doesn't, yet.** The mobile deployers are CI-gated, so they need CI
-status (Scenario D, D4) and long waits (below). The agent can't run an iOS
+status (Scenario D, D4), and wait with `core.WaitError` while CI builds. The agent can't run an iOS
 simulator on a Linux host, nor tap through either app, so UI verification
 becomes manual test steps in the outcome, or a device cloud the agent drives
 through an MCP server, an agent option. No interface changes.
 
-**Verdict: fits**, given D4 and long waits.
+**Verdict: fits**, given D4.
 
 ### 12.6 An open-source SDK family
 
@@ -1544,7 +1566,7 @@ anything itself here, and the interfaces don't require it to.
   production-like data, no credentials beyond the booked environment, every
   command logged. Same root as 12.6 (open question 11).
 
-**Verdict: fits structurally; mismatched on long waits and on agent access.**
+**Verdict: fits structurally; mismatched on agent access.** Long waits were the other mismatch, now resolved by `core.WaitError`: a booking or a ServiceNow change is a deployer or provisioner returning "not yet" until ops has acted.
 
 ### What the case studies show together
 
@@ -1556,8 +1578,8 @@ organisations where Heinzel may not deploy. New shapes needed new
 the core:
 
 1. **Waiting on others** (CI, app stores, bookings, approvals) as a step
-   outcome, not a timeout (open question 13; supersedes the long timeouts of
-   D5).
+   outcome, not a timeout. Done: `core.WaitError` and the `waiting` status
+   (open question 13).
 2. **Trust**: who may write the agent's instructions, and how much the agent
    may reach. The working assumption "the agent has everything it needs" is
    the one design decision several real teams can't accept (open question

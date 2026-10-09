@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Tight-Line/heinzel/core"
 	"github.com/Tight-Line/heinzel/deploy"
 )
 
@@ -97,7 +98,34 @@ func (x *execution) agentDeploy(ctx context.Context) ([]string, error) {
 			return nil, fmt.Errorf("the environment has changes not in git (repo %s); review, commit and push them first", d.Repo)
 		}
 	}
-	return x.deployAll(ctx, false)
+	return x.deployWaiting(ctx)
+}
+
+// deployWaiting deploys for the agent's deploy command. The agent is blocked
+// on the command anyway, so a deployer that has to wait (for CI to build an
+// image, say) is waited for here, within the step's time, rather than
+// parking the run. Deployers already done aren't deployed again on a retry.
+func (x *execution) deployWaiting(ctx context.Context) ([]string, error) {
+	var lines []string
+	for skip := false; ; skip = true {
+		report, err := x.deployAll(ctx, skip)
+		lines = append(lines, report...)
+		var wait *core.WaitError
+		if !errors.As(err, &wait) {
+			return lines, err
+		}
+		after := wait.After
+		if after <= 0 {
+			after = time.Minute
+		}
+		lines = append(lines, fmt.Sprintf("waiting for %s; checking again in %s", wait.Reason, after))
+		x.logf("", "deploy: waiting for %s", wait.Reason)
+		select {
+		case <-ctx.Done():
+			return lines, ctx.Err()
+		case <-time.After(after):
+		}
+	}
 }
 
 func (x *execution) checkCommittedAndPushed(ctx context.Context, repo string) error {

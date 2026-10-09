@@ -8,10 +8,12 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tight-Line/heinzel/agent"
 	"github.com/Tight-Line/heinzel/agent/agenttest"
 	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/heinzel/deploy"
 	"github.com/Tight-Line/heinzel/deploy/deploytest"
 	"github.com/Tight-Line/heinzel/env"
 	"github.com/Tight-Line/heinzel/env/envtest"
@@ -131,5 +133,36 @@ func TestCLIAgentCommandsNeedARun(t *testing.T) {
 	_, err := runCLI(t, cliFactory(t, nil), "deploy")
 	if err == nil || !strings.Contains(err.Error(), "only works inside a run") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// onceWaiting waits once, briefly, before deploying a run-branch commit.
+type onceWaiting struct {
+	deploytest.Fake
+	waited bool
+}
+
+func (d *onceWaiting) Deploy(ctx context.Context, e *env.Environment, src *deploy.Source) (*deploy.Deployment, error) {
+	if src.Branch != "main" && !d.waited {
+		d.waited = true
+		return nil, &core.WaitError{Reason: "CI", After: 20 * time.Millisecond}
+	}
+	return d.Fake.Deploy(ctx, e, src)
+}
+
+func TestCLIRunFollowsAWait(t *testing.T) {
+	t.Setenv("HEINZEL_STATE_DIR", t.TempDir())
+	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		os.WriteFile(filepath.Join(task.Repos[0].Path, "hello.txt"), []byte("hello\n"), 0o644)
+		return nil, nil
+	})
+	f.Deployers[0].Deployer = &onceWaiting{}
+
+	out, err := runCLI(t, f, "run", "D-1")
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "waiting for CI; checking again at") || !strings.Contains(out, ": succeeded") {
+		t.Errorf("run must follow the wait to the end:\n%s", out)
 	}
 }

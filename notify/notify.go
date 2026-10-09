@@ -25,6 +25,7 @@ const (
 	EventRunNeedsInput       EventType = "run.needs_input"
 	EventRunAwaitingApproval EventType = "run.awaiting_approval"
 	EventRunActionRequired   EventType = "run.action_required" // one per human action; Event.Action says which
+	EventRunWaiting          EventType = "run.waiting"         // a step started waiting on something new
 )
 
 // Common event sets for routing notifiers.

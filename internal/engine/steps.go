@@ -30,7 +30,9 @@ func (x *execution) runStep(ctx context.Context, name string) error {
 	case StepProvisionEnvironment:
 		return x.provisionEnvironment(ctx)
 	case StepDeployBase:
-		_, err := x.deployAll(ctx, false)
+		// Deployers already done are skipped, so going on after a wait
+		// doesn't deploy them again.
+		_, err := x.deployAll(ctx, true)
 		return err
 	case StepImplement:
 		return x.implement(ctx)

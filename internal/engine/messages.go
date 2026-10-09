@@ -196,6 +196,9 @@ func eventMessage(r *run.Run, typ notify.EventType) core.Message {
 		return msg
 	case notify.EventRunFailed:
 		return core.Message{Title: subject + ": failed", Body: fmt.Sprintf("Run `%s` failed at `%s`:\n\n%s\n\nResume it with `resume %s`.", r.ID, r.CurrentStep, firstLine(r.Error), r.ID)}
+	case notify.EventRunWaiting:
+		return core.Message{Title: subject + ": waiting", Body: fmt.Sprintf("Run `%s` is waiting for %s at `%s`. It checks again at %s; `resume %s` checks now.",
+			r.ID, r.WaitingFor, r.CurrentStep, r.WaitUntil.UTC().Format("2006-01-02 15:04 MST"), r.ID)}
 	case notify.EventRunNeedsInput:
 		return core.Message{Title: subject + ": needs input", Body: r.Error}
 	case notify.EventRunAwaitingApproval:

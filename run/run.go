@@ -28,6 +28,7 @@ const (
 	StatusQueued           Status = "queued"
 	StatusRunning          Status = "running"
 	StatusAwaitingApproval Status = "awaiting_approval"
+	StatusWaiting          Status = "waiting" // a step waits on someone or something else (core.WaitError)
 	StatusNeedsInput       Status = "needs_input"
 	StatusSucceeded        Status = "succeeded"
 	StatusFailed           Status = "failed"
@@ -48,6 +49,10 @@ type Snapshot struct {
 	Environment    *env.Environment                `json:"environment,omitempty"`
 	// Deployments holds the latest deployment per deployer, keyed by deployer name.
 	Deployments map[string]*deploy.Deployment `json:"deployments,omitempty"`
+	// WaitingFor and WaitUntil say what a waiting run waits for, and when its
+	// step is next checked.
+	WaitingFor string    `json:"waiting_for,omitempty"`
+	WaitUntil  time.Time `json:"wait_until,omitempty"`
 	// Actions are the human actions of the run's environment and their progress.
 	Actions   []Action  `json:"actions,omitempty"`
 	Error     string    `json:"error,omitempty"`
@@ -75,7 +80,7 @@ type Action struct {
 
 type StepRecord struct {
 	Name     string    `json:"name"`
-	Status   string    `json:"status"` // pending|running|done|skipped|failed
+	Status   string    `json:"status"` // pending|running|waiting|done|skipped|failed
 	Started  time.Time `json:"started"`
 	Finished time.Time `json:"finished"`
 	Error    string    `json:"error,omitempty"`

@@ -135,7 +135,7 @@ Commands:
                                  start a run for a ticket and follow it
   status [run-id]                list runs or show one
   logs [-f] <run-id>             print a run's log (-f: follow it)
-  resume <run-id>                continue a failed, needs_input or interrupted run
+  resume <run-id>                continue a failed, needs_input, waiting or interrupted run
   approve <run-id>               pass the gate a run is waiting at and continue it
   cancel <run-id>                cancel a run that isn't executing
   check                          test credentials and the tools this host needs
