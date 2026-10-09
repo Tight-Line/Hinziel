@@ -253,7 +253,7 @@ ingress, so no per-environment DNS is needed.
 
 **What it asks of the core**, proposed and not built:
 
-- **D1. Lazy run branches.** `prepare_workspace` creates the run branch
+- **D1. Lazy run branches** (done). `prepare_workspace` creates the run branch
   locally in every repo but pushes nothing. The agent pushes the repos it
   changes, and `finalize_branch` pushes whatever it left. A repo nobody
   changed never gets a remote branch, an MR or a CI run, and it deploys from
@@ -357,7 +357,7 @@ when no deployer implements `Retriever`).
 | Step | Does | Persisted output |
 |---|---|---|
 | `fetch_ticket` | `Tracker.Fetch`; download files attached to the ticket (`AttachmentFetcher`) into the run's directory, since the agent has no tracker credentials; optionally move the ticket to "in progress" | `Ticket` (with local attachment paths) |
-| `prepare_workspace` | clone every repo side by side, create the run branch in each from its target branch and push it, so the agent can push to it | `Branch`, base commits |
+| `prepare_workspace` | clone every repo side by side and create the run branch in each from its target branch, locally only: it reaches the forge when someone pushes a change to it, so repos the ticket doesn't touch get no remote branch, MR or CI run | `Branch` |
 | `provision_environment` | `Provisioner.Ensure`, then compute the factory's endpoint URLs and create their DNS records (`dns.Provider.Ensure`). Collect the environment's [human actions](#human-actions) and emit `run.action_required` for each new one | `Environment` (with `Endpoints` and `Actions`) |
 | `deploy_base` | every deployer, in order, deploys its repo's unchanged branch, so the environment starts identical to the target branches | `Deployments` |
 | `implement` | `Agent.Implement` in the workspace (all repos), with `Task.Environment` set. The agent loops: edit, commit, push, deploy, test (see [Agent loop](#agent-loop)) | `Outcome`, `Deployments` (latest) |
@@ -1159,7 +1159,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
 | M6 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
-| M7 | Scenario D: the core changes D1–D5 (D1, lazy branches, can land earlier: it helps every multi-repo factory), `env/k8snamespace`, `deploy/helm` |
+| M7 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
 ---
 

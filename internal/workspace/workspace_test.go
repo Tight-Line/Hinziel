@@ -134,3 +134,36 @@ func TestAuthURLEmbedsToken(t *testing.T) {
 		t.Fatalf("ssh url changed: %q", got)
 	}
 }
+
+func TestNewBranchIsLocalUntilAPlainPushCreatesIt(t *testing.T) {
+	ctx := context.Background()
+	r, bare := setup(t)
+	mainBefore, _ := r.run(ctx, "rev-parse", "origin/main")
+
+	if err := r.CheckoutBranch(ctx, "heinzel/t-2", "origin/main"); err != nil {
+		t.Fatal(err)
+	}
+	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/heinzel/t-2") == nil {
+		t.Fatal("CheckoutBranch must not push")
+	}
+	// An unchanged branch counts as pushed: its commit is on origin/main.
+	if pushed, err := r.IsPushed(ctx); err != nil || !pushed {
+		t.Fatalf("pushed %v, %v", pushed, err)
+	}
+
+	write(t, r, "a.txt", "a\n")
+	r.CommitAll(ctx, "a")
+	// What the agent does: a plain push, no arguments.
+	if _, err := r.run(ctx, "push", "--quiet"); err != nil {
+		t.Fatalf("a plain push must create the branch on origin: %v", err)
+	}
+	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/heinzel/t-2") != nil {
+		t.Error("the branch is not on origin")
+	}
+	if mainAfter, _ := r.run(ctx, "rev-parse", "origin/main"); mainAfter != mainBefore {
+		t.Error("the push moved main")
+	}
+	if err := r.DeleteRemoteBranch(ctx, "heinzel/never-pushed"); err != nil {
+		t.Errorf("deleting a branch that was never pushed must be a no-op: %v", err)
+	}
+}

@@ -95,10 +95,23 @@ func (r *Repo) RemoteBranchExists(ctx context.Context, branch string) (bool, err
 	return err == nil, err
 }
 
-// CheckoutBranch creates (or resets) branch at start and checks it out.
+// CheckoutBranch creates (or resets) branch at start and checks it out,
+// without pushing it. Its upstream is set to the branch of the same name on
+// origin, which may not exist yet, so a plain `git push` creates it there and
+// can never land on start's branch.
 func (r *Repo) CheckoutBranch(ctx context.Context, branch, start string) error {
-	_, err := r.run(ctx, "checkout", "--quiet", "-B", branch, start)
-	return err
+	if _, err := r.run(ctx, "checkout", "--quiet", "--no-track", "-B", branch, start); err != nil {
+		return err
+	}
+	for _, kv := range [][2]string{
+		{"branch." + branch + ".remote", "origin"},
+		{"branch." + branch + ".merge", "refs/heads/" + branch},
+	} {
+		if _, err := r.run(ctx, "config", kv[0], kv[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Push pushes branch to origin and sets it as upstream.

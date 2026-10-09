@@ -177,10 +177,9 @@ func (x *execution) prepareWorkspace(ctx context.Context) error {
 		if exists {
 			start = "origin/" + x.r.Branch
 		}
+		// The branch stays local until someone pushes a change to it, so a
+		// repo the ticket doesn't touch gets no remote branch, MR or CI run.
 		if err := ws.CheckoutBranch(ctx, x.r.Branch, start); err != nil {
-			return fmt.Errorf("repo %s: %w", cfg.Name, err)
-		}
-		if err := ws.Push(ctx, x.r.Branch); err != nil {
 			return fmt.Errorf("repo %s: %w", cfg.Name, err)
 		}
 		x.logf(StepPrepareWorkspace, "%s: branch %s from %s", cfg.Name, x.r.Branch, start)
@@ -266,7 +265,11 @@ func (x *execution) deployAll(ctx context.Context, skipDeployed bool) ([]string,
 		if err := ws.Worktree(ctx, wt, head); err != nil {
 			return report, err
 		}
-		src := &deploy.Source{Repo: d.Repo, Workdir: wt, Branch: x.r.Branch, Commit: head, Ticket: x.r.Ticket}
+		branch, err := x.remoteBranch(ctx, ws, d.Repo)
+		if err != nil {
+			return report, err
+		}
+		src := &deploy.Source{Repo: d.Repo, Workdir: wt, Branch: branch, Commit: head, Ticket: x.r.Ticket}
 		dep, err := d.Deployer.Deploy(ctx, x.r.Environment, src)
 		if err != nil {
 			return report, fmt.Errorf("deployer %s: %w", d.Name, err)
@@ -289,6 +292,17 @@ func (x *execution) deployAll(ctx context.Context, skipDeployed bool) ([]string,
 		x.logf("", "deploy %s", line)
 	}
 	return report, nil
+}
+
+// remoteBranch is the branch a repo's HEAD is deployed from: the run branch
+// once it has been pushed, else the target branch it started from.
+func (x *execution) remoteBranch(ctx context.Context, ws *workspace.Repo, repo string) (string, error) {
+	pushed, err := ws.RemoteBranchExists(ctx, x.r.Branch)
+	if err != nil || pushed {
+		return x.r.Branch, err
+	}
+	cfg, err := x.repoConfig(repo)
+	return cfg.TargetBranch, err
 }
 
 func (x *execution) implement(ctx context.Context) error {

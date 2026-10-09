@@ -67,7 +67,7 @@ func prompt(p *Project, r *run.Run, task *agent.Task) string {
 	}
 
 	b.WriteString("\n## How to work\n\n")
-	fmt.Fprintf(&b, "- Commit your work and push it to `%s`. Never push to any other branch and never open merge requests; Heinzel does that.\n", r.Branch)
+	fmt.Fprintf(&b, "- Commit your work and push it to `%s` (a plain `git push` creates it on the remote). Push only the repositories you change; the others stay as they are. Never push to any other branch and never open merge requests; Heinzel does that.\n", r.Branch)
 	if task.Environment != nil {
 		b.WriteString("- To try your work, push it, then run `$HEINZEL_BIN deploy`. It deploys every repository's pushed HEAD to your environment and prints the result. Then test against the URLs above. Repeat as needed.\n")
 		if slices.ContainsFunc(p.Deployers, isRetriever) {
