@@ -12,6 +12,8 @@ import (
 	"syscall"
 
 	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/heinzel/internal/engine"
+	"github.com/Tight-Line/heinzel/internal/store"
 )
 
 // Main is the entry point of a factory binary. It validates the factories,
@@ -27,7 +29,50 @@ func Main(factories ...Factory) {
 }
 
 // Run is Main without the process handling, for tests and embedding.
+// Output, including run progress, goes to out.
 func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory) error {
+	if err := validateAll(factories); err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		usage(out)
+		return nil
+	}
+	cmd, args := args[0], args[1:]
+	switch cmd {
+	case "help", "-h", "--help":
+		usage(out)
+		return nil
+	case "check":
+		return check(ctx, out, factories)
+	case "deploy", "retrieve":
+		return agentCommand(ctx, out, cmd)
+	case "serve", "env":
+		return fmt.Errorf("%s: not implemented yet (milestone M2)", cmd)
+	}
+
+	c := &cli{out: out, factories: factories}
+	if err := c.open(); err != nil {
+		return err
+	}
+	switch cmd {
+	case "run":
+		return c.run(ctx, args)
+	case "status":
+		return c.status(ctx, args)
+	case "logs":
+		return c.logs(ctx, args)
+	case "resume":
+		return c.withRun(ctx, args, c.eng.Resume)
+	case "approve":
+		return c.withRun(ctx, args, c.eng.Approve)
+	case "cancel":
+		return c.withRun(ctx, args, c.eng.Cancel)
+	}
+	return fmt.Errorf("unknown command %q (try 'help')", cmd)
+}
+
+func validateAll(factories []Factory) error {
 	if len(factories) == 0 {
 		return errors.New("no factories given")
 	}
@@ -46,25 +91,39 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if missing := missingEnvNames(); len(missing) > 0 {
 		errs = append(errs, fmt.Errorf("missing environment variables: %s", strings.Join(missing, ", ")))
 	}
-	if err := errors.Join(errs...); err != nil {
-		return err
-	}
+	return errors.Join(errs...)
+}
 
-	if len(args) == 0 {
-		usage(out)
-		return nil
+// stateDir is where runs are kept: $HEINZEL_STATE_DIR, else
+// $XDG_STATE_HOME/heinzel, else ~/.local/state/heinzel.
+func stateDir() (string, error) {
+	if d := os.Getenv("HEINZEL_STATE_DIR"); d != "" {
+		return d, nil
 	}
-	switch cmd := args[0]; cmd {
-	case "help", "-h", "--help":
-		usage(out)
-		return nil
-	case "check":
-		return check(ctx, out, factories)
-	case "run", "serve", "status", "logs", "resume", "approve", "cancel", "env", "deploy", "retrieve":
-		return fmt.Errorf("%s: not implemented yet (milestone M0)", cmd)
-	default:
-		return fmt.Errorf("unknown command %q (try 'help')", cmd)
+	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
+		return filepath.Join(d, "heinzel"), nil
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "heinzel"), nil
+}
+
+func newEngine(out io.Writer, factories []Factory) (*engine.Engine, error) {
+	dir, err := stateDir()
+	if err != nil {
+		return nil, err
+	}
+	st, err := store.New(dir)
+	if err != nil {
+		return nil, err
+	}
+	var projects []*engine.Project
+	for i := range factories {
+		projects = append(projects, factories[i].project())
+	}
+	return engine.New(st, projects, engine.Options{Out: out}), nil
 }
 
 func usage(out io.Writer) {
@@ -72,18 +131,18 @@ func usage(out io.Writer) {
 	fmt.Fprintf(out, `Usage: %[1]s <command> [arguments]
 
 Commands:
-  run [--factory F] <ticket-id> [--gate STEP]... [--detach]
-  serve                          HTTP triggers + worker pool
+  run [--factory F] <ticket-id> [--gate STEP]...
+                                 start a run for a ticket and follow it
   status [run-id]                list runs or show one
-  logs <run-id> [-f]
-  resume <run-id>                continue a failed or needs_input run
-  approve <run-id>               pass the current gate
-  cancel <run-id>
-  env up [--factory F]           provision + deploy the target branches, without a ticket
-  env list | env destroy <run-id | env-name>
+  logs [-f] <run-id>             print a run's log (-f: follow it)
+  resume <run-id>                continue a failed, needs_input or interrupted run
+  approve <run-id>               pass the gate a run is waiting at and continue it
+  cancel <run-id>                cancel a run that isn't executing
   check                          validate factories and test component credentials
+  serve                          HTTP triggers + worker pool (not yet)
+  env up | list | destroy        manage environments (not yet)
 
-Used by the agent inside a run (found via $HEINZEL_RUN_ID):
+Used by the agent inside a run (found via $HEINZEL_SOCKET):
   deploy                         deploy every repo's pushed HEAD to the environment
   retrieve                       pull environment changes into the working tree
 `, bin)

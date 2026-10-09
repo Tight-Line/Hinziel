@@ -228,8 +228,8 @@ opened.
 
 The agent tests its work in the environment many times during `implement`,
 so these deploys are not pipeline steps. Heinzel gives the agent two commands
-of the factory binary. The engine passes the binary's path in `HEINZEL_BIN`
-and the run in `HEINZEL_RUN_ID`:
+of the factory binary. The engine passes the binary's path in `HEINZEL_BIN`,
+the run in `HEINZEL_RUN_ID` and the engine's socket in `HEINZEL_SOCKET`:
 
 - **`$HEINZEL_BIN deploy`** runs every deployer on its repo's pushed HEAD and
   blocks until done, printing the results and the deploy logs. It refuses if
@@ -243,8 +243,9 @@ and the run in `HEINZEL_RUN_ID`:
   (e.g. Salesforce clicks) into the working tree, for the agent to review,
   commit and push.
 
-Both commands send their request to the running engine over a Unix socket in
-the run directory. They don't call the components themselves, so the engine
+Both commands send their request to the running engine over a Unix socket
+(in the system temp directory, because socket paths are limited to about 108
+bytes). They don't call the components themselves, so the engine
 records every deployment in the run state and only one process ever writes
 `run.json`.
 
@@ -319,17 +320,18 @@ compiles in the components it imports.
 Components outside this repository (in a team's factory code or a
 third-party module) follow the same interfaces and are used the same way.
 
-### Planned internal packages
-
-Not written yet.
+### Test packages and internals
 
 | Package | Purpose |
 |---|---|
-| `internal/engine` | pipeline, steps, run state machine, gates, the agent's Unix socket |
-| `internal/store` | `run.Store` on the filesystem |
-| `internal/workspace` | git via the git CLI: clone, branch, commit, push |
-| `core/remote` | SSH exec and file sync. Public, because components outside this repository need it too |
-| `<interface>/<interface>test` | conformance test suites, e.g. `forge/forgetest`. Public (§9) |
+| [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§9) |
+| [`agent/agenttest`](./agent/agenttest) | public: a scriptable fake agent. No conformance suite; agents are tested end to end |
+| [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
+| [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
+| [`internal/workspace`](./internal/workspace) | git via the git CLI: clone, branch, commit, push, "is it pushed?", deploy worktrees |
+| `core/remote` | *planned:* SSH exec and file sync. Public, because components outside this repository need it too |
+
+There is no `trigger/triggertest` yet; it comes with `serve` (M2).
 
 ### Design rules
 
@@ -633,54 +635,75 @@ material the skill learns from.
 `blanktracker-factory`.
 
 ```sh
-<factory> run [--factory F] <ticket-id> [--gate STEP]... [--detach]
-<factory> serve                        # HTTP triggers + worker pool
+<factory> run [--factory F] <ticket-id> [--gate STEP]...
 <factory> status [run-id]              # list runs or show one
-<factory> logs <run-id> [-f]
-<factory> resume <run-id>              # continue a failed or needs_input run
-<factory> approve <run-id>             # pass the current gate
-<factory> cancel <run-id>
-<factory> env up [--factory F]         # provision + deploy the target branches, without a ticket
-<factory> env list
-<factory> env destroy <run-id | env-name>
+<factory> logs [-f] <run-id>
+<factory> resume <run-id>              # continue a failed, needs_input or interrupted run
+<factory> approve <run-id>             # pass the current gate and continue
+<factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check                        # validate factories and test component credentials
+<factory> serve                        # HTTP triggers + worker pool (M2)
+<factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
+<factory> env list                     # (M5)
+<factory> env destroy <run-id | env-name>   # (M5)
 
-# used by the agent inside a run (run found via $HEINZEL_RUN_ID)
+# used by the agent inside a run (engine found via $HEINZEL_SOCKET)
 $HEINZEL_BIN deploy                    # deploy every repo's pushed HEAD to the run's environment
 $HEINZEL_BIN retrieve                  # pull environment changes into the working tree
 ```
 
-`--factory` is only needed when the binary holds more than one factory. `run`
-without `--detach` executes in-process and streams the log. It uses the same
-engine and store as `serve`.
+`--factory` is only needed when the binary holds more than one factory.
+`run`, `resume` and `approve` execute the run in the foreground, streaming its
+progress, until it finishes or pauses. A run executing in one process is
+locked; `resume` and `cancel` refuse it until that process stops (Ctrl-C
+leaves the run `failed`, ready to resume). A run whose process died is not
+locked and resumes normally. Running in the background arrives with `serve`.
+
+[`examples/demo`](./examples/demo) is a factory built entirely from fakes, to
+try the CLI without any accounts.
 
 ---
 
 ## 8. Operational behaviour
 
-- **Workspace:** `$XDG_STATE_HOME/heinzel/runs/<run-id>/{run.json,log.txt,engine.sock,repos/<name>/}`.
-  Every repo is a fresh clone per run, which costs time but avoids state
-  bleeding between runs.
-- **Concurrency:** at most one active run per (factory, ticket). A global
+- **State:** `$HEINZEL_STATE_DIR`, else `$XDG_STATE_HOME/heinzel`, else
+  `~/.local/state/heinzel`. Each run has
+  `runs/<run-id>/{run.json,log.txt,lock,repos/<name>/,deploy/<deployer>/}`.
+  `run.json` is written atomically after every step. Every repo is a fresh
+  clone per run, which costs time but avoids state bleeding between runs.
+  Deployers build in their own worktree (`deploy/<deployer>/`) at the
+  commit being deployed, so build output never shows up as uncommitted
+  changes in the agent's checkout.
+- **Concurrency:** at most one unfinished run per (factory, ticket). A global
   worker limit applies in `serve`.
-- **Re-triggering a ticket that already has a run:** refused while a run is
-  active. Otherwise a new run starts, reusing the same branch, environment
-  and MRs (thanks to the idempotent keys). It force-pushes with lease. *(See
-  Open Questions.)*
+- **Re-triggering a ticket that already has a run:** refused while that run is
+  unfinished (queued, running, awaiting approval, needs input or failed):
+  resume or cancel it first. After a run succeeded or was cancelled, a new
+  run continues the existing branch if it is still on the forge, and reuses
+  the environment and MRs (thanks to the idempotent keys). *(See Open
+  Questions.)*
 - **Agent access:** set through the agent component's options and carries
   whatever the agent needs, including push access to the forges. Heinzel does
   not restrict it (§1).
-- **Logging:** `log/slog`, written to stderr and to the run log. The agent
-  transcript goes to the run log only.
-- **Timeouts:** per step, configurable. Defaults: implement 60m, provision
-  15m, deploy 20m.
+- **Logging:** one timestamped line per event (`2026-10-09T09:12:31Z
+  [deploy_base] done`), written to the run log and to the CLI's output. The
+  agent's transcript and the output of its `deploy`/`retrieve` commands go to
+  the run log only.
+- **Timeouts:** per step. Defaults: implement 60m, provision 15m, deploy and
+  deploy_base 20m, prepare_workspace 15m, the rest 2–10m. Not yet
+  configurable.
+- **Retries:** a step that returns `core.RetryableError` is retried up to 3
+  times, with backoff starting at 5s and doubling.
 
 ---
 
 ## 9. Testing strategy
 
-- `internal/engine` is tested end to end with fakes: resume, gates,
-  idempotency, error kinds, several repos.
+- `internal/engine` is tested end to end with fakes: two repos (one
+  unchanged), the agent deploying over the socket, resume after a failure,
+  retries, gates, needs-input with a re-fetched ticket, the deploy guards
+  (uncommitted, unpushed, unretrieved environment changes) and a factory
+  without an environment.
 - **Conformance suites are public**, one per interface: `forge/forgetest`,
   `env/envtest`, `deploy/deploytest`, … They check the contract (idempotency,
   `Destroy` on a missing env, a missing DNS record is not an error, …). Every
@@ -696,7 +719,7 @@ engine and store as `serve`.
 
 | # | Deliverable |
 |---|---|
-| M0 | interface packages and the root `heinzel` package (`Factory`, validation, `Main`, `check`) ✅ partly; engine with fakes (multi-repo from the start), file store, `run` / `status` / `resume` |
+| M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfpages`, `notify/ticket`, and `examples/blanktracker` |
 | M2 | `serve` + `trigger/trellopowerup` + one chat notifier; `env up` |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |

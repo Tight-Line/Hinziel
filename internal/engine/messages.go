@@ -1,0 +1,201 @@
+package engine
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/Tight-Line/heinzel/agent"
+	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/heinzel/deploy"
+	"github.com/Tight-Line/heinzel/notify"
+	"github.com/Tight-Line/heinzel/run"
+)
+
+// prompt is the task description given to the agent.
+func prompt(p *Project, r *run.Run, task *agent.Task) string {
+	t := r.Ticket
+	var b strings.Builder
+	fmt.Fprintf(&b, "Implement ticket %s: %s\n", t.Key, t.Title)
+	if t.URL != "" {
+		fmt.Fprintf(&b, "Ticket: %s\n", t.URL)
+	}
+	if d := strings.TrimSpace(t.Description); d != "" {
+		fmt.Fprintf(&b, "\n## Description\n\n%s\n", d)
+	}
+	for _, name := range sortedKeys(t.Fields) {
+		fmt.Fprintf(&b, "\n## %s\n\n%s\n", name, t.Fields[name])
+	}
+	if len(t.Comments) > 0 {
+		b.WriteString("\n## Comments on the ticket\n")
+		for _, c := range t.Comments {
+			fmt.Fprintf(&b, "\n**%s:**\n%s\n", c.Author, c.Body)
+		}
+	}
+	if len(t.Attachments) > 0 {
+		b.WriteString("\n## Attachments\n\n")
+		for _, a := range t.Attachments {
+			fmt.Fprintf(&b, "- %s: %s\n", a.Name, a.URL)
+		}
+	}
+
+	b.WriteString("\n## Workspace\n\n")
+	fmt.Fprintf(&b, "Every repository is checked out under %s on branch `%s`:\n\n", task.Workdir, r.Branch)
+	for _, c := range task.Repos {
+		fmt.Fprintf(&b, "- %s: %s\n", c.Name, c.Path)
+	}
+	if e := task.Environment; e != nil {
+		fmt.Fprintf(&b, "\nYour environment %q is running the code from before your changes.\n", e.Name)
+		for _, name := range sortedKeys(e.Endpoints) {
+			fmt.Fprintf(&b, "- %s: %s\n", name, e.Endpoints[name])
+		}
+	}
+
+	b.WriteString("\n## How to work\n\n")
+	fmt.Fprintf(&b, "- Commit your work and push it to `%s`. Never push to any other branch and never open merge requests; Heinzel does that.\n", r.Branch)
+	if task.Environment != nil {
+		b.WriteString("- To try your work, push it, then run `$HEINZEL_BIN deploy`. It deploys every repository's pushed HEAD to your environment and prints the result. Then test against the URLs above. Repeat as needed.\n")
+		if slices.ContainsFunc(p.Deployers, isRetriever) {
+			b.WriteString("- Changes you make directly in the environment are not in git. Run `$HEINZEL_BIN retrieve` to pull them into your checkout, then review, commit and push them. `$HEINZEL_BIN deploy` refuses to run while such changes are not committed.\n")
+		}
+	}
+	b.WriteString("- If something must be done by a human (a setting you can't change, a secret to add), say so in your final summary under \"Manual steps\".\n")
+
+	if p.Settings.Instructions != "" {
+		fmt.Fprintf(&b, "\n## Instructions for this project\n\n%s\n", strings.TrimSpace(p.Settings.Instructions))
+	}
+	return b.String()
+}
+
+func isRetriever(d Deployer) bool {
+	_, ok := d.Deployer.(deploy.Retriever)
+	return ok
+}
+
+func commitMessage(r *run.Run) string {
+	if r.Outcome != nil && strings.TrimSpace(r.Outcome.CommitMessage) != "" {
+		return r.Outcome.CommitMessage
+	}
+	return fmt.Sprintf("%s: %s", r.Ticket.Key, r.Ticket.Title)
+}
+
+func noChangesQuestion(r *run.Run) string {
+	q := "I didn't change anything in any repository."
+	if r.Outcome != nil && strings.TrimSpace(r.Outcome.Summary) != "" {
+		q += " Here is what I found:\n\n" + strings.TrimSpace(r.Outcome.Summary) + "\n\n"
+	} else {
+		q += " "
+	}
+	return q + "Could you clarify what should change? Answer in a comment, then resume the run."
+}
+
+// changeRequestMessage is the description of one repo's change request.
+func changeRequestMessage(r *run.Run) core.Message {
+	var b strings.Builder
+	if r.Ticket.URL != "" {
+		fmt.Fprintf(&b, "Implements [%s: %s](%s).\n", r.Ticket.Key, r.Ticket.Title, r.Ticket.URL)
+	} else {
+		fmt.Fprintf(&b, "Implements %s: %s.\n", r.Ticket.Key, r.Ticket.Title)
+	}
+	if r.Outcome != nil && strings.TrimSpace(r.Outcome.Summary) != "" {
+		fmt.Fprintf(&b, "\n%s\n", strings.TrimSpace(r.Outcome.Summary))
+	}
+	writeManualSteps(&b, r)
+	fmt.Fprintf(&b, "\n_Opened by Heinzel, run `%s`._\n", r.ID)
+	msg := core.Message{Body: b.String()}
+	if r.Ticket.URL != "" {
+		msg.Links = append(msg.Links, core.Link{Title: r.Ticket.Key, URL: r.Ticket.URL})
+	}
+	return msg
+}
+
+// relatedMessage lists the other change requests of the same run.
+func relatedMessage(r *run.Run, repo string) core.Message {
+	var b strings.Builder
+	b.WriteString("This ticket also changed:\n")
+	var links []core.Link
+	for _, name := range sortedKeys(r.ChangeRequests) {
+		if name == repo {
+			continue
+		}
+		cr := r.ChangeRequests[name]
+		fmt.Fprintf(&b, "- %s: %s\n", name, cr.URL)
+		links = append(links, core.Link{Title: name, URL: cr.URL})
+	}
+	b.WriteString("\nThey may need to be merged together.\n")
+	return core.Message{Body: b.String(), Links: links}
+}
+
+// publishMessage announces the result on the change requests and the ticket.
+func publishMessage(r *run.Run) core.Message {
+	var b strings.Builder
+	var links []core.Link
+	if len(r.ChangeRequests) > 0 {
+		b.WriteString("**Changes**\n")
+		for _, name := range sortedKeys(r.ChangeRequests) {
+			cr := r.ChangeRequests[name]
+			fmt.Fprintf(&b, "- %s: %s\n", name, cr.URL)
+			links = append(links, core.Link{Title: "Merge request: " + name, URL: cr.URL})
+		}
+	}
+	if r.Environment != nil && len(r.Environment.Endpoints) > 0 {
+		b.WriteString("\n**Environment** `" + r.Environment.Name + "`\n")
+		for _, name := range sortedKeys(r.Environment.Endpoints) {
+			u := r.Environment.Endpoints[name]
+			fmt.Fprintf(&b, "- %s: %s\n", name, u)
+			links = append(links, core.Link{Title: "Preview: " + name, URL: u})
+		}
+	}
+	writeManualSteps(&b, r)
+	return core.Message{Title: "Heinzel: " + r.Ticket.Key + " is ready for review", Body: b.String(), Links: links}
+}
+
+func questionMessage(r *run.Run, question string) core.Message {
+	return core.Message{
+		Title: "Heinzel needs input",
+		Body:  question + fmt.Sprintf("\n\n_Run `%s`. After answering, resume it with `resume %s`._\n", r.ID, r.ID),
+	}
+}
+
+func writeManualSteps(b *strings.Builder, r *run.Run) {
+	if r.Outcome == nil || len(r.Outcome.ManualSteps) == 0 {
+		return
+	}
+	b.WriteString("\n**Manual steps**\n")
+	for _, s := range r.Outcome.ManualSteps {
+		fmt.Fprintf(b, "- [ ] %s\n", s)
+	}
+}
+
+// eventMessage is the default text of a notification.
+func eventMessage(r *run.Run, typ notify.EventType) core.Message {
+	key := r.Request.Ticket.ID
+	if r.Ticket != nil {
+		key = r.Ticket.Key
+	}
+	subject := r.Factory + " " + key
+	switch typ {
+	case notify.EventRunStarted:
+		return core.Message{Title: subject + ": started", Body: fmt.Sprintf("Run `%s` started.", r.ID)}
+	case notify.EventRunSucceeded:
+		msg := publishMessage(r)
+		msg.Title = subject + ": ready for review"
+		return msg
+	case notify.EventRunFailed:
+		return core.Message{Title: subject + ": failed", Body: fmt.Sprintf("Run `%s` failed at `%s`:\n\n%s\n\nResume it with `resume %s`.", r.ID, r.CurrentStep, firstLine(r.Error), r.ID)}
+	case notify.EventRunNeedsInput:
+		return core.Message{Title: subject + ": needs input", Body: r.Error}
+	case notify.EventRunAwaitingApproval:
+		return core.Message{Title: subject + ": waiting for approval", Body: fmt.Sprintf("Run `%s` is waiting before `%s`. Continue it with `approve %s`.", r.ID, r.CurrentStep, r.ID)}
+	}
+	return core.Message{Title: subject + ": " + string(typ)}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}

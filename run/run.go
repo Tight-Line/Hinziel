@@ -59,7 +59,9 @@ type Run struct {
 	Request Request           `json:"request"`
 	Commits map[string]string `json:"commits,omitempty"` // repo name -> pushed head
 	Outcome *agent.Outcome    `json:"outcome,omitempty"`
-	Steps   []StepRecord      `json:"steps"`
+	// Approved lists the gates (step names) this run has been approved past.
+	Approved []string     `json:"approved,omitempty"`
+	Steps    []StepRecord `json:"steps"`
 }
 
 type StepRecord struct {
