@@ -409,7 +409,8 @@ third-party module) follow the same interfaces and are used the same way.
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
 | [`internal/workspace`](./internal/workspace) | git via the git CLI: clone, branch, commit, push, "is it pushed?", deploy worktrees |
-| `core/remote` | *planned:* SSH exec and file sync. Public, because components outside this repository need it too |
+| [`core/remote`](./core/remote) | SSH exec, file writes and directory upload through the system `ssh`; `remotetest.LocalSSH` runs them locally in tests. Public, because components outside this repository need it too |
+| [`internal/apiclient`](./internal/apiclient) | the JSON-over-HTTP client the components here share; 429 and 5xx become `core.RetryableError` |
 
 There is no `trigger/triggertest` yet; it comes with `serve` (M2).
 
