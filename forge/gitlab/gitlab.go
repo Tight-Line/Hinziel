@@ -1,8 +1,16 @@
 // Package gitlab is a forge.Forge for GitLab (gitlab.com or self-managed).
+// Heinzel and the agent push over https with the same token that opens
+// merge requests.
 //
-// The token needs the api scope (to open merge requests) and write access to
-// the repository (Heinzel and the agent push over https with it). A personal,
-// project or group access token with the Developer role works.
+// # Credentials
+//
+//   - GITLAB_TOKEN, with scopes api and write_repository and at least the
+//     Developer role on the project: a project access token (project →
+//     Settings → Access tokens; on gitlab.com this needs a paid tier), or a
+//     personal access token (avatar → Edit profile → Access tokens) of a
+//     dedicated user who is a Developer on the project.
+//   - The run branches (heinzel/… by default) must not be protected, or
+//     pushes are refused.
 package gitlab
 
 import (

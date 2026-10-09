@@ -10,6 +10,15 @@
 // the previous one) and writes Heinzel's own files to <RemoteDir>/heinzel,
 // outside the build context, so a `COPY . .` never bakes them into an image.
 // The host needs Docker with the compose plugin.
+//
+// # Credentials
+//
+// It reaches the host with the environment's SSH access, so it needs no
+// credentials of its own. With TLS, it needs the certificate and key files:
+// for Cloudflare's "Full (strict)" mode, a Cloudflare Origin CA certificate
+// (the zone → SSL/TLS → Origin Server → "Create Certificate"; the key is
+// shown only once). Whatever the app itself needs to run (API keys, OAuth
+// clients) goes into EnvFile or Env; list it from the app's .env.example.
 package dockercompose
 
 import (

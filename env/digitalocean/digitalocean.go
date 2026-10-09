@@ -5,6 +5,17 @@
 // per label (e.g. "heinzel-factory:shop"). Ensure only ever adopts a droplet
 // that carries the "heinzel" tag, so it never takes over, or later destroys,
 // a droplet it didn't create.
+//
+// # Credentials
+//
+//   - DO_TOKEN: Control Panel → API → Tokens → "Generate New Token". Custom
+//     scopes are enough: droplet (create, read, delete), tag (create, read),
+//     ssh_key (read) and account (read).
+//   - An SSH key pair for reaching the droplets: create one with
+//     `ssh-keygen -t ed25519 -N "" -f ~/.config/heinzel/id_ed25519`, add the
+//     .pub file under Settings → Security → SSH Keys, and pass its
+//     fingerprint (shown there, or `ssh-keygen -E md5 -lf <file>.pub` without
+//     the "MD5:" prefix) as SSHKeys and the private key's path as SSHKeyPath.
 package digitalocean
 
 import (

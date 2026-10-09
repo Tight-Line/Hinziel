@@ -1,6 +1,10 @@
 // Package ticket is a notify.Notifier that comments on the run's ticket,
 // through the factory's own tracker. It lets "tell the tester on the card"
 // use the same event routing as "tell the dev channel".
+//
+// # Credentials
+//
+// None: it posts with the tracker it's given.
 package ticket
 
 import (

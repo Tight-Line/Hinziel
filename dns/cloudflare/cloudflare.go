@@ -1,8 +1,15 @@
 // Package cloudflare is a dns.Provider for Cloudflare DNS.
 //
-// The token needs Zone:Read and DNS:Edit on the zone. Cloudflare can't limit
-// a token to some records of a zone, so when the zone also holds production
-// records, set AllowedNames: every other name is refused before any API call.
+// Cloudflare can't limit a token to some records of a zone, so when the zone
+// also holds production records, set AllowedNames: every other name is
+// refused before any API call.
+//
+// # Credentials
+//
+//   - CLOUDFLARE_DNS_TOKEN: at https://dash.cloudflare.com/profile/api-tokens,
+//     "Create Token" → custom token with Zone → DNS → Edit and
+//     Zone → Zone → Read, with Zone Resources limited to the one zone.
+//   - The zone itself must be on Cloudflare (the free plan is enough).
 package cloudflare
 
 import (

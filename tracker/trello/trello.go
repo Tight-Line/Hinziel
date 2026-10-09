@@ -7,6 +7,20 @@
 // It implements every optional capability: StageMover (moves the card to the
 // list named for the stage), Linker (adds URL attachments) and
 // AttachmentFetcher.
+//
+// # Credentials
+//
+//   - TRELLO_API_KEY: at https://trello.com/power-ups/admin, create a Power-Up
+//     (or open an existing one) in the board's workspace, then "API key" →
+//     "Generate a new API key".
+//   - TRELLO_TOKEN: on the same page, follow the "Token" link next to the key
+//     and allow access. It needs read and write (comments, moving cards,
+//     attachments) and should not expire. It acts as the Trello member who
+//     authorizes it, on every board they can see, so authorize it as a
+//     dedicated member (e.g. "Heinzel") who is only on the factory's board.
+//     Comments then also appear under that name.
+//   - Board: the board's ID or the shortLink from its URL
+//     (trello.com/b/<shortLink>/…). Stages name lists that must exist on it.
 package trello
 
 import (

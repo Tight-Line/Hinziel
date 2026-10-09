@@ -8,8 +8,18 @@
 // overridden, so previews go to a Worker of their own and never touch the
 // production ones named in the configuration.
 //
-// The token needs Workers Scripts:Edit on the account. The Heinzel host needs
-// Node.js; wrangler comes from the repository's node_modules, or npx.
+// The Heinzel host needs Node.js; wrangler comes from the repository's
+// node_modules, or npx.
+//
+// # Credentials
+//
+//   - CLOUDFLARE_ACCOUNT_ID: shown on the account's home page and on
+//     Workers & Pages in the dashboard.
+//   - CLOUDFLARE_WORKERS_TOKEN: at https://dash.cloudflare.com/profile/api-tokens,
+//     "Create Token" → the "Edit Cloudflare Workers" template, limited to
+//     the one account.
+//   - The account needs a workers.dev subdomain: opening Workers & Pages for
+//     the first time asks for one.
 package cfworkers
 
 import (

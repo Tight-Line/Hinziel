@@ -400,6 +400,12 @@ in tests only as the worked example; nothing here depends on it. If a
 component seems to need one app's knowledge, that knowledge belongs in an
 option, or in the factory's own code.
 
+**Components document what they need.** Every component's package
+documentation has a `Credentials` section: each secret, file or one-time
+setup it needs, the least access that works, and exactly where to create
+it. The build-a-factory skill (§6) assembles its list for the team from
+these sections, so a component isn't finished without one.
+
 Components outside this repository (in a team's factory code or a
 third-party module) follow the same interfaces and are used the same way.
 
@@ -784,31 +790,66 @@ picks up the repo's own `AGENTS.md` / `CLAUDE.md` as usual.
 Teams shouldn't have to read this document. Upstream Heinzel ships a
 **build-a-factory guide and a Claude skill**: point an agent at a team's
 repositories and tools, and it builds, tests and hands over their factory.
+The factory lives in the app's own repository (§5).
 
-Because Heinzel is autonomous by design, the agent can test its own work
-end to end:
+Collecting credentials is the part with the most friction, and a missing one
+stalls everything after it. So the skill settles all of them **before it
+writes any code**, and works in two phases.
+
+### Phase 1: plan and requirements (no code yet)
 
 1. **Discover the process.** Read the team's repos (compose files, CI config,
-   `package.json`, deploy scripts) and ask about the rest: where tickets live,
-   how and where things are deployed, which domains, who should hear about
-   what.
-2. **Choose components.** Use ready-made ones where they fit.
-3. **Write the missing ones** in the factory's own code, against the
-   interfaces, and run the matching conformance suite
-   (`trackertest.Run(t, myTracker)`, …) until it passes.
-4. **Check credentials** with `check` until every component passes.
-5. **Bring up an environment** for the target branches alone with
-   `env up`, and iterate until it provisions, deploys and answers on its
-   endpoint URLs.
-6. **Prove the whole flow.** Ask the user for a small test feature, run it as a
-   real ticket, and verify the result with them: branch, MRs, a working
-   environment with the change, notifications. Fix and repeat until it works.
-7. **Hand over** the factory repository, with a short README of what was built
-   and any components worth contributing upstream.
+   `package.json`, deploy scripts, `.env.example`, `CLAUDE.md`) and ask about
+   the rest: where tickets live, how and where things are deployed, which
+   domains, who should hear about what.
+2. **Choose components.** Use ready-made ones where they fit; name any that
+   must be written.
+3. **List everything needed from people**, in one message. For each item:
+   what it is, which component needs it and why, the least access that
+   works, exactly where and how to create it, and the environment variable or
+   file it goes in. The sources are:
+   - each component's **Credentials** section in its package documentation
+     (every component in this repository has one; see
+     [Where components go](#where-components-go));
+   - what the **app** needs to run in an environment: its `.env.example`,
+     secrets its deploy scripts expect, OAuth clients;
+   - **one-time setup** that isn't a secret: a Cloudflare zone for the
+     daemon's URL, a webhook or Power-Up to register, a Slack channel, a test
+     ticket and a sandbox repository for the integration tests;
+   - **human actions** each environment will need (§3), so nobody is
+     surprised by them later.
+4. **Ask for confirmation**, in this shape:
+
+   > Here's my plan: (components, where previews run, what triggers runs,
+   > who gets notified). Here's what I need from you and how to get each
+   > one: (the list). I'll write `~/.config/heinzel/<factory>.env` with a
+   > commented placeholder for every value, so you only fill it in. Shall I
+   > proceed to build?
+
+   Secrets go into that file, never into the chat. The skill only reads the
+   file into a command's environment.
+
+### Phase 2: build and prove
+
+5. **Write the factory**, and any missing components, against the
+   interfaces. Run each one's conformance suite (`trackertest.Run(t,
+   myTracker)`, …) until it passes.
+6. **Check** with `check` as the values arrive. It reports every bad
+   credential and missing tool at once, so the person can fill the file in
+   any order, and the skill tells them what's still missing.
+7. **Bring up an environment** for the target branches alone with `env up`,
+   and iterate until it provisions, deploys and answers on its endpoint URLs.
+8. **Prove the whole flow.** Ask for a small test feature, run it as a real
+   ticket, and verify the result together: branch, MRs, a working environment
+   with the change, notifications. Fix and repeat until it works.
+9. **Hand over** the factory, with a short README of what was built, every
+   credential it uses and how to rotate it, and any components worth
+   contributing upstream.
 
 What makes this work is that a factory is small, typed Go code with
-conformance suites to check it against. Every case study (§12) is the kind of
-material the skill learns from.
+conformance suites to check it against, and that every component documents
+what it needs. Every case study (§12) is the kind of material the skill
+learns from.
 
 ---
 

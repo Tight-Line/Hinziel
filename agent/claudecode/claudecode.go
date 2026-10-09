@@ -14,6 +14,16 @@
 // Claude Code must be installed and logged in (or ANTHROPIC_API_KEY set) for
 // the user running the factory. It runs with permission prompts off
 // (bypassPermissions), as Heinzel's agents have full access by design.
+//
+// # Credentials
+//
+//   - Claude Code installed on the Heinzel host (https://claude.com/claude-code).
+//   - One of: CLAUDE_CODE_OAUTH_TOKEN, from running `claude setup-token`
+//     once with a Claude subscription; or ANTHROPIC_API_KEY, from
+//     https://console.anthropic.com → API keys. On a desktop where you're
+//     already logged in to Claude Code, neither is needed.
+//   - Whatever the agent itself needs for the project, such as SSH access to
+//     environments, comes through the factory's environment.
 package claudecode
 
 import (

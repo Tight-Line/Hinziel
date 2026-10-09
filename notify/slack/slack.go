@@ -1,6 +1,13 @@
 // Package slack is a notify.Notifier that posts to a Slack channel through an
 // incoming webhook (https://api.slack.com/messaging/webhooks). One webhook
 // posts to one channel, so use one notifier per audience.
+//
+// # Credentials
+//
+//   - A webhook URL per channel: at https://api.slack.com/apps, "Create New
+//     App" → From scratch, then Incoming Webhooks → on → "Add New Webhook"
+//     and pick the channel. Some workspaces need an admin to approve the app.
+//     The URL is the secret; keep it in the env file.
 package slack
 
 import (
