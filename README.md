@@ -157,7 +157,8 @@ on a droplet. A preview environment looks like this:
   new environment produces a [human action](#human-actions) asking someone to
   add its two callback URLs. The agent doesn't need Google login: it creates a
   Sanctum token with `artisan tinker` over SSH.
-- **The app needs no changes.** See §12.4.
+- **The app's code needs no changes.** Installing Heinzel only adds the
+  factory's directory to the repository. See §12.4.
 
 ### Scenario C in more detail
 
@@ -390,6 +391,14 @@ about: `deploy/sshnginx` and `deploy/scratchorg` are also `env.Provisioner`s.
 Each component package has a `New(Options)` constructor, and a factory only
 compiles in the components it imports.
 
+**Components in this repository are generic.** None of them knows about a
+particular team, app or project. Everything specific (names, URLs, compose
+files, `.env` templates, instructions) comes in through options from the
+factory, which lives with the app. BlankTracker appears in this document and
+in tests only as the worked example; nothing here depends on it. If a
+component seems to need one app's knowledge, that knowledge belongs in an
+option, or in the factory's own code.
+
 Components outside this repository (in a team's factory code or a
 third-party module) follow the same interfaces and are used the same way.
 
@@ -515,10 +524,11 @@ These rules keep the interfaces from fighting each other:
 
 ## 5. Writing a factory
 
-A factory is a `main` package, usually in its own small repository (or a
-`factory/` directory) owned by the team. Secrets come from the environment
-through `heinzel.Env`. A missing variable doesn't fail on the spot: `Main`
-lists every missing one at once and exits before doing anything.
+A factory is a `main` package with its own `go.mod`, usually in a directory
+of the app's repository (e.g. `heinzel/`), so it's versioned and reviewed with
+the app it builds. A separate repository works too. Secrets come from the
+environment through `heinzel.Env`. A missing variable doesn't fail on the
+spot: `Main` lists every missing one at once and exits before doing anything.
 
 ### Scenario A: BlankTracker
 
@@ -885,7 +895,7 @@ try the CLI without any accounts.
 | # | Deliverable |
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
-| M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions), and `examples/blanktracker` |
+| M1 | Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
 | M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up` |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1024,7 +1034,8 @@ Pages), three hostnames per environment, no preview domain, a `CLAUDE.md`
 written for non-developers who drive Claude by hand, and a nightly schedule
 that spends money on third-party APIs.
 
-**What Heinzel delivers.** Previews with no changes to the app.
+**What Heinzel delivers.** Previews with no changes to the app's code. The
+only addition to the repository is the factory, in `heinzel/`.
 
 **How it maps.**
 

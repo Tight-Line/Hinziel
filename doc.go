@@ -11,8 +11,8 @@
 //			Name:    "blanktracker",
 //			Tracker: trello.New(trello.Options{Board: "5f1a2b3c4d", Token: heinzel.Env("TRELLO_TOKEN")}),
 //			Repos: []heinzel.Repo{{
-//				Name: "blanktracker", TargetBranch: "staging",
-//				Forge: gitlab.New(gitlab.Options{Project: "acme/blanktracker", Token: heinzel.Env("GITLAB_TOKEN")}),
+//				Name: "app", TargetBranch: "develop",
+//				Forge: gitlab.New(gitlab.Options{Project: "blanktracker/app", Token: heinzel.Env("GITLAB_TOKEN")}),
 //			}},
 //			Agent:       claudecode.New(claudecode.Options{Model: "claude-opus-5-5"}),
 //			Environment: digitalocean.New(digitalocean.Options{Region: "fra1"}),
