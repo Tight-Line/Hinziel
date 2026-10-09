@@ -89,21 +89,25 @@ harder, so it's out of scope until we choose to revisit it.
 - Automatic environment teardown policy (§11). Teardown is supported in the
   interfaces and through a manual CLI command.
 - Multi-tenant/public SaaS deployment.
+- Production rollout. Heinzel's work ends at reviewed MRs and a working
+  preview. Merging, canaries, feature flags and production deploys stay the
+  team's own pipeline (Scenario D).
 
 ---
 
 ## 2. Reference scenarios
 
-| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** |
-|---|---|---|---|
-| Tracker | Trello | Jira | Jira |
-| Forge | GitLab | Forgejo (self-hosted) | GitHub |
-| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser |
-| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket |
-| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data |
-| Human steps | add the environment's OAuth redirect URIs in Google Cloud Console | — | — |
-| Trigger | CLI + Trello Power-Up button | CLI | CLI (Jira trigger later) |
-| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat |
+| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** | **D: Microservices on Kubernetes** |
+|---|---|---|---|---|
+| Repos | one (monorepo) | one | one | eight, plus a dedicated factory repo |
+| Tracker | Trello | Jira | Jira | Jira |
+| Forge | GitLab | Forgejo (self-hosted) | GitHub | GitHub |
+| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` |
+| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
+| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
+| Human steps | add the environment's OAuth redirect URIs in Google Cloud Console | — | — | — |
+| Trigger | CLI + Trello Power-Up button | CLI | CLI (Jira trigger later) | Jira webhook |
+| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
 
 Any design decision that makes one column awkward is wrong.
 
@@ -185,6 +189,112 @@ The agent has three ways to handle a change, in order of preference:
 3. **Changes the Metadata API can't deploy** become a manual checklist for a
    human (`agent.Outcome.ManualSteps`), shown in the PR and the notifications.
    Heinzel never clicks in production or in shared sandboxes.
+
+---
+
+### Scenario D in more detail
+
+*A design exercise: no team has run this yet. It exists to keep the core
+interfaces honest for the most common shape of a larger system.*
+
+**The system.** "Shopfront" is a typical microservice setup across eight
+GitHub repositories in the `acme` organisation:
+
+| Repo | What | CI (GitHub Actions) |
+|---|---|---|
+| `web` | Next.js storefront | lint, unit tests, build image |
+| `gateway` | API gateway (Go) | tests, build image |
+| `orders`, `catalog`, `payments`, `notifications` | services in Go, Python, Java and Node | tests, contract tests, build and sign an image tagged with the commit, push it to the registry: 15–40 minutes |
+| `proto` | shared gRPC contracts, a library the services depend on by version | generate clients, publish a version on release |
+| `platform` | Helm charts, Argo CD applications, Terraform | policy checks |
+
+Production and staging run on Kubernetes. Deploying means committing image
+tags to `platform`; Argo CD syncs them, and Argo Rollouts does a canary with
+automated analysis in production. Database migrations run as pre-sync hooks,
+secrets come from Vault through External Secrets, and risky features hide
+behind feature flags. Every repo has required status checks and CODEOWNERS.
+
+**The factory lives in its own repository**, `acme/heinzel-factory` (§5),
+owned by the platform team. It lists all eight repos; the agent sees them
+all, and only the ones it changes get a branch and an MR.
+
+**What a preview is.** A namespace per ticket, `hz-<key>`, in a dedicated
+preview cluster, reachable at `https://<key>.preview.acme.dev`. A wildcard DNS
+record and a wildcard certificate (cert-manager) point at the cluster's
+ingress, so no per-environment DNS is needed.
+
+- **Provisioner:** creates the namespace with a resource quota, an
+  ExternalSecret that copies the preview secrets in, and a database seeded
+  from a sanitised snapshot (a Postgres operator). For the agent it writes a
+  kubeconfig limited to that namespace.
+- **Deployers:** one per service repo. A deploy waits until CI has built the
+  image for the commit, then sets that service's tag in the namespace and
+  waits until its rollout is healthy. Services the ticket doesn't touch run
+  the image of their target branch, which CI has already built. A system
+  deployer bound to `platform` renders the Helm umbrella chart with every
+  service's tag.
+- **No canaries in previews.** A preview has one user and no traffic. The
+  production rollout (canaries, analysis, flags, migrations in production)
+  stays the team's pipeline, after a human merges. Heinzel's job ends at
+  reviewed MRs and a working preview (non-goal in §1).
+
+**How a run goes, and what it asks of the core.**
+
+| Step | What happens | Fits today? |
+|---|---|---|
+| `prepare_workspace` | eight clones; the run branch in each | **No.** Pushing a branch to every repo triggers eight CI pipelines and leaves seven empty branches. Branches must be created lazily (D1). Eight full clones per run are slow: clone from a cached mirror per repo |
+| `provision_environment` | namespace, secrets, database, kubeconfig | Yes. `Hosts` stays empty, as for a scratch org |
+| `deploy_base` | every service at its target branch's image | Yes, if a deployer can see every repo's commit (D3) |
+| `implement` | the agent edits `orders` and `proto`, runs unit tests locally, pushes, deploys, tests against the preview with `kubectl` | **Partly.** The agent has no way to reach a cluster (D2). Each deploy waits 15–40 minutes for CI, so the agent should test locally first and deploy sparingly; the default timeouts are too short (D5). It can't see why CI failed (D4) |
+| `finalize_branch`, `open_change_request` | two MRs, linked | Yes. CODEOWNERS picks the reviewers. The `proto` MR must merge first (open question 2) |
+| `deploy` | final commits, after CI | Yes, with D4 and D5 |
+| `publish` | MR links, preview URL, CI state | **Partly.** "Ready for review" while CI is red is misleading (D4) |
+| teardown | delete the namespace, the images, the database | Needs `deploy.Destroyer` (planned) and a teardown policy (open question 1), which a cluster's cost makes urgent |
+
+**What it asks of the core**, proposed and not built:
+
+- **D1. Lazy run branches.** `prepare_workspace` creates the run branch
+  locally in every repo but pushes nothing. The agent pushes the repos it
+  changes, and `finalize_branch` pushes whatever it left. A repo nobody
+  changed never gets a remote branch, an MR or a CI run, and it deploys from
+  its target branch's commit, which is pushed already. An engine change; no
+  interface changes. It also helps every multi-repo factory.
+- **D2. Agent access beyond SSH.** `env.Environment` gets
+  `Access []Access{Name, Description, Env}`: what the agent may use to reach
+  the environment, as environment variables and a sentence for its prompt.
+  A Kubernetes provisioner sets `KUBECONFIG` to a namespace-limited file; a
+  scratch org (Scenario C) sets the `sf` target org. Like SSH key paths, the
+  values are references to files or aliases, never secrets themselves, so
+  they can be persisted. SSH hosts stay as they are.
+- **D3. Deployers that see every repo.** `deploy.Source` gets
+  `Commits map[string]string`: the commit being deployed in every repo of
+  the factory, not only the deployer's own. A system deployer (an umbrella
+  chart in `platform`) needs all the image tags at once. `Deployer.Repo`
+  stays the repo whose checkout it gets.
+- **D4. CI status.** An optional forge capability, `forge.CheckReader`:
+  `Checks(ctx, commit) ([]Check, error)`, with each check's name, state and
+  URL. The agent gets a `$HEINZEL_BIN checks` command to see failing
+  pipelines and their links, and `publish` reports the checks, waiting for
+  them to finish if the factory asks. CI-gated deployers can use the same
+  capability to wait for an image's build, or poll the registry themselves.
+- **D5. Configurable timeouts.** Per step, in the factory
+  (`Timeouts: map[heinzel.Step]time.Duration`), because a factory whose
+  deploys wait for CI needs hours, not the default 20 minutes. Deploy logs
+  also need a channel (`Deploy` has none today), so a 30-minute wait shows
+  progress.
+- **D6. Merge order.** MRs already link each other; with a shared library
+  the order matters (`proto` before `orders`). The MR description states it,
+  and the agent says so in its summary. Enforcing it stays open question 2.
+
+**What doesn't change.** The interfaces for tracker, agent, DNS and
+notifiers, and the pipeline's steps. Every component Shopfront needs is a
+new component, not a new kind: `forge/github` (M6), `tracker/jira` (M4),
+`env/k8snamespace`, `deploy/helm` (waits for CI images, sets tags, waits for
+the rollout) and possibly `deploy/argocd` for teams that preview through an
+ApplicationSet. A platform that only creates previews from open MRs (an
+Argo CD pull-request generator) would also need draft MRs opened early, a
+factory option and not an interface change; a branch-name generator on
+`heinzel/*` avoids that.
 
 ---
 
@@ -542,11 +652,17 @@ These rules keep the interfaces from fighting each other:
 
 ## 5. Writing a factory
 
-A factory is a `main` package with its own `go.mod`, usually in a directory
-of the app's repository (e.g. `heinzel/`), so it's versioned and reviewed with
-the app it builds. A separate repository works too. Secrets come from the
-environment through `heinzel.Env`. A missing variable doesn't fail on the
-spot: `Main` lists every missing one at once and exits before doing anything.
+A factory is a `main` package with its own `go.mod`. **By default it lives
+in a dedicated factory repository** (e.g. `acme/heinzel-factory`), owned by
+whoever owns how the system is built and run. That works for one repo or
+fifty, keeps Heinzel's code and dependencies out of the apps, and gives the
+factory its own review and history. **The exception is a monorepo:** there
+the factory lives in a directory of it (e.g. `heinzel/`), next to the app it
+builds, as in Scenario A.
+
+Secrets come from the environment through `heinzel.Env`. A missing variable
+doesn't fail on the spot: `Main` lists every missing one at once and exits
+before doing anything.
 
 ### Scenario A: BlankTracker
 
@@ -798,7 +914,7 @@ picks up the repo's own `AGENTS.md` / `CLAUDE.md` as usual.
 Teams shouldn't have to read this document. Upstream Heinzel ships a
 **build-a-factory guide and a Claude skill**: point an agent at a team's
 repositories and tools, and it builds, tests and hands over their factory.
-The factory lives in the app's own repository (§5).
+The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§5).
 
 Collecting credentials is the part with the most friction, and a missing one
 stalls everything after it. So the skill settles all of them **before it
@@ -806,7 +922,12 @@ writes any code**, and works in two phases.
 
 ### Phase 1: plan and requirements (no code yet)
 
-1. **Discover the process.** Read the team's repos (compose files, CI config,
+1. **Discover the system and the process.** First: one repository or
+   several? A monorepo gets the factory in a directory of it; anything else
+   gets a dedicated factory repository (§5). With several, ask which repos
+   make up the system and start from the one that knows how they run
+   together (an infra, deploy or platform repo), if there is one. Then read
+   the team's repos (compose files, CI config,
    `package.json`, deploy scripts, `.env.example`, `CLAUDE.md`) and ask about
    the rest: where tickets live, how and where things are deployed, which
    domains, who should hear about what.
@@ -1036,6 +1157,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
 | M6 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
+| M7 | Scenario D: the core changes D1–D5 (D1, lazy branches, can land earlier: it helps every multi-repo factory), `env/k8snamespace`, `deploy/helm` |
 
 ---
 
