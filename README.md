@@ -85,7 +85,8 @@ harder, so it's out of scope until we choose to revisit it.
 
 - A zero-code setup. A YAML front end over the ready-made components may come
   later, once the library is rich enough (§11).
-- Reacting to review comments or iterating on an MR (planned for v7 or later).
+- Reacting to review comments on MRs. Iterating on feedback in the ticket is
+  planned for M4 ([Iteration](#iteration)); comments on the MR may follow.
 - Automatic environment teardown policy (§11). Teardown is supported in the
   interfaces and through a manual CLI command.
 - Multi-tenant/public SaaS deployment.
@@ -290,7 +291,7 @@ ingress, so no per-environment DNS is needed.
 
 **What doesn't change.** The interfaces for tracker, agent, DNS and
 notifiers, and the pipeline's steps. Every component Shopfront needs is a
-new component, not a new kind: `forge/github` (M6), `tracker/jira` (M4),
+new component, not a new kind: `forge/github` (M7), `tracker/jira` (M5),
 `env/k8snamespace`, `deploy/helm` (waits for CI images, sets tags, waits for
 the rollout) and possibly `deploy/argocd` for teams that preview through an
 ApplicationSet. A platform that only creates previews from open MRs (an
@@ -488,6 +489,55 @@ safe because steps are idempotent:
 A new reason emits `run.waiting`; checking again on the same one doesn't.
 How long to keep waiting before giving up is the component's decision: it
 returns an ordinary error when it stops expecting the wait to end.
+
+### Iteration
+
+*Planned for M4.* A run ends with MRs and a preview, but that's rarely the
+end of a ticket. Someone tries the preview and comments on the ticket:
+"make the button green", "this breaks when the list is empty", "why does
+it sort by date?". Heinzel picks the comment up and continues the same
+work: the same branch, environment and MRs. It changes what was asked,
+deploys, and replies on the ticket. People iterate with Heinzel the way
+they would with a colleague, in the tracker they already use.
+
+**An iteration is a new run for the same ticket** that continues where the
+last one ended. Most of that already holds: `prepare_workspace` starts from
+the run branch when it exists, `deploy_base` deploys the checkouts as they
+are (so the preview keeps the last iteration's state), and provisioning,
+DNS and change requests are idempotent by name. What's new:
+
+1. **Feedback.** At `fetch_ticket`, the comments added since the previous
+   run published are the feedback, minus those Heinzel wrote itself.
+   Trackers mark those (`tracker.Comment.Mine`, from comparing the author
+   with the tracker's own credentials, plus a stable `ID`), so Heinzel can
+   never answer itself in a loop. A factory can require a mention (e.g.
+   `@heinzel`) for a comment to count, and caps iterations per ticket.
+2. **Who may steer it.** A comment becomes part of the agent's prompt, so
+   only people who may start runs count: members of the board, for Trello
+   (open question 11).
+3. **The prompt** carries the previous run's summary and MRs, and lists the
+   feedback as the changes to make, asking the agent to change only that.
+   `agent.Task` gets `Previous *Outcome` and `Feedback []tracker.Comment`.
+   An agent component may resume its previous session for full context:
+   `Outcome.Session` (opaque to the engine, e.g. Claude Code's session ID)
+   is handed back as `Task.Session`.
+4. **Answers without code.** Not every comment asks for a change. The agent
+   can reply instead (`Outcome.Reply`). An iteration with a reply and no
+   commits succeeds, where a first run with no changes asks for input.
+5. **Replies on the ticket.** When an iteration starts, Heinzel comments
+   that it's on it. When it ends, it replies with what changed (or the
+   answer), the preview link and the commits. The MR description is
+   updated with the new summary (`ChangeRequestUpdater`), and the MR gets a
+   comment listing what this iteration changed.
+6. **Starting one.** From the CLI, `run <ticket>` on a ticket whose last
+   run succeeded is an iteration, if there is new feedback. With the daemon,
+   a tracker webhook (`trigger/trellowebhook`, Trello's webhooks on the
+   board's comments) starts one as soon as someone comments. A comment that
+   arrives while a run is in progress is picked up when it ends.
+
+This is also the answer to open question 4: a new run continues the
+existing branch. Starting fresh stays possible by closing the MR and
+deleting the branch.
 
 ---
 
@@ -1024,8 +1074,8 @@ learns from.
 <factory> daemon                       # run triggers and execute runs continuously (M2)
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
-<factory> env list                     # (M5)
-<factory> env destroy <run-id | env-name>   # (M5)
+<factory> env list                     # (M6)
+<factory> env destroy <run-id | env-name>   # (M6)
 
 # used by the agent inside a run (engine found via $HEINZEL_SOCKET)
 $HEINZEL_BIN deploy                    # deploy every repo's pushed HEAD to the run's environment
@@ -1058,11 +1108,11 @@ try the CLI without any accounts.
 - **Concurrency:** at most one unfinished run per (factory, ticket). A global
   worker limit applies in `daemon`.
 - **Re-triggering a ticket that already has a run:** refused while that run is
-  unfinished (queued, running, awaiting approval, needs input or failed):
-  resume or cancel it first. After a run succeeded or was cancelled, a new
-  run continues the existing branch if it is still on the forge, and reuses
-  the environment and MRs (thanks to the idempotent keys). *(See Open
-  Questions.)*
+  unfinished (queued, running, awaiting approval, waiting, needs input or
+  failed): resume or cancel it first. After a run succeeded or was cancelled,
+  a new run continues the existing branch if it is still on the forge, and
+  reuses the environment and MRs (thanks to the idempotent keys). From M4,
+  that new run is an [iteration](#iteration) on the ticket's feedback.
 - **Agent access:** set through the agent component's options and carries
   whatever the agent needs, including push access to the forges. Heinzel does
   not restrict it (§1).
@@ -1181,10 +1231,11 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
 | M2 | [`daemon`](#the-daemon) + `trigger/trellopowerup` (button, badges, confirming actions) as the first HTTP trigger; `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
-| M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
-| M5 | Gates/approve, `env list/destroy`, hardening |
-| M6 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
-| M7 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
+| M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, `trigger/trellowebhook` |
+| M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
+| M6 | Gates/approve, `env list/destroy`, hardening |
+| M7 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
+| M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
 ---
 
@@ -1201,9 +1252,8 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 3. **Scenario B process model.** How does the Go binary keep running on the
    shared host: a systemd unit per preview, a supervisor, or something else?
    Who allocates ports (proposed: the provisioner, stored in `Environment.State`)?
-4. **Re-trigger semantics.** Should re-running a ticket continue from the
-   existing branch (the agent sees its previous work) or start fresh from the
-   target branch?
+4. **Re-trigger semantics** (resolved by [Iteration](#iteration)). A new run
+   for a ticket continues the existing branch, environment and MRs.
 5. **Where the agent process runs.** Directly on the Heinzel host (v1,
    simplest), or in a container per run for isolation between concurrent
    runs? This is an option of the agent component and does not change the
