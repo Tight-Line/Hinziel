@@ -34,6 +34,12 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if err := validateAll(factories); err != nil {
 		return err
 	}
+	if len(args) > 0 && args[0] == "check" {
+		return check(ctx, out, factories)
+	}
+	if err := missingEnvError(); err != nil {
+		return err
+	}
 	if len(args) == 0 {
 		usage(out)
 		return nil
@@ -43,8 +49,6 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	case "help", "-h", "--help":
 		usage(out)
 		return nil
-	case "check":
-		return check(ctx, out, factories)
 	case "deploy", "retrieve":
 		return agentCommand(ctx, out, cmd)
 	case "daemon", "env":
@@ -88,10 +92,14 @@ func validateAll(factories []Factory) error {
 			errs = append(errs, err)
 		}
 	}
-	if missing := missingEnvNames(); len(missing) > 0 {
-		errs = append(errs, fmt.Errorf("missing environment variables: %s", strings.Join(missing, ", ")))
-	}
 	return errors.Join(errs...)
+}
+
+func missingEnvError() error {
+	if missing := missingEnvNames(); len(missing) > 0 {
+		return fmt.Errorf("missing environment variables: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // stateDir is where runs are kept: $SKRAT_STATE_DIR, else
@@ -149,8 +157,14 @@ Used by the agent inside a run (found via $SKRAT_SOCKET):
 }
 
 // check runs core.Checker on every component that implements it.
+// Missing environment variables are one of its failures rather than a reason
+// not to start, so an env file can be filled in any order and checked as it goes.
 func check(ctx context.Context, out io.Writer, factories []Factory) error {
 	failed := 0
+	if err := missingEnvError(); err != nil {
+		failed++
+		fmt.Fprintf(out, "FAIL  skrat: %v\n", err)
+	}
 	// The engine clones, branches and pushes with git.
 	if err := core.NeedTools("git"); err != nil {
 		failed++

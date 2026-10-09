@@ -167,6 +167,26 @@ func TestEnvRecordsMissingVariables(t *testing.T) {
 	missingEnv.names = nil
 }
 
+func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
+	Env("SKRAT_TEST_MISSING")
+	defer func() { missingEnv.names = nil }()
+	f := validFactory()
+	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
+	var out bytes.Buffer
+	err := Run(context.Background(), []string{"check"}, &out, f)
+	if err == nil {
+		t.Fatal("expected check to fail")
+	}
+	for _, want := range []string{
+		"FAIL  skrat: missing environment variables: SKRAT_TEST_MISSING",
+		"FAIL  blanktracker: tracker: bad token",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestRunCheckReportsMissingGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var out bytes.Buffer
