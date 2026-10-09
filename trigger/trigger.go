@@ -14,7 +14,7 @@ import (
 // Trigger starts runs for the factory it belongs to.
 type Trigger interface {
 	// Start begins accepting run requests and must return promptly. A trigger
-	// may register HTTP handlers on mux (served by `serve` under
+	// may register HTTP handlers on mux (served by `daemon` under
 	// /triggers/<factory>/<trigger>/, with that prefix stripped) and/or start
 	// background work, such as a poller, that stops when ctx is done.
 	Start(ctx context.Context, d Dispatcher, mux *http.ServeMux) error

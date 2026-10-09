@@ -111,7 +111,7 @@ type Notifier struct {
 	Notifier notify.Notifier
 }
 
-// Trigger is a named trigger; `serve` mounts its HTTP handlers under
+// Trigger is a named trigger; `daemon` mounts its HTTP handlers under
 // /triggers/<factory>/<name>/.
 type Trigger struct {
 	Name    string

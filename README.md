@@ -38,7 +38,7 @@ func main() {
 }
 ```
 
-`heinzel.Main` gives that binary the whole CLI (`run`, `serve`, `status`, …).
+`heinzel.Main` gives that binary the whole CLI (`run`, `daemon`, `status`, …).
 Every component is either a ready-made one from this repository or the team's
 own code implementing the same interface. The compiler checks the wiring.
 
@@ -415,7 +415,7 @@ third-party module) follow the same interfaces and are used the same way.
 | [`core/remote`](./core/remote) | SSH exec, file writes and directory upload through the system `ssh`; `remotetest.LocalSSH` runs them locally in tests. Public, because components outside this repository need it too |
 | [`internal/apiclient`](./internal/apiclient) | the JSON-over-HTTP client the components here share; 429 and 5xx become `core.RetryableError` |
 
-There is no `trigger/triggertest` yet; it comes with `serve` (M2).
+There is no `trigger/triggertest` yet; it comes with `daemon` (M2).
 
 ### Design rules
 
@@ -514,7 +514,7 @@ These rules keep the interfaces from fighting each other:
   through the factory's tracker. This way "tell the tester on the Trello card"
   uses the same routing as "tell the dev channel on Slack".
 - **Triggers belong to a factory.** Each trigger gets a `Dispatcher` scoped to
-  its factory, and `serve` mounts its HTTP handlers under
+  its factory, and `daemon` mounts its HTTP handlers under
   `/triggers/<factory>/<trigger>/`.
 - **Actions.** A provisioner, or the factory, asks a human to do something the
   environment needs ([Human actions](#human-actions)). Unlike
@@ -825,7 +825,7 @@ material the skill learns from.
 <factory> approve <run-id>             # pass the current gate, confirm pending actions, continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check                        # test credentials and the tools this host needs (git, ssh, node, claude, …)
-<factory> serve                        # HTTP triggers + worker pool (M2)
+<factory> daemon                       # run triggers and execute runs continuously (M2)
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list                     # (M5)
@@ -841,7 +841,7 @@ $HEINZEL_BIN retrieve                  # pull environment changes into the worki
 progress, until it finishes or pauses. A run executing in one process is
 locked; `resume` and `cancel` refuse it until that process stops (Ctrl-C
 leaves the run `failed`, ready to resume). A run whose process died is not
-locked and resumes normally. Running in the background arrives with `serve`.
+locked and resumes normally. Running in the background arrives with [`daemon`](#the-daemon).
 
 [`examples/demo`](./examples/demo) is a factory built entirely from fakes, to
 try the CLI without any accounts.
@@ -859,7 +859,7 @@ try the CLI without any accounts.
   commit being deployed, so build output never shows up as uncommitted
   changes in the agent's checkout.
 - **Concurrency:** at most one unfinished run per (factory, ticket). A global
-  worker limit applies in `serve`.
+  worker limit applies in `daemon`.
 - **Re-triggering a ticket that already has a run:** refused while that run is
   unfinished (queued, running, awaiting approval, needs input or failed):
   resume or cancel it first. After a run succeeded or was cancelled, a new
@@ -881,12 +881,31 @@ try the CLI without any accounts.
 
 ---
 
+### The daemon
+
+*Planned for M2.* `daemon` is the factory running continuously, as opposed
+to one CLI command at a time. It:
+
+- **runs the triggers.** Some receive HTTP: webhooks from GitLab, GitHub,
+  Jira or Slack, or the Trello Power-Up's button. Each one's handlers are
+  mounted under `/triggers/<factory>/<trigger>/`. Others are pollers, such as
+  "look for Jira tickets labelled `heinzel` every five minutes", which need
+  no inbound traffic at all;
+- **executes runs in the background**, with a worker pool and a global limit
+  on concurrent runs. Runs started from the CLI still execute in the
+  foreground;
+- later, **does the factory's other ongoing work**, such as confirming human
+  actions from a button and tearing down environments by policy (open
+  question 1).
+
+It's one process, so Heinzel needs no queue or other external service
+between receiving a request and executing the run.
+
 ### Hosting a factory
 
-*Planned for M2.* `serve` needs an always-on host, reachable over HTTPS
-(Trello only loads Power-Up connectors over HTTPS). Installing it is the
-same everywhere except for routing traffic to it, so routing is a separate
-choice.
+*Planned for M2.* The daemon needs an always-on host. Installing it is the
+same everywhere; only routing traffic to it differs, and only when a trigger
+receives HTTP.
 
 **The host needs Docker, nothing else.** The factory ships as a container
 image holding the binary and every tool `check` asks for (git, ssh, Node,
@@ -900,18 +919,22 @@ its env file, over SSH (`core/remote`):
 1. check for Docker, and install it with Docker's official script if missing;
 2. create a non-root `heinzel` user;
 3. copy the env file, the SSH key and any certificate files, mode 600;
-4. pull the factory image and start it with a restart policy and a volume
-   for run state (`HEINZEL_STATE_DIR`);
-5. set up routing (below);
+4. pull the factory image and start `daemon` with a restart policy and a
+   volume for run state (`HEINZEL_STATE_DIR`);
+5. set up routing (below), if any trigger receives HTTP;
 6. run `check` on the host and report.
 
 Running it again updates in place, so it's also the upgrade command. It
 works on any machine you point it at; Heinzel doesn't create its own host.
 What it can't do: Claude Code's login (run `claude setup-token` once and put
-the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`) and registering the
-Trello Power-Up.
+the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`), and registering the
+public URL wherever the trigger's sender needs it (a webhook in GitLab's
+project settings, the connector URL in Trello's Power-Up admin, …).
 
-**Routing.** `serve` itself only serves plain HTTP on a port. On top of it:
+**Routing.** HTTP triggers need a fixed public HTTPS URL: senders are
+configured with it once, and most refuse plain HTTP (Trello, Slack and
+GitHub all do). The daemon itself only serves plain HTTP on a port. On top
+of it:
 
 | | Needs | Fits |
 |---|---|---|
@@ -920,17 +943,16 @@ Trello Power-Up.
 | The host's reverse proxy | a server block in the host's nginx, Caddy or Traefik, added once by hand | shared hosts that already have one |
 
 The tunnel is the default because it's the same everywhere and needs nothing
-from the host. Its hostname is fixed, which Trello needs because the
-connector URL is registered once. Cloudflare's account-less "quick tunnels"
-change their address on every restart, so they don't qualify.
+from the host, and its hostname is fixed. Cloudflare's account-less "quick
+tunnels" change their address on every restart, so they don't qualify.
 
-The hostname is internal plumbing: only the Trello Power-Up admin page ever
-sees it, so it doesn't need to be on the team's own domain. Any domain whose
-DNS is on Cloudflare works, such as a cheap spare one. A CNAME from a domain
-hosted elsewhere does *not* work: Cloudflare only routes a tunnel for
-hostnames in a zone on the same account. (Cloudflare for SaaS custom
-hostnames could get around that, but it's extra setup for no benefit here.
-Verify both points against Cloudflare's docs when building this.)
+The hostname is internal plumbing: only the senders' settings ever see it,
+so it doesn't need to be on the team's own domain. Any domain whose DNS is
+on Cloudflare works, such as a cheap spare one. A CNAME from a domain hosted
+elsewhere does *not* work: Cloudflare only routes a tunnel for hostnames in a
+zone on the same account. (Cloudflare for SaaS custom hostnames could get
+around that, but it's extra setup for no benefit here. Verify both points
+against Cloudflare's docs when building this.)
 
 ## 9. Testing strategy
 
@@ -961,7 +983,7 @@ Verify both points against Cloudflare's docs when building this.)
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
-| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
+| M2 | [`daemon`](#the-daemon) + `trigger/trellopowerup` (button, badges, confirming actions) as the first HTTP trigger; `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
@@ -1058,7 +1080,7 @@ environment links.
 
 | Piece | Implementation |
 |---|---|
-| Trigger | `trigger/trellopowerup`, listed in the factory's `Triggers`. `serve` mounts it under `/triggers/blanktracker/trello/` |
+| Trigger | `trigger/trellopowerup`, listed in the factory's `Triggers`. `daemon` mounts it under `/triggers/blanktracker/trello/` |
 | Power-Up assets | a static connector (`index.html` + JS) served from `embed.FS`. In the Trello Power-Up admin, the iframe connector URL is set to `https://<public_url>/triggers/blanktracker/trello/`. Because the connector and the API share an origin, the button's request needs no CORS. BlankTracker's repository already has a generic version (`local-dev/trello-power-up/`); the trigger ships its own copy, so nothing is added to the app |
 | Button | the `card-buttons` capability calls `POST …/runs {cardId}`, which calls `Dispatcher.Submit` |
 | Badges | the `card-badges` / `card-detail-badges` capabilities poll `GET …/cards/{cardId}`, which calls `Dispatcher.Latest` |
@@ -1075,7 +1097,7 @@ environment links.
   Trello boards.
 
 **Caveat.** Trello requires HTTPS for the connector. For local testing, put
-`serve` behind a tunnel (cloudflared/ngrok).
+`daemon` behind a tunnel (see [Hosting a factory](#hosting-a-factory)).
 
 ### 12.3 A preview that needs a human: Google login
 

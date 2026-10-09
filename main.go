@@ -47,7 +47,7 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 		return check(ctx, out, factories)
 	case "deploy", "retrieve":
 		return agentCommand(ctx, out, cmd)
-	case "serve", "env":
+	case "daemon", "env":
 		return fmt.Errorf("%s: not implemented yet (milestone M2)", cmd)
 	}
 
@@ -139,7 +139,7 @@ Commands:
   approve <run-id>               pass the gate a run is waiting at and continue it
   cancel <run-id>                cancel a run that isn't executing
   check                          test credentials and the tools this host needs
-  serve                          HTTP triggers + worker pool (not yet)
+  daemon                         run triggers and execute runs continuously (not yet)
   env up | list | destroy        manage environments (not yet)
 
 Used by the agent inside a run (found via $HEINZEL_SOCKET):
