@@ -66,7 +66,7 @@ func Run(t *testing.T, n notify.Notifier) {
 	}
 	for _, typ := range []notify.EventType{
 		notify.EventRunStarted, notify.EventRunSucceeded, notify.EventRunFailed,
-		notify.EventRunNeedsInput, notify.EventRunAwaitingApproval, notify.EventRunActionRequired,
+		notify.EventRunNeedsInput, notify.EventRunAwaitingApproval, notify.EventRunActionRequired, notify.EventRunWaiting,
 	} {
 		t.Run(string(typ), func(t *testing.T) {
 			ev := &notify.Event{

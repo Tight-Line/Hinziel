@@ -37,7 +37,7 @@ func TestConformance(t *testing.T) {
 	srv := httptest.NewServer(f)
 	defer srv.Close()
 	notifytest.Run(t, New(srv.URL))
-	if len(f.payloads) != 6 {
+	if len(f.payloads) != 7 {
 		t.Errorf("%d posts", len(f.payloads))
 	}
 }
