@@ -244,7 +244,7 @@ when no deployer implements `Retriever`).
 
 | Step | Does | Persisted output |
 |---|---|---|
-| `fetch_ticket` | `Tracker.Fetch`; optionally move the ticket to "in progress" | `Ticket` |
+| `fetch_ticket` | `Tracker.Fetch`; download files attached to the ticket (`AttachmentFetcher`) into the run's directory, since the agent has no tracker credentials; optionally move the ticket to "in progress" | `Ticket` (with local attachment paths) |
 | `prepare_workspace` | clone every repo side by side, create the run branch in each from its target branch and push it, so the agent can push to it | `Branch`, base commits |
 | `provision_environment` | `Provisioner.Ensure`, then compute the factory's endpoint URLs and create their DNS records (`dns.Provider.Ensure`). Collect the environment's [human actions](#human-actions) and emit `run.action_required` for each new one | `Environment` (with `Endpoints` and `Actions`) |
 | `deploy_base` | every deployer, in order, deploys its repo's unchanged branch, so the environment starts identical to the target branches | `Deployments` |
@@ -901,7 +901,7 @@ try the CLI without any accounts.
 
 - **State:** `$HEINZEL_STATE_DIR`, else `$XDG_STATE_HOME/heinzel`, else
   `~/.local/state/heinzel`. Each run has
-  `runs/<run-id>/{run.json,log.txt,lock,repos/<name>/,deploy/<deployer>/}`.
+  `runs/<run-id>/{run.json,log.txt,lock,repos/<name>/,deploy/<deployer>/,attachments/}`.
   `run.json` is written atomically after every step. Every repo is a fresh
   clone per run, which costs time but avoids state bleeding between runs.
   Deployers build in their own worktree (`deploy/<deployer>/`) at the

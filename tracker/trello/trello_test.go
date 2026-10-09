@@ -33,8 +33,11 @@ func newFakeTrello() *fakeTrello {
 				"id": "c1", "name": "Add CSV export", "desc": "Users want **CSV**.",
 				"shortLink": "AbCd1234", "shortUrl": "https://trello.com/c/AbCd1234",
 				"idBoard": "b1", "idList": "l-todo",
-				"labels":      []map[string]string{{"name": "backend"}, {"name": "", "color": "red"}},
-				"attachments": []map[string]string{{"id": "a1", "name": "mock.png", "url": "https://trello.com/1/cards/c1/attachments/a1/download/mock.png", "mimeType": "image/png"}},
+				"labels": []map[string]string{{"name": "backend"}, {"name": "", "color": "red"}},
+				"attachments": []map[string]any{
+					{"id": "a1", "name": "mock.png", "url": "https://trello.com/1/cards/c1/attachments/a1/download/mock.png", "mimeType": "image/png", "isUpload": true},
+					{"id": "a2", "name": "MR", "url": "https://gitlab.test/mr/1", "isUpload": false},
+				},
 				"checklists": []map[string]any{{"name": "Done when", "checkItems": []map[string]any{
 					{"name": "second", "state": "incomplete", "pos": 2},
 					{"name": "first", "state": "complete", "pos": 1},
@@ -177,7 +180,7 @@ func TestFetch(t *testing.T) {
 	if got := tk.Fields["Checklist: Done when"]; got != "- [x] first\n- [ ] second\n" {
 		t.Errorf("checklist %q", got)
 	}
-	if len(tk.Attachments) != 1 || tk.Attachments[0].MediaType != "image/png" {
+	if len(tk.Attachments) != 2 || tk.Attachments[0].MediaType != "image/png" || !tk.Attachments[0].IsFile || tk.Attachments[1].IsFile {
 		t.Errorf("attachments %+v", tk.Attachments)
 	}
 }

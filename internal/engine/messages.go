@@ -36,6 +36,10 @@ func prompt(p *Project, r *run.Run, task *agent.Task) string {
 	if len(t.Attachments) > 0 {
 		b.WriteString("\n## Attachments\n\n")
 		for _, a := range t.Attachments {
+			if a.Path != "" {
+				fmt.Fprintf(&b, "- %s: %s (downloaded from the ticket; read it there)\n", a.Name, a.Path)
+				continue
+			}
 			fmt.Fprintf(&b, "- %s: %s\n", a.Name, a.URL)
 		}
 	}

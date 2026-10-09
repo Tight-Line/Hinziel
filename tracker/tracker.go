@@ -68,4 +68,10 @@ type Attachment struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	MediaType string `json:"media_type"`
+	// IsFile marks a file stored in the tracker, which only the tracker's
+	// credentials can download, as opposed to a link to somewhere else.
+	IsFile bool `json:"is_file,omitempty"`
+	// Path is a local copy, set by the engine when it downloads the file
+	// for the agent (through AttachmentFetcher).
+	Path string `json:"path,omitempty"`
 }

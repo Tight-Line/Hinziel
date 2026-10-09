@@ -3,9 +3,11 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Tight-Line/heinzel/agent"
@@ -53,8 +55,72 @@ func (x *execution) fetchTicket(ctx context.Context) error {
 		return err
 	}
 	x.r.Ticket = t
+	x.downloadAttachments(ctx)
 	x.moveTicket(ctx, tracker.StageInProgress)
 	return nil
+}
+
+// maxAttachment is the largest attachment downloaded for the agent.
+const maxAttachment = 50 << 20
+
+// downloadAttachments saves the files stored in the tracker to the run's
+// directory, where the agent can read them: it has no tracker credentials.
+// A file that can't be fetched keeps its URL in the prompt; it never fails
+// the run.
+func (x *execution) downloadAttachments(ctx context.Context) {
+	f, ok := x.p.Tracker.(tracker.AttachmentFetcher)
+	if !ok {
+		return
+	}
+	dir := filepath.Join(x.e.store.Dir(x.r.ID), "attachments")
+	for i := range x.r.Ticket.Attachments {
+		a := &x.r.Ticket.Attachments[i]
+		if !a.IsFile {
+			continue
+		}
+		path := filepath.Join(dir, fmt.Sprintf("%02d-%s", i+1, safeFileName(a.Name)))
+		if err := download(ctx, f, x.ticketID(), *a, path); err != nil {
+			x.logf(StepFetchTicket, "attachment %q not downloaded: %v", a.Name, err)
+			continue
+		}
+		a.Path = path
+	}
+}
+
+func download(ctx context.Context, f tracker.AttachmentFetcher, ticket string, a tracker.Attachment, path string) error {
+	rc, err := f.FetchAttachment(ctx, ticket, a)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	n, err := io.Copy(out, io.LimitReader(rc, maxAttachment+1))
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && n > maxAttachment {
+		err = fmt.Errorf("larger than %d MB", maxAttachment>>20)
+	}
+	if err != nil {
+		os.Remove(path)
+	}
+	return err
+}
+
+var unsafeFileChars = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+func safeFileName(name string) string {
+	name = strings.Trim(unsafeFileChars.ReplaceAllString(filepath.Base(name), "_"), "._")
+	if name == "" {
+		return "attachment"
+	}
+	return name
 }
 
 func (x *execution) reposDir() string { return filepath.Join(x.e.store.Dir(x.r.ID), "repos") }

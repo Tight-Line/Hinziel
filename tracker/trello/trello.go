@@ -120,6 +120,7 @@ type attachment struct {
 	Name     string `json:"name"`
 	URL      string `json:"url"`
 	MimeType string `json:"mimeType"`
+	IsUpload bool   `json:"isUpload"`
 }
 
 type checklist struct {
@@ -165,7 +166,7 @@ func (t *Tracker) Fetch(ctx context.Context, id string) (*tracker.Ticket, error)
 	q := url.Values{
 		"fields":                      {"name,desc,shortLink,shortUrl,idBoard,labels"},
 		"attachments":                 {"true"},
-		"attachment_fields":           {"id,name,url,mimeType"},
+		"attachment_fields":           {"id,name,url,mimeType,isUpload"},
 		"checklists":                  {"all"},
 		"checklist_fields":            {"name"},
 		"actions":                     {"commentCard"},
@@ -213,7 +214,7 @@ func (c *card) ticket() *tracker.Ticket {
 		tk.Comments = append(tk.Comments, tracker.Comment{Author: author, Body: a.Data.Text, At: a.Date})
 	}
 	for _, a := range c.Attachments {
-		tk.Attachments = append(tk.Attachments, tracker.Attachment{ID: a.ID, Name: a.Name, URL: a.URL, MediaType: a.MimeType})
+		tk.Attachments = append(tk.Attachments, tracker.Attachment{ID: a.ID, Name: a.Name, URL: a.URL, MediaType: a.MimeType, IsFile: a.IsUpload})
 	}
 	for _, cl := range c.Checklists {
 		if tk.Fields == nil {
@@ -275,7 +276,7 @@ func (t *Tracker) FetchAttachment(ctx context.Context, _ string, a tracker.Attac
 	if u, err := url.Parse(a.URL); err == nil && (u.Host == "trello.com" || u.Host == "api.trello.com" || strings.HasPrefix(a.URL, t.api.BaseURL)) {
 		t.authorize(req)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -285,6 +286,10 @@ func (t *Tracker) FetchAttachment(ctx context.Context, _ string, a tracker.Attac
 	}
 	return resp.Body, nil
 }
+
+// downloadClient fetches attachments. Go drops the Authorization header when
+// Trello redirects a download to its storage on another host.
+var downloadClient = &http.Client{Timeout: 5 * time.Minute}
 
 // Check verifies the credentials, the board, and that every stage's list and label exists.
 func (t *Tracker) Check(ctx context.Context) error {

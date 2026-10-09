@@ -5,7 +5,9 @@ package trackertest
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ type Fake struct {
 	comments map[string][]core.Message
 	stages   map[string]tracker.Stage
 	links    map[string][]core.Link
+	files    map[string]string // attachment ID -> content
 	fetches  int
 
 	FetchErrs []error // returned by the next Fetch calls, in order
@@ -31,6 +34,8 @@ var (
 	_ tracker.Tracker    = (*Fake)(nil)
 	_ tracker.StageMover = (*Fake)(nil)
 	_ tracker.Linker     = (*Fake)(nil)
+
+	_ tracker.AttachmentFetcher = (*Fake)(nil)
 )
 
 // NewFake returns a tracker holding tickets, keyed by Ref.ID (set from Key if empty).
@@ -40,6 +45,7 @@ func NewFake(tickets ...tracker.Ticket) *Fake {
 		comments: map[string][]core.Message{},
 		stages:   map[string]tracker.Stage{},
 		links:    map[string][]core.Link{},
+		files:    map[string]string{},
 	}
 	for _, t := range tickets {
 		if t.Ref.ID == "" {
@@ -93,6 +99,36 @@ func (f *Fake) AddLink(_ context.Context, id string, link core.Link) error {
 	}
 	f.links[id] = append(f.links[id], link)
 	return nil
+}
+
+// AddFile attaches a file with content to a ticket, as if uploaded to the tracker.
+func (f *Fake) AddFile(id, attachmentID, name, content string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t := f.tickets[id]
+	t.Attachments = append(t.Attachments, tracker.Attachment{
+		ID: attachmentID, Name: name, URL: "https://tracker.test/files/" + attachmentID, IsFile: true,
+	})
+	f.files[attachmentID] = content
+}
+
+// AddAttachment attaches a as it is, with no content behind it: a link, or
+// (with IsFile) a file the tracker fails to serve.
+func (f *Fake) AddAttachment(id string, a tracker.Attachment) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t := f.tickets[id]
+	t.Attachments = append(t.Attachments, a)
+}
+
+func (f *Fake) FetchAttachment(_ context.Context, _ string, a tracker.Attachment) (io.ReadCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	content, ok := f.files[a.ID]
+	if !ok {
+		return nil, fmt.Errorf("attachment %q not found", a.ID)
+	}
+	return io.NopCloser(strings.NewReader(content)), nil
 }
 
 // AddComment adds a comment to a ticket, as a human answering on the tracker would.
