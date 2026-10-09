@@ -27,7 +27,9 @@ func (f *fakeCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
-	ok := func(v any) { json.NewEncoder(w).Encode(map[string]any{"success": true, "errors": []any{}, "result": v}) }
+	ok := func(v any) {
+		json.NewEncoder(w).Encode(map[string]any{"success": true, "errors": []any{}, "result": v})
+	}
 	if r.Header.Get("Authorization") != "Bearer cf-token" {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]any{"success": false, "errors": []map[string]any{{"code": 9109, "message": "Invalid access token"}}})

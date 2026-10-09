@@ -31,7 +31,7 @@ func newFakeTrello() *fakeTrello {
 				"id": "c1", "name": "Add CSV export", "desc": "Users want **CSV**.",
 				"shortLink": "AbCd1234", "shortUrl": "https://trello.com/c/AbCd1234",
 				"idBoard": "b1", "idList": "l-todo",
-				"labels": []map[string]string{{"name": "backend"}, {"name": "", "color": "red"}},
+				"labels":      []map[string]string{{"name": "backend"}, {"name": "", "color": "red"}},
 				"attachments": []map[string]string{{"id": "a1", "name": "mock.png", "url": "https://trello.com/1/cards/c1/attachments/a1/download/mock.png", "mimeType": "image/png"}},
 				"checklists": []map[string]any{{"name": "Done when", "checkItems": []map[string]any{
 					{"name": "second", "state": "incomplete", "pos": 2},
