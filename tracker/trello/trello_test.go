@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +22,8 @@ type fakeTrello struct {
 	cards       map[string]map[string]any // by ID
 	comments    map[string][]string
 	attachments map[string][]map[string]string
-	lists       map[string][]list // by board ID
+	lists       map[string][]list  // by board ID
+	labels      map[string][]label // by board ID
 }
 
 func newFakeTrello() *fakeTrello {
@@ -46,7 +48,11 @@ func newFakeTrello() *fakeTrello {
 		},
 		comments:    map[string][]string{},
 		attachments: map[string][]map[string]string{},
-		lists:       map[string][]list{"b1": {{"l-todo", "To do"}, {"l-doing", "Doing"}, {"l-review", "Review"}}},
+		lists: map[string][]list{"b1": {
+			{"l-new", "New tickets"}, {"l-doing", "  In Progress"}, {"l-review", "Review"},
+			{"l-dup1", "Done"}, {"l-dup2", "done"},
+		}},
+		labels: map[string][]label{"b1": {{ID: "lb-blocked", Name: "Blocked"}, {ID: "lb-review", Name: "Heinzel: review"}, {ID: "lb-red", Color: "red"}}},
 	}
 	return f
 }
@@ -83,6 +89,8 @@ func (f *fakeTrello) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		send(map[string]string{"id": "b1"})
 	case parts[0] == "boards" && parts[2] == "lists":
 		send(f.lists[parts[1]])
+	case parts[0] == "boards" && parts[2] == "labels":
+		send(f.labels[parts[1]])
 	case parts[0] == "cards":
 		c := f.card(parts[1])
 		if c == nil {
@@ -99,6 +107,18 @@ func (f *fakeTrello) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case len(parts) == 4 && parts[2] == "actions" && r.Method == "POST":
 			f.comments[id] = append(f.comments[id], body["text"])
 			send(map[string]string{})
+		case parts[2] == "idLabels" && r.Method == "POST":
+			c["idLabels"] = append(idLabels(c), body["value"])
+			send([]string{})
+		case parts[2] == "idLabels" && r.Method == "DELETE":
+			kept := []string{}
+			for _, l := range idLabels(c) {
+				if l != parts[3] {
+					kept = append(kept, l)
+				}
+			}
+			c["idLabels"] = kept
+			send(map[string]any{})
 		case parts[2] == "attachments" && r.Method == "GET":
 			send(f.attachments[id])
 		case parts[2] == "attachments" && r.Method == "POST":
@@ -120,7 +140,16 @@ func newTestTracker(t *testing.T, opts Options) (*Tracker, *fakeTrello) {
 	return New(opts), f
 }
 
-var stages = map[tracker.Stage]string{tracker.StageInProgress: "Doing", tracker.StageInReview: "Review"}
+func idLabels(c map[string]any) []string {
+	ids, _ := c["idLabels"].([]string)
+	return ids
+}
+
+var stages = map[tracker.Stage]Stage{
+	tracker.StageInProgress: {List: "in progress"}, // the board says "  In Progress"
+	tracker.StageInReview:   {List: "l-review", Label: "heinzel:  REVIEW"},
+	tracker.StageBlocked:    {Label: "Blocked"},
+}
 
 func TestConformance(t *testing.T) {
 	tr, _ := newTestTracker(t, Options{Board: "b1", Stages: stages})
@@ -163,20 +192,46 @@ func TestBoardRestriction(t *testing.T) {
 	}
 }
 
-func TestMoveToAndLinks(t *testing.T) {
+func TestStages(t *testing.T) {
 	tr, f := newTestTracker(t, Options{Stages: stages})
 	ctx := context.Background()
-	if err := tr.MoveTo(ctx, "AbCd1234", tracker.StageInReview); err != nil {
+	card := func() (string, []string) { return f.cards["c1"]["idList"].(string), idLabels(f.cards["c1"]) }
+
+	if err := tr.MoveTo(ctx, "AbCd1234", tracker.StageBlocked); err != nil {
 		t.Fatal(err)
 	}
-	if f.cards["c1"]["idList"] != "l-review" {
-		t.Errorf("card in list %v", f.cards["c1"]["idList"])
+	if list, labels := card(); list != "l-todo" || !slices.Equal(labels, []string{"lb-blocked"}) {
+		t.Errorf("blocked: list %s, labels %v (a label-only stage must not move the card)", list, labels)
 	}
-	tr2, _ := newTestTracker(t, Options{Stages: map[tracker.Stage]string{tracker.StageBlocked: "Nope"}})
-	if err := tr2.MoveTo(ctx, "c1", tracker.StageBlocked); err == nil {
-		t.Error("a mapped list that doesn't exist must be an error")
+	if err := tr.MoveTo(ctx, "c1", tracker.StageInProgress); err != nil {
+		t.Fatal(err)
+	}
+	if list, labels := card(); list != "l-doing" || len(labels) != 0 {
+		t.Errorf("in progress: list %s, labels %v (names match ignoring case and spaces; other stages' labels come off)", list, labels)
+	}
+	if err := tr.MoveTo(ctx, "c1", tracker.StageInReview); err != nil {
+		t.Fatal(err)
+	}
+	if list, labels := card(); list != "l-review" || !slices.Equal(labels, []string{"lb-review"}) {
+		t.Errorf("in review: list %s, labels %v (lists match by ID too)", list, labels)
 	}
 
+	tr2, _ := newTestTracker(t, Options{Stages: map[tracker.Stage]Stage{tracker.StageBlocked: {List: "Doing"}}})
+	if err := tr2.MoveTo(ctx, "c1", tracker.StageBlocked); err == nil || !strings.Contains(err.Error(), `"New tickets"`) {
+		t.Errorf("a missing list must name the board's lists: %v", err)
+	}
+	tr3, _ := newTestTracker(t, Options{Stages: map[tracker.Stage]Stage{tracker.StageBlocked: {List: "DONE"}}})
+	if err := tr3.MoveTo(ctx, "c1", tracker.StageBlocked); err == nil || !strings.Contains(err.Error(), "use the ID") {
+		t.Errorf("an ambiguous name must ask for the ID: %v", err)
+	}
+	if err := New(Options{}).MoveTo(ctx, "c1", tracker.StageBlocked); err != nil {
+		t.Errorf("without Stages, MoveTo does nothing: %v", err)
+	}
+}
+
+func TestLinks(t *testing.T) {
+	tr, f := newTestTracker(t, Options{})
+	ctx := context.Background()
 	link := core.Link{Title: "MR", URL: "https://gitlab.test/mr/1"}
 	tr.AddLink(ctx, "c1", link)
 	tr.AddLink(ctx, "c1", link)
@@ -202,9 +257,15 @@ func TestCheck(t *testing.T) {
 	if err := tr.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	tr, _ = newTestTracker(t, Options{Board: "b1", Stages: map[tracker.Stage]string{tracker.StageBlocked: "Blocked"}})
-	if err := tr.Check(context.Background()); err == nil || !strings.Contains(err.Error(), `"Blocked"`) {
-		t.Errorf("a missing list must fail the check: %v", err)
+	tr, _ = newTestTracker(t, Options{Board: "b1", Stages: map[tracker.Stage]Stage{
+		tracker.StageInProgress: {List: "Doing"},
+		tracker.StageBlocked:    {Label: "Waiting"},
+	}})
+	err := tr.Check(context.Background())
+	for _, want := range []string{`stage blocked: no label "Waiting"`, `stage in_progress: no list "Doing" on the board (it has: "New tickets", "  In Progress"`} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("check must report %q: %v", want, err)
+		}
 	}
 	bad := New(Options{APIKey: "key", Token: "wrong", BaseURL: tr.api.BaseURL[:len(tr.api.BaseURL)-2]})
 	if err := bad.Check(context.Background()); err == nil {

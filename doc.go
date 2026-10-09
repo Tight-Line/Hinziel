@@ -9,7 +9,7 @@
 //	func main() {
 //		heinzel.Main(heinzel.Factory{
 //			Name:    "blanktracker",
-//			Tracker: trello.New(trello.Options{Board: "5f1a2b3c4d", Token: heinzel.Env("TRELLO_TOKEN")}),
+//			Tracker: trello.New(trello.Options{Board: "FbGOL7Wb", Token: heinzel.Env("TRELLO_TOKEN")}),
 //			Repos: []heinzel.Repo{{
 //				Name: "app", TargetBranch: "develop",
 //				Forge: gitlab.New(gitlab.Options{Project: "blanktracker/app", Token: heinzel.Env("GITLAB_TOKEN")}),

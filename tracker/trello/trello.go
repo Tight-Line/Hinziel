@@ -20,7 +20,9 @@
 //     dedicated member (e.g. "Heinzel") who is only on the factory's board.
 //     Comments then also appear under that name.
 //   - Board: the board's ID or the shortLink from its URL
-//     (trello.com/b/<shortLink>/…). Stages name lists that must exist on it.
+//     (trello.com/b/<shortLink>/…). The lists and labels Stages name must
+//     exist on it; nothing is created. `check` lists the board's own names
+//     when one doesn't match.
 package trello
 
 import (
@@ -51,9 +53,9 @@ type Options struct {
 	// Board, if set, is the only board whose cards are tickets (ID or
 	// shortLink). Cards on other boards are refused.
 	Board string
-	// Stages maps lifecycle stages to list names on the card's board.
+	// Stages says how each lifecycle stage shows on a card (see Stage).
 	// Unmapped stages are not reflected.
-	Stages map[tracker.Stage]string
+	Stages map[tracker.Stage]Stage
 	// BaseURL of the API; "" = https://api.trello.com.
 	BaseURL string
 }
@@ -64,8 +66,9 @@ type Tracker struct {
 	api  *apiclient.Client
 
 	mu      sync.Mutex
-	boardID string            // resolved Options.Board
-	lists   map[string][]list // by board ID
+	boardID string             // resolved Options.Board
+	lists   map[string][]list  // by board ID
+	labels  map[string][]label // by board ID
 }
 
 var (
@@ -82,7 +85,7 @@ func New(opts Options) *Tracker {
 	if base == "" {
 		base = "https://api.trello.com"
 	}
-	t := &Tracker{opts: opts, lists: map[string][]list{}}
+	t := &Tracker{opts: opts, lists: map[string][]list{}, labels: map[string][]label{}}
 	t.api = &apiclient.Client{Name: "trello", BaseURL: base + "/1", Auth: t.authorize}
 	return t
 }
@@ -107,6 +110,7 @@ type card struct {
 }
 
 type label struct {
+	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
 }
@@ -247,34 +251,6 @@ func (t *Tracker) Comment(ctx context.Context, id string, msg core.Message) erro
 	return t.api.Do(ctx, http.MethodPost, "/cards/"+url.PathEscape(cardID(id))+"/actions/comments", nil, body, nil)
 }
 
-// MoveTo moves the card to the list mapped to stage. An unmapped stage is a no-op.
-func (t *Tracker) MoveTo(ctx context.Context, id string, stage tracker.Stage) error {
-	name, ok := t.opts.Stages[stage]
-	if !ok || name == "" {
-		return nil
-	}
-	var c struct {
-		IDBoard string `json:"idBoard"`
-		IDList  string `json:"idList"`
-	}
-	path := "/cards/" + url.PathEscape(cardID(id))
-	if err := t.api.Do(ctx, http.MethodGet, path, url.Values{"fields": {"idBoard,idList"}}, nil, &c); err != nil {
-		return err
-	}
-	lists, err := t.boardLists(ctx, c.IDBoard)
-	if err != nil {
-		return err
-	}
-	i := slices.IndexFunc(lists, func(l list) bool { return l.Name == name })
-	if i < 0 {
-		return fmt.Errorf("board %s has no list named %q (stage %s)", c.IDBoard, name, stage)
-	}
-	if lists[i].ID == c.IDList {
-		return nil
-	}
-	return t.api.Do(ctx, http.MethodPut, path, nil, map[string]string{"idList": lists[i].ID}, nil)
-}
-
 // AddLink attaches link.URL to the card unless it's already attached.
 func (t *Tracker) AddLink(ctx context.Context, id string, link core.Link) error {
 	path := "/cards/" + url.PathEscape(cardID(id)) + "/attachments"
@@ -310,7 +286,7 @@ func (t *Tracker) FetchAttachment(ctx context.Context, _ string, a tracker.Attac
 	return resp.Body, nil
 }
 
-// Check verifies the credentials, the board and that every stage's list exists.
+// Check verifies the credentials, the board, and that every stage's list and label exists.
 func (t *Tracker) Check(ctx context.Context) error {
 	var me struct {
 		Username string `json:"username"`
@@ -320,7 +296,7 @@ func (t *Tracker) Check(ctx context.Context) error {
 	}
 	if t.opts.Board == "" {
 		if len(t.opts.Stages) > 0 {
-			return errors.New("Stages need a Board, to check that their lists exist")
+			return errors.New("Stages need a Board, to check that their lists and labels exist")
 		}
 		return nil
 	}
@@ -328,21 +304,7 @@ func (t *Tracker) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	lists, err := t.boardLists(ctx, board)
-	if err != nil {
-		return err
-	}
-	var missing []string
-	for stage, name := range t.opts.Stages {
-		if !slices.ContainsFunc(lists, func(l list) bool { return l.Name == name }) {
-			missing = append(missing, fmt.Sprintf("%q (%s)", name, stage))
-		}
-	}
-	if len(missing) > 0 {
-		slices.Sort(missing)
-		return fmt.Errorf("board %s has no list %s", t.opts.Board, strings.Join(missing, ", "))
-	}
-	return nil
+	return t.checkStages(ctx, board)
 }
 
 // board resolves Options.Board, which may be a shortLink, to its ID.

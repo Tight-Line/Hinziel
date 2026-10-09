@@ -22,7 +22,7 @@ A factory is an ordinary Go program that wires components together:
 func main() {
 	heinzel.Main(heinzel.Factory{
 		Name:    "blanktracker",
-		Tracker: trello.New(trello.Options{Board: "5f1a2b3c4d", Token: heinzel.Env("TRELLO_TOKEN")}),
+		Tracker: trello.New(trello.Options{Board: "FbGOL7Wb", Token: heinzel.Env("TRELLO_TOKEN")}),
 		Repos: []heinzel.Repo{{
 			Name: "app", TargetBranch: "develop",
 			Forge: gitlab.New(gitlab.Options{Project: "blanktracker/app", Token: heinzel.Env("GITLAB_TOKEN")}),
@@ -516,6 +516,13 @@ These rules keep the interfaces from fighting each other:
 - **Environments without servers.** A scratch org has no hosts and no SSH. Its
   org username and instance URL go in `Environment.State` and `Hosts` stays
   empty.
+- **Stages are the tracker's to show.** The engine reports three abstract
+  stages (in progress, in review, blocked). How a team shows them varies
+  with every board: list or column names in any spelling, labels instead of
+  columns, or not at all. That mapping is the tracker component's option,
+  matched leniently (case and spacing don't matter, IDs survive renames)
+  and checked by `check`, which names the board's own lists or statuses
+  when one doesn't match. Heinzel never creates lists, labels or statuses.
 - **Notify.** `notify/ticket` turns events into comments on the run's ticket,
   through the factory's tracker. This way "tell the tester on the Trello card"
   uses the same routing as "tell the dev channel on Slack".
@@ -591,13 +598,14 @@ var previewOverride string
 
 func main() {
 	board := trello.New(trello.Options{
-		Board:  "5f1a2b3c4d",
+		Board:  "FbGOL7Wb",
 		APIKey: heinzel.Env("TRELLO_API_KEY"),
 		Token:  heinzel.Env("TRELLO_TOKEN"),
-		Stages: map[tracker.Stage]string{
-			tracker.StageInProgress: "Doing",
-			tracker.StageInReview:   "Review",
-			tracker.StageBlocked:    "Blocked",
+		// The board has no list for review or blocked, and gets none: those
+		// stages show in comments and notifications only. Another board might
+		// map them to lists, labels or both (trello.Stage).
+		Stages: map[tracker.Stage]trello.Stage{
+			tracker.StageInProgress: {List: "In progress"},
 		},
 	})
 
@@ -693,7 +701,7 @@ func main() {
 
 		Triggers: []heinzel.Trigger{{Name: "trello", Trigger: trellopowerup.New(trellopowerup.Options{ // M2
 			APIKey: heinzel.Env("TRELLO_POWERUP_API_KEY"),
-			Boards: []string{"5f1a2b3c4d"}, // only cards on these boards can start a run
+			Boards: []string{"FbGOL7Wb"}, // only cards on these boards can start a run
 		})}},
 		Notifiers: []heinzel.Notifier{
 			{On: notify.Problems, Notifier: ticket.New(board)}, // failures, questions and actions, on the card

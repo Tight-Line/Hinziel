@@ -33,8 +33,8 @@ func Example_blanktracker() {
 	board := trello.New(trello.Options{
 		APIKey: heinzel.Env("TRELLO_API_KEY"),
 		Token:  heinzel.Env("TRELLO_TOKEN"),
-		Board:  "5f1a2b3c4d",
-		Stages: map[tracker.Stage]string{tracker.StageInProgress: "Doing", tracker.StageInReview: "Review", tracker.StageBlocked: "Blocked"},
+		Board:  "FbGOL7Wb",
+		Stages: map[tracker.Stage]trello.Stage{tracker.StageInProgress: {List: "In progress"}},
 	})
 
 	heinzel.Main(heinzel.Factory{
