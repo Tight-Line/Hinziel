@@ -990,10 +990,9 @@ tunnels" change their address on every restart, so they don't qualify.
 The hostname is internal plumbing: only the senders' settings ever see it,
 so it doesn't need to be on the team's own domain. Any domain whose DNS is
 on Cloudflare works, such as a cheap spare one. A CNAME from a domain hosted
-elsewhere does *not* work: Cloudflare only routes a tunnel for hostnames in a
-zone on the same account. (Cloudflare for SaaS custom hostnames could get
-around that, but it's extra setup for no benefit here. Verify both points
-against Cloudflare's docs when building this.)
+elsewhere does *not* work: a tunnel's `cfargotunnel.com` address only serves
+DNS records in the same Cloudflare account. (Cloudflare for SaaS custom
+hostnames might get around that, but it's extra setup for no benefit here.)
 
 ## 9. Testing strategy
 
@@ -1069,11 +1068,22 @@ against Cloudflare's docs when building this.)
     `heinzel` binary could build a factory from YAML for teams that only use
     those. It would be a thin layer over the library, not a second
     configuration model.
-10. **Workers preview aliases at scale.** Scenario A gives every environment a
-    preview alias on one Worker and never deletes them. We haven't checked
-    whether Cloudflare limits how many aliases a Worker keeps, or whether a
-    later upload can push an old alias out. If it can, `deploy/cfworkers`
-    needs a Worker per environment instead, deleted on teardown.
+10. **Workers preview aliases or Workers Previews.** `deploy/cfworkers`
+    uploads a version with `--preview-alias` (now called a Version URL).
+    Cloudflare's docs now say aliases are for inspecting one version, not
+    for branch or PR testing, and point to a newer product, Workers
+    Previews (`wrangler preview`): per-branch previews with their own
+    settings, a delete command, and limits of 100 previews per Worker on
+    the Free plan and 500 on Paid, evicting the least recently deployed.
+    Their custom domains take the form `<preview>.app.example.com`, two
+    levels deep, which Universal SSL doesn't cover. As of October 2026,
+    BlankTracker's wrangler (4.87) has it only as a private beta; the docs
+    name 4.135 as the minimum. For a static SPA with no bindings, aliases
+    work, so M1 keeps them. Moving `deploy/cfworkers` to Previews brings a
+    real teardown (`wrangler preview delete`, through the planned
+    `deploy.Destroyer`) and known limits, but needs the newer wrangler in
+    the app's dependencies. We still don't know whether aliases themselves
+    have a limit.
 
 ### Per-environment certificates
 

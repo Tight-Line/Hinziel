@@ -9,8 +9,10 @@
 // # Credentials
 //
 //   - DO_TOKEN: Control Panel → API → Tokens → "Generate New Token". Custom
-//     scopes are enough: droplet (create, read, delete), tag (create, read),
-//     ssh_key (read) and account (read).
+//     scopes are enough: droplet:create, droplet:read, droplet:delete,
+//     tag:create (droplets are tagged at creation), ssh_key:read and
+//     account:read. DigitalOcean adds the read scopes droplet:create
+//     depends on (regions, sizes, images, actions, snapshots, VPCs).
 //   - An SSH key pair for reaching the droplets: create one with
 //     `ssh-keygen -t ed25519 -N "" -f ~/.config/heinzel/id_ed25519`, add the
 //     .pub file under Settings → Security → SSH Keys, and pass its

@@ -6,7 +6,8 @@
 //
 //   - GITLAB_TOKEN, with scopes api and write_repository and at least the
 //     Developer role on the project: a project access token (project →
-//     Settings → Access tokens; on gitlab.com this needs a paid tier), or a
+//     Settings → Access tokens; on gitlab.com this needs Premium or Ultimate,
+//     on self-managed any tier), or a
 //     personal access token (avatar → Edit profile → Access tokens) of a
 //     dedicated user who is a Developer on the project.
 //   - The run branches (heinzel/… by default) must not be protected, or
