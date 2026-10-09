@@ -165,7 +165,7 @@ on a droplet. A preview environment looks like this:
   add its two callback URLs. The agent doesn't need Google login: it creates a
   Sanctum token with `artisan tinker` over SSH.
 - **The app's code needs no changes.** Installing Heinzel only adds the
-  factory's directory to the repository. See §12.4.
+  factory's directory to the repository. See §12.3.
 
 ### Scenario C in more detail
 
@@ -281,7 +281,9 @@ ingress, so no per-environment DNS is needed.
   (`Timeouts: map[heinzel.Step]time.Duration`), because a factory whose
   deploys wait for CI needs hours, not the default 20 minutes. Deploy logs
   also need a channel (`Deploy` has none today), so a 30-minute wait shows
-  progress.
+  progress. Waiting on CI is better modelled as its own step outcome
+  than as a long timeout (open question 13), which would leave timeouts for
+  steps that are really stuck.
 - **D6. Merge order.** MRs already link each other; with a shared library
   the order matters (`proto` before `orders`). The MR description states it,
   and the agent says so in its summary. Enforcing it stays open question 2.
@@ -1214,6 +1216,30 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     `deploy.Destroyer`) and known limits, but needs the newer wrangler in
     the app's dependencies. We still don't know whether aliases themselves
     have a limit.
+11. **Trust and restricted agents.** §1 assumes the agent has everything it
+    needs. That holds when the people who write tickets are trusted and the
+    team accepts an agent with full access. It fails for open source, where
+    anyone can write an issue that becomes the prompt (12.6), and for
+    regulated organisations that won't grant an agent full access (12.7).
+    Options, cheapest first: start runs only from trusted people (the
+    trigger already decides that), but treat ticket text as untrusted
+    anyway; pass the agent only the variables it needs (the engine passes
+    its whole environment today); run the agent in its own container per
+    run, with only the environment's access (D2) and a push token for the
+    run's repositories. The last is the real answer, and an option of the
+    agent component (question 5), not an interface change.
+12. **Forks.** Teams whose bots can't push to the upstream repository work
+    from forks (12.6). `forge.GitRemote` would get an upstream to fetch base
+    branches from, separate from the remote Heinzel pushes to, and forge
+    components a `Fork` option that opens the change request from the fork
+    to the upstream.
+13. **Waiting on others.** CI pipelines, app-store builds, environment
+    bookings and change approvals take minutes to days (D4, 12.5, 12.7). A
+    step should be able to answer "not yet, check again at T" (e.g.
+    `core.WaitError{Reason, RetryAt}`): the run waits in a new `waiting`
+    status without holding a process, the daemon re-runs the step at `T`,
+    and the CLI's `resume` checks right away. Idempotent steps make the
+    re-check safe. This replaces the long step timeouts proposed in D5.
 
 ### Per-environment certificates
 
@@ -1280,7 +1306,7 @@ environment links.
 **Caveat.** Trello requires HTTPS for the connector. For local testing, put
 `daemon` behind a tunnel (see [Hosting a factory](#hosting-a-factory)).
 
-### 12.3 A preview that needs a human: Google login
+### 12.2 A preview that needs a human: Google login
 
 **The setup.** BlankTracker logs users in with Google OAuth only. Google
 checks every redirect URI against a list on the OAuth client, accepts no
@@ -1317,7 +1343,7 @@ someone runs `approve`.
 - **Waiting is per step.** Blocking at provisioning would leave the agent
   idle for something it doesn't need.
 
-### 12.4 Installing Heinzel on an app that wasn't built for it
+### 12.3 Installing Heinzel on an app that wasn't built for it
 
 **The setup.** BlankTracker as it really is, not as Scenario A first imagined
 it: API and SPA in one repository root, the SPA on Cloudflare Workers (not
@@ -1350,7 +1376,7 @@ only addition to the repository is the factory, in `heinzel/`.
 - **Preview hosting may sit next to production.** Guards against touching
   production records belong in the components that hold the tokens.
 
-### 12.2 The Salesforce team that only clicks
+### 12.4 The Salesforce team that only clicks
 
 **The team.** A Salesforce team with no source-driven development at all.
 They implement a ticket by clicking in a shared dev org, then repeat the same
@@ -1402,3 +1428,139 @@ one ticket at a time.
 **Caveat.** The instructions will be good, not perfect. Salesforce's Setup UI
 changes between releases and some settings are deeply nested, so whoever
 follows them in production still needs basic Salesforce knowledge.
+
+### 12.5 A mobile product: iOS, Android and a backend
+
+**The setup.** Three repositories, three teams: `ios` (Swift), `android`
+(Kotlin) and `backend` (a Rails API on Heroku-like hosting). Mobile builds
+need signing keys and, for iOS, a macOS machine; CI builds them (GitHub
+Actions with macOS runners) and ships internal builds through TestFlight and
+Firebase App Distribution. A product manager writes tickets in Linear;
+most features touch the backend and one or both apps.
+
+**How it maps.**
+
+| Piece | Implementation |
+|---|---|
+| Factory | a dedicated repository listing all three repos (§5) |
+| Environment | a preview of the backend per ticket, like Scenario A or B |
+| Deployers | `backend`: as usual. `ios`, `android`: wait for CI to build the commit with the preview API URL baked in, then hand over the build's install link (TestFlight, Firebase) as `Deployment.URL` |
+| Agent | edits all three, runs unit tests where its host can (Kotlin, Ruby; Swift needs macOS), deploys, tests the API against the preview |
+| Publish | MR links, the backend URL and an install link per app |
+
+**What fits.** Repos on separate teams are just repos; a ticket that only
+changes `android` gets one MR. A mobile build is a deployment whose "URL" is
+an install link, and its endpoint a store link. Build signing stays in CI,
+where the keys already live, so Heinzel never holds them.
+
+**What doesn't, yet.** The mobile deployers are CI-gated, so they need CI
+status (Scenario D, D4) and long waits (below). The agent can't run an iOS
+simulator on a Linux host, nor tap through either app, so UI verification
+becomes manual test steps in the outcome, or a device cloud the agent drives
+through an MCP server, an agent option. No interface changes.
+
+**Verdict: fits**, given D4 and long waits.
+
+### 12.6 An open-source SDK family
+
+**The setup.** One OpenAPI specification in `api-spec` generates client
+libraries in six repositories (`sdk-go`, `sdk-python`, `sdk-js`, …).
+Maintainers are a small team; most issues and pull requests come from
+outside contributors. Tracker and forge are both GitHub (issues and PRs).
+Branches can't be pushed to the upstream repositories by bots: everyone,
+including the maintainers' automation, works from forks. There is nothing to
+deploy: CI tests every PR on a matrix of language versions and publishes
+pre-release packages for merged changes.
+
+**How it maps.**
+
+| Piece | Implementation |
+|---|---|
+| Factory | a dedicated repository listing `api-spec` and the six SDKs |
+| Tracker, forge | `tracker/github` (issues) and `forge/github`, two components on one token |
+| Environment | none: provision, deploy and retrieve are skipped (design rule 2) |
+| Trigger | a webhook trigger that only accepts a `heinzel` label added by a maintainer |
+| Agent | changes the spec, regenerates the SDKs it affects, runs their tests locally; CI's matrix is the real check (D4) |
+
+**What fits.** No environment is a supported shape: the zero value skips
+those steps. A spec change that fans out to seven repos is the multi-repo
+case, and needs lazy branches (D1) so the SDKs it doesn't touch see nothing.
+
+**What doesn't.**
+
+- **Forks.** The engine clones `Forge.Remote` and branches from its target
+  branch, and the forge opens the change request in the same repository.
+  With forks, Heinzel pushes to `heinzel-bot/sdk-go` but must branch from,
+  and open the PR against, `acme/sdk-go`. `forge.GitRemote` needs an
+  upstream to fetch the base from, besides the remote it pushes to, and the
+  forge component a `Fork` option. A small interface change (open question
+  12).
+- **Untrusted ticket authors.** Anyone can open an issue, and the issue is
+  the agent's prompt. Restricting who can *start* a run (the maintainer's
+  label) doesn't stop the issue *text* from steering an agent that holds a
+  push token and runs with full access. Heinzel's working assumption (§1)
+  holds only when the people who write tickets are trusted. This is the real
+  impedance mismatch (open question 11).
+
+**Verdict: fits structurally; mismatched on trust.** Usable today only with
+tickets written or rewritten by maintainers.
+
+### 12.7 A regulated enterprise with a separate operations team
+
+**The setup.** A bank's internal lending platform: a Java monolith and two
+services, in Bitbucket, tracked in Jira. Developers may not deploy anything.
+Environments (`dev1`–`dev6`, `uat`) are long-lived, shared and booked through
+the ops team; a booking can take a day. Deploying to any of them means
+raising a change in ServiceNow that ops executes through their own pipeline.
+Every change needs two approvals, an audit trail, and nothing may touch
+customer data outside production.
+
+**How it maps.**
+
+| Piece | Implementation |
+|---|---|
+| Factory | a dedicated repository, run by the platform team on an approved host |
+| Environment | a provisioner that leases one of `dev1`–`dev6` from a pool (open question 8): `Ensure` books it, `Destroy` releases it, and a provider action asks ops to confirm the booking, with `Before: implement` |
+| Deployers | raise a ServiceNow change for the commit, then wait until ops has executed it, and report the change number in `Deployment.Info` |
+| Gates | `Gates: [deploy]` for the second approval before the final deploy |
+| Audit | the run's log and `run.json` record every step, deployment and approval |
+
+**What fits.** Every part is a component or an option. Human actions and
+gates express "ops must confirm" and "a second person approves". Deployers
+may use any system (ServiceNow) as long as they are idempotent: "is there
+already a change for this commit?" is the natural key. Heinzel never deploys
+anything itself here, and the interfaces don't require it to.
+
+**What doesn't.**
+
+- **Waiting days, not minutes.** A booking or an executed change can take a
+  day. Today a step either finishes, fails, retries three times with
+  backoff, or times out. A step that is simply *waiting on someone else*
+  needs its own outcome: the step returns "not yet, look again in an hour",
+  the run waits in a `waiting` status without holding a process, and the
+  daemon re-runs the step later. The same fixes CI waits (D4, D5) and the
+  mobile builds of 12.5 (open question 13).
+- **Restricted agents.** The bank won't give an agent full access: no
+  production-like data, no credentials beyond the booked environment, every
+  command logged. Same root as 12.6 (open question 11).
+
+**Verdict: fits structurally; mismatched on long waits and on agent access.**
+
+### What the case studies show together
+
+The pipeline (ticket, branch, environment, implement, MRs, deploy, publish)
+and the component boundaries held for every structure so far: monorepo,
+multi-repo, microservices, mobile, libraries with no environment, and
+organisations where Heinzel may not deploy. New shapes needed new
+*components*, not new *kinds* of component. Three things recur and belong in
+the core:
+
+1. **Waiting on others** (CI, app stores, bookings, approvals) as a step
+   outcome, not a timeout (open question 13; supersedes the long timeouts of
+   D5).
+2. **Trust**: who may write the agent's instructions, and how much the agent
+   may reach. The working assumption "the agent has everything it needs" is
+   the one design decision several real teams can't accept (open question
+   11).
+3. **Repository topology**: lazy branches (D1), seeing every repo's commit
+   (D3), and forks (open question 12).
