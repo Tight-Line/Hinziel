@@ -826,6 +826,7 @@ material the skill learns from.
 <factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check                        # test credentials and the tools this host needs (git, ssh, node, claude, …)
 <factory> serve                        # HTTP triggers + worker pool (M2)
+<factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list                     # (M5)
 <factory> env destroy <run-id | env-name>   # (M5)
@@ -880,6 +881,50 @@ try the CLI without any accounts.
 
 ---
 
+### Hosting a factory
+
+*Planned for M2.* `serve` needs an always-on host, reachable over HTTPS
+(Trello only loads Power-Up connectors over HTTPS). Installing it is the
+same everywhere except for routing traffic to it, so routing is a separate
+choice.
+
+**The host needs Docker, nothing else.** The factory ships as a container
+image holding the binary and every tool `check` asks for (git, ssh, Node,
+Claude Code). Ubuntu 24.04 is the reference, but any Linux with Docker works.
+Running the factory in a container also keeps it apart from anything else
+on a shared host: no host mounts, no Docker socket, no `--privileged`.
+
+**`host install <user@host>`**, run from a machine that has the factory and
+its env file, over SSH (`core/remote`):
+
+1. check for Docker, and install it with Docker's official script if missing;
+2. create a non-root `heinzel` user;
+3. copy the env file, the SSH key and any certificate files, mode 600;
+4. pull the factory image and start it with a restart policy and a volume
+   for run state (`HEINZEL_STATE_DIR`);
+5. set up routing (below);
+6. run `check` on the host and report.
+
+Running it again updates in place, so it's also the upgrade command. It
+works on any machine you point it at; Heinzel doesn't create its own host.
+What it can't do: Claude Code's login (run `claude setup-token` once and put
+the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`) and registering the
+Trello Power-Up.
+
+**Routing.** `serve` itself only serves plain HTTP on a port. On top of it:
+
+| | Needs | Fits |
+|---|---|---|
+| **Cloudflare Tunnel** (default) | the domain's DNS on Cloudflare (the free plan is enough); `cloudflared` runs in the container and connects out, so no open ports, no certificates, no web server on the host | any host: dedicated, a container on a shared box, behind NAT, a laptop |
+| Listening on 443 | an A record; an Origin CA certificate behind Cloudflare's proxy, or Let's Encrypt | a dedicated host, where nothing else uses 443 |
+| The host's reverse proxy | a server block in the host's nginx, Caddy or Traefik, added once by hand | shared hosts that already have one |
+
+The tunnel is the default because it's the same everywhere and needs nothing
+from the host. Its hostname is fixed, which Trello needs because the
+connector URL is registered once. Cloudflare's account-less "quick tunnels"
+change their address on every restart, so they don't qualify. A team whose
+main domain can't move to Cloudflare can use a spare domain there.
+
 ## 9. Testing strategy
 
 - `internal/engine` is tested end to end with fakes: two repos (one
@@ -909,7 +954,7 @@ try the CLI without any accounts.
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
-| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need |
+| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
