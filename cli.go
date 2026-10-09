@@ -145,7 +145,13 @@ func (c *cli) report(ctx context.Context, id run.ID) {
 	case run.StatusNeedsInput:
 		fmt.Fprintf(c.out, "  %s\n  Answer on the ticket, then: resume %s\n", r.Error, r.ID)
 	case run.StatusAwaitingApproval:
-		fmt.Fprintf(c.out, "  waiting before %s. Continue with: approve %s\n", r.CurrentStep, r.ID)
+		fmt.Fprintf(c.out, "  waiting before %s.\n", r.CurrentStep)
+		for _, a := range r.Actions {
+			if a.Before == r.CurrentStep && !a.Done {
+				fmt.Fprintf(c.out, "  action needed: %s\n%s\n", a.Title, indentLines(a.Body, "    "))
+			}
+		}
+		fmt.Fprintf(c.out, "  Continue with: approve %s\n", r.ID)
 	case run.StatusFailed:
 		fmt.Fprintf(c.out, "  failed at %s. Fix the cause, then: resume %s\n", r.CurrentStep, r.ID)
 	}
@@ -223,6 +229,16 @@ func (c *cli) detail(r *run.Run) {
 		fmt.Fprintf(c.out, "\nEnvironment %s\n", r.Environment.Name)
 		for _, name := range sortedKeys(r.Environment.Endpoints) {
 			fmt.Fprintf(c.out, "  %s: %s\n", name, r.Environment.Endpoints[name])
+		}
+	}
+	if len(r.Actions) > 0 {
+		fmt.Fprintln(c.out, "\nHuman actions")
+		for _, a := range r.Actions {
+			state := "pending"
+			if a.Done {
+				state = "done"
+			}
+			fmt.Fprintf(c.out, "  [%s] %s\n", state, a.Title)
 		}
 	}
 	if len(r.Deployments) > 0 {
@@ -318,4 +334,13 @@ func shortCommit(c string) string {
 		return c[:10]
 	}
 	return c
+}
+
+// indentLines prefixes every line of s.
+func indentLines(s, prefix string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i, l := range lines {
+		lines[i] = prefix + l
+	}
+	return strings.Join(lines, "\n")
 }

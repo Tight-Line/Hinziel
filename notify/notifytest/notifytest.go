@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/heinzel/env"
 	"github.com/Tight-Line/heinzel/internal/testutil"
 	"github.com/Tight-Line/heinzel/notify"
 	"github.com/Tight-Line/heinzel/run"
@@ -65,13 +66,16 @@ func Run(t *testing.T, n notify.Notifier) {
 	}
 	for _, typ := range []notify.EventType{
 		notify.EventRunStarted, notify.EventRunSucceeded, notify.EventRunFailed,
-		notify.EventRunNeedsInput, notify.EventRunAwaitingApproval,
+		notify.EventRunNeedsInput, notify.EventRunAwaitingApproval, notify.EventRunActionRequired,
 	} {
 		t.Run(string(typ), func(t *testing.T) {
 			ev := &notify.Event{
 				Type:    typ,
 				Run:     snap,
 				Message: core.Message{Title: "Heinzel conformance: " + string(typ), Body: "Sent by **notifytest**."},
+			}
+			if typ == notify.EventRunActionRequired {
+				ev.Action = &env.Action{ID: "conformance", Title: "Conformance action", Body: "Nothing to do.", Before: "publish"}
 			}
 			if err := n.Notify(context.Background(), ev); err != nil {
 				t.Fatal(err)

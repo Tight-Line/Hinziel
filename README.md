@@ -287,8 +287,6 @@ Notifications are **events**, not a step. The engine emits `run.started`,
 
 ### Human actions
 
-*Planned for M1; not in the code yet.*
-
 Some environments can't be finished by software. BlankTracker's previews need
 their OAuth redirect URIs added in Google Cloud Console, which has no API for
 it. A Salesforce sandbox lease might need an admin's approval. Heinzel
@@ -370,7 +368,7 @@ and the plain data types around it.
 | [`tracker`](./tracker/tracker.go) | `Tracker` + optional `StageMover`, `Linker`, `AttachmentFetcher`; `Ticket`, `TicketRef`, `Stage` | core |
 | [`forge`](./forge/forge.go) | `Forge` + optional `ChangeRequestUpdater`; `GitRemote`, `ChangeRequest`, `ChangeRequestInput` | core |
 | [`agent`](./agent/agent.go) | `Agent`; `Task`, `Checkout`, `Outcome`, `Usage` | tracker, env |
-| [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`), `Host`, `SSHAccess`, `Action` (*planned*) | — |
+| [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`, `Actions`), `Host`, `SSHAccess`, `Action` | — |
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
 | [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
@@ -533,7 +531,6 @@ spot: `Main` lists every missing one at once and exits before doing anything.
 ### Scenario A: BlankTracker
 
 The component packages below are planned (§10); their options are a sketch.
-`EnvironmentActions` is planned too ([Human actions](#human-actions)).
 
 ```go
 package main

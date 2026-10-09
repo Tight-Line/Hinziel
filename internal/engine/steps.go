@@ -159,9 +159,15 @@ func (x *execution) provisionEnvironment(ctx context.Context) error {
 		}
 		x.logf(StepProvisionEnvironment, "DNS %s %s -> %s", rec.Type, rec.Name, rec.Value)
 	}
+	if err := x.collectActions(ctx, e); err != nil {
+		return err
+	}
 	x.r.Environment = e
+	if err := x.save(ctx); err != nil {
+		return err
+	}
 	x.logf(StepProvisionEnvironment, "environment %s ready", e.Name)
-	return nil
+	return x.announceActions(ctx)
 }
 
 // deployAll runs every deployer on its repo's current HEAD, which must be
@@ -194,7 +200,7 @@ func (x *execution) deployAll(ctx context.Context, skipDeployed bool) ([]string,
 		if err := ws.Worktree(ctx, wt, head); err != nil {
 			return report, err
 		}
-		src := &deploy.Source{Repo: d.Repo, Workdir: wt, Branch: x.r.Branch, Commit: head}
+		src := &deploy.Source{Repo: d.Repo, Workdir: wt, Branch: x.r.Branch, Commit: head, Ticket: x.r.Ticket}
 		dep, err := d.Deployer.Deploy(ctx, x.r.Environment, src)
 		if err != nil {
 			return report, fmt.Errorf("deployer %s: %w", d.Name, err)

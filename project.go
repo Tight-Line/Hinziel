@@ -17,6 +17,7 @@ func (f *Factory) project() *engine.Project {
 			Instructions:        f.Instructions,
 			BranchName:          f.BranchName,
 			EnvName:             f.EnvName,
+			EnvironmentActions:  f.EnvironmentActions,
 			Gates:               stepNames(f.Gates),
 			DisabledSteps:       stepNames(f.DisabledSteps),
 			DraftChangeRequests: f.DraftChangeRequests,

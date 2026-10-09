@@ -41,10 +41,15 @@ type Factory struct {
 
 	// Optional behaviour. Zero values give the defaults.
 
-	Instructions        string                         // extra agent instructions, added to the engine's prompt
-	BranchName          func(t *tracker.Ticket) string // nil = "heinzel/<key>-<slugged title>"
-	EnvName             func(t *tracker.Ticket) string // nil = "hz-<factory>-<key>"; must be a DNS label
-	Gates               []Step                         // pause before these steps; empty = fully autonomous
+	Instructions string                         // extra agent instructions, added to the engine's prompt
+	BranchName   func(t *tracker.Ticket) string // nil = "heinzel/<key>-<slugged title>"
+	EnvName      func(t *tracker.Ticket) string // nil = "hz-<factory>-<key>"; must be a DNS label
+	// EnvironmentActions are things a human must do for each new environment
+	// that Heinzel can't, such as registering its URLs with a third party.
+	// They're announced right after provisioning (run.action_required) and,
+	// with Before set, hold the run back before that step until approved.
+	EnvironmentActions  func(e *env.Environment) []env.Action
+	Gates               []Step // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step
 	DraftChangeRequests bool
 }
@@ -151,8 +156,8 @@ func (f *Factory) validate() error {
 	}
 
 	if f.Environment == nil {
-		if len(f.Endpoints) > 0 || len(f.Deployers) > 0 || f.DNS != nil {
-			bad("Endpoints, Deployers and DNS need an Environment")
+		if len(f.Endpoints) > 0 || len(f.Deployers) > 0 || f.DNS != nil || f.EnvironmentActions != nil {
+			bad("Endpoints, Deployers, DNS and EnvironmentActions need an Environment")
 		}
 	}
 	endpoints := map[string]bool{}

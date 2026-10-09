@@ -39,6 +39,19 @@ type Environment struct {
 	Endpoints map[string]string `json:"endpoints,omitempty"`
 	Hosts     []Host            `json:"hosts,omitempty"`
 	State     map[string]string `json:"state,omitempty"` // opaque provider data (port, vhost path, dns record id)
+	// Actions are things a human must do for this environment that the
+	// provider can't, such as approving a lease. The factory may add its own.
+	Actions []Action `json:"actions,omitempty"`
+}
+
+// Action asks a human to do something for an environment. The engine
+// announces it once (run.action_required) right after provisioning; if Before
+// names a step, the run waits before that step until someone confirms it.
+type Action struct {
+	ID     string `json:"id"`               // stable per environment; makes announcing and confirming idempotent
+	Title  string `json:"title"`            // one line
+	Body   string `json:"body"`             // CommonMark: exactly what to do
+	Before string `json:"before,omitempty"` // step name that waits until it's done; "" = nothing waits
 }
 
 type Host struct {

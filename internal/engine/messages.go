@@ -101,6 +101,7 @@ func changeRequestMessage(r *run.Run) core.Message {
 		fmt.Fprintf(&b, "\n%s\n", strings.TrimSpace(r.Outcome.Summary))
 	}
 	writeManualSteps(&b, r)
+	writeActions(&b, r)
 	fmt.Fprintf(&b, "\n_Opened by Heinzel, run `%s`._\n", r.ID)
 	msg := core.Message{Body: b.String()}
 	if r.Ticket.URL != "" {
@@ -147,6 +148,7 @@ func publishMessage(r *run.Run) core.Message {
 		}
 	}
 	writeManualSteps(&b, r)
+	writeActions(&b, r)
 	return core.Message{Title: "Heinzel: " + r.Ticket.Key + " is ready for review", Body: b.String(), Links: links}
 }
 
@@ -169,11 +171,7 @@ func writeManualSteps(b *strings.Builder, r *run.Run) {
 
 // eventMessage is the default text of a notification.
 func eventMessage(r *run.Run, typ notify.EventType) core.Message {
-	key := r.Request.Ticket.ID
-	if r.Ticket != nil {
-		key = r.Ticket.Key
-	}
-	subject := r.Factory + " " + key
+	subject := subject(r)
 	switch typ {
 	case notify.EventRunStarted:
 		return core.Message{Title: subject + ": started", Body: fmt.Sprintf("Run `%s` started.", r.ID)}
@@ -186,9 +184,34 @@ func eventMessage(r *run.Run, typ notify.EventType) core.Message {
 	case notify.EventRunNeedsInput:
 		return core.Message{Title: subject + ": needs input", Body: r.Error}
 	case notify.EventRunAwaitingApproval:
-		return core.Message{Title: subject + ": waiting for approval", Body: fmt.Sprintf("Run `%s` is waiting before `%s`. Continue it with `approve %s`.", r.ID, r.CurrentStep, r.ID)}
+		var b strings.Builder
+		fmt.Fprintf(&b, "Run `%s` is waiting before `%s`.", r.ID, r.CurrentStep)
+		if pending := pendingActions(r, r.CurrentStep); len(pending) > 0 {
+			b.WriteString(" These must be done first:\n\n")
+			for _, a := range pending {
+				fmt.Fprintf(&b, "- **%s**\n\n%s\n\n", a.Title, indent(strings.TrimSpace(a.Body)))
+			}
+			fmt.Fprintf(&b, "Then confirm with `approve %s`.", r.ID)
+		} else {
+			fmt.Fprintf(&b, " Continue it with `approve %s`.", r.ID)
+		}
+		return core.Message{Title: subject + ": waiting for approval", Body: b.String()}
 	}
 	return core.Message{Title: subject + ": " + string(typ)}
+}
+
+// subject names a run in notification titles: "<factory> <ticket key>".
+func subject(r *run.Run) string {
+	key := r.Request.Ticket.ID
+	if r.Ticket != nil {
+		key = r.Ticket.Key
+	}
+	return r.Factory + " " + key
+}
+
+// indent indents every line by two spaces, to nest text under a list item.
+func indent(s string) string {
+	return "  " + strings.ReplaceAll(s, "\n", "\n  ")
 }
 
 func sortedKeys[V any](m map[string]V) []string {

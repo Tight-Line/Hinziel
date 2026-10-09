@@ -57,6 +57,7 @@ type Settings struct {
 	Instructions        string
 	BranchName          func(t *tracker.Ticket) string // nil = names.Branch
 	EnvName             func(t *tracker.Ticket) string // nil = names.Env
+	EnvironmentActions  func(e *env.Environment) []env.Action
 	Gates               []string
 	DisabledSteps       []string
 	DraftChangeRequests bool

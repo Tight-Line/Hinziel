@@ -48,9 +48,11 @@ type Snapshot struct {
 	Environment    *env.Environment                `json:"environment,omitempty"`
 	// Deployments holds the latest deployment per deployer, keyed by deployer name.
 	Deployments map[string]*deploy.Deployment `json:"deployments,omitempty"`
-	Error       string                        `json:"error,omitempty"`
-	StartedAt   time.Time                     `json:"started_at"`
-	UpdatedAt   time.Time                     `json:"updated_at"`
+	// Actions are the human actions of the run's environment and their progress.
+	Actions   []Action  `json:"actions,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	StartedAt time.Time `json:"started_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Run is the mutable state passed between steps and persisted after each one.
@@ -62,6 +64,13 @@ type Run struct {
 	// Approved lists the gates (step names) this run has been approved past.
 	Approved []string     `json:"approved,omitempty"`
 	Steps    []StepRecord `json:"steps"`
+}
+
+// Action is a human action of the run's environment (env.Action), with its progress.
+type Action struct {
+	env.Action
+	Announced bool `json:"announced,omitempty"` // run.action_required was emitted
+	Done      bool `json:"done,omitempty"`      // someone confirmed it (approve)
 }
 
 type StepRecord struct {

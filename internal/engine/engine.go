@@ -174,6 +174,11 @@ func (e *Engine) Approve(ctx context.Context, id run.ID) error {
 			return fmt.Errorf("run %s is %s, not awaiting approval", r.ID, r.Status)
 		}
 		r.Approved = append(r.Approved, r.CurrentStep)
+		// Approving confirms every human action: whoever approves has seen them
+		// all in the notifications and in `status`.
+		for i := range r.Actions {
+			r.Actions[i].Done = true
+		}
 		r.Status = run.StatusRunning
 		return nil
 	}); err != nil {
@@ -289,7 +294,7 @@ func (x *execution) pipeline(ctx context.Context) error {
 			}
 			continue
 		}
-		if x.gated(name) {
+		if x.gated(name) || len(pendingActions(x.r, name)) > 0 {
 			x.r.Status = run.StatusAwaitingApproval
 			x.r.CurrentStep = name
 			if err := x.save(ctx); err != nil {
@@ -412,13 +417,16 @@ func (x *execution) gated(name string) bool {
 // emit sends an event to every notifier subscribed to it. Notifier failures
 // are logged, never fatal.
 func (x *execution) emit(ctx context.Context, typ notify.EventType) {
-	ev := &notify.Event{Type: typ, Run: x.r.Snapshot, Message: eventMessage(x.r, typ)}
+	x.emitEvent(ctx, &notify.Event{Type: typ, Run: x.r.Snapshot, Message: eventMessage(x.r, typ)})
+}
+
+func (x *execution) emitEvent(ctx context.Context, ev *notify.Event) {
 	for _, n := range x.p.Notifiers {
-		if len(n.On) > 0 && !slices.Contains(n.On, typ) {
+		if len(n.On) > 0 && !slices.Contains(n.On, ev.Type) {
 			continue
 		}
 		if err := n.Notifier.Notify(ctx, ev); err != nil {
-			x.logf("", "notifier failed for %s: %v", typ, err)
+			x.logf("", "notifier failed for %s: %v", ev.Type, err)
 		}
 	}
 }

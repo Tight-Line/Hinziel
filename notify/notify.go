@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/heinzel/env"
 	"github.com/Tight-Line/heinzel/run"
 )
 
@@ -23,16 +24,18 @@ const (
 	EventRunFailed           EventType = "run.failed"
 	EventRunNeedsInput       EventType = "run.needs_input"
 	EventRunAwaitingApproval EventType = "run.awaiting_approval"
+	EventRunActionRequired   EventType = "run.action_required" // one per human action; Event.Action says which
 )
 
 // Common event sets for routing notifiers.
 var (
 	Finished = []EventType{EventRunSucceeded, EventRunFailed}
-	Problems = []EventType{EventRunFailed, EventRunNeedsInput, EventRunAwaitingApproval}
+	Problems = []EventType{EventRunFailed, EventRunNeedsInput, EventRunAwaitingApproval, EventRunActionRequired}
 )
 
 type Event struct {
 	Type    EventType    `json:"type"`
-	Run     run.Snapshot `json:"run"`     // structured data for plugins that want it
-	Message core.Message `json:"message"` // engine-rendered default text
+	Run     run.Snapshot `json:"run"`              // structured data for plugins that want it
+	Message core.Message `json:"message"`          // engine-rendered default text
+	Action  *env.Action  `json:"action,omitempty"` // for run.action_required
 }
