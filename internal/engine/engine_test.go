@@ -532,3 +532,55 @@ func TestWithoutEnvironmentTheEnvironmentStepsAreSkipped(t *testing.T) {
 		}
 	}
 }
+
+// A configuration error found while running (a variable the factory reads
+// inside a func, say) fails the step that hit it, and resuming once it's
+// fixed carries on from there.
+func TestConfigErrorFailsTheStepThatHitIt(t *testing.T) {
+	f := newFixture(t)
+	var unusable error
+	url := f.project.Endpoints[0].URL
+	f.project.Endpoints[0].URL = func(e *env.Environment) string {
+		unusable = errors.New("missing environment variables: API_HOST")
+		return url(e)
+	}
+	f.eng.opts.Config = func() error { return unusable }
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
+		return nil, nil
+	}
+
+	r, err := f.start()
+	if err == nil || !strings.Contains(err.Error(), "API_HOST") {
+		t.Fatalf("expected the config error, got %v", err)
+	}
+	if got := f.step(r, StepProvisionEnvironment); got.Status != stepFailed {
+		t.Fatalf("provision step %+v", got)
+	}
+
+	f.project.Endpoints[0].URL = url
+	unusable = nil
+	if err := f.eng.Resume(f.ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r = f.load(r.ID); r.Status != run.StatusSucceeded {
+		t.Fatalf("after resume: %s %s", r.Status, r.Error)
+	}
+}
+
+// The agent's deploy command reports a configuration error at once, rather
+// than the agent going on against a deployment that used it.
+func TestConfigErrorFailsTheAgentsDeploy(t *testing.T) {
+	f := newFixture(t)
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
+		f.eng.opts.Config = func() error { return errors.New("missing environment variables: API_HOST") }
+		if _, err := agentDeploy(ctx, task); err == nil || !strings.Contains(err.Error(), "API_HOST") {
+			t.Errorf("deploy: %v", err)
+		}
+		return nil, nil
+	}
+	if _, err := f.start(); err == nil {
+		t.Fatal("expected the run to fail")
+	}
+}

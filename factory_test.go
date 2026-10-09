@@ -151,6 +151,7 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 }
 
 func TestEnvRecordsMissingVariables(t *testing.T) {
+	resetEnv()
 	t.Setenv("SKRAT_TEST_PRESENT", "x")
 	Env("SKRAT_TEST_PRESENT")
 	Env("SKRAT_TEST_MISSING")
@@ -164,12 +165,40 @@ func TestEnvRecordsMissingVariables(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "SKRAT_TEST_MISSING") {
 		t.Fatalf("got %v", err)
 	}
-	missingEnv.names = nil
+	resetEnv()
+}
+
+func TestEnvReadAfterStartupIsReportedAsLate(t *testing.T) {
+	resetEnv()
+	defer resetEnv()
+	if err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory()); err != nil {
+		t.Fatal(err)
+	}
+	if err := lateEnvError(); err != nil {
+		t.Fatalf("nothing read late yet: %v", err)
+	}
+	t.Setenv("SKRAT_TEST_PRESENT", "x")
+	Env("SKRAT_TEST_PRESENT") // read late but set: fine
+	Env("SKRAT_TEST_LATE")
+	if got := missingEnvNames(); len(got) != 0 {
+		t.Errorf("a late read must not count as missing at startup: %v", got)
+	}
+	err := lateEnvError()
+	if err == nil || !strings.Contains(err.Error(), "missing environment variables: SKRAT_TEST_LATE.") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func resetEnv() {
+	missingEnv.Lock()
+	missingEnv.started, missingEnv.names, missingEnv.late = false, nil, nil
+	missingEnv.Unlock()
 }
 
 func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
+	resetEnv()
+	defer resetEnv()
 	Env("SKRAT_TEST_MISSING")
-	defer func() { missingEnv.names = nil }()
 	f := validFactory()
 	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
 	var out bytes.Buffer

@@ -34,6 +34,7 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if err := validateAll(factories); err != nil {
 		return err
 	}
+	envChecked()
 	if len(args) > 0 && args[0] == "check" {
 		return check(ctx, out, factories)
 	}
@@ -131,7 +132,7 @@ func newEngine(out io.Writer, factories []Factory) (*engine.Engine, error) {
 	for i := range factories {
 		projects = append(projects, factories[i].project())
 	}
-	return engine.New(st, projects, engine.Options{Out: out}), nil
+	return engine.New(st, projects, engine.Options{Out: out, Config: lateEnvError}), nil
 }
 
 func usage(out io.Writer) {

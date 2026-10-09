@@ -739,7 +739,11 @@ builds, as in Scenario A.
 
 Secrets come from the environment through `skrat.Env`. A missing variable
 doesn't fail on the spot: `Main` lists every missing one at once and exits
-before doing anything.
+before doing anything (`check` lists them among its other results). That
+only covers what is read while the `Factory` is built, so read every
+variable there, not inside a func the factory holds (a deployer's `Env`, an
+endpoint's `URL`): those run during a run, and a variable found missing
+there fails the step that read it.
 
 ### Scenario A: BlankTracker
 
@@ -790,6 +794,10 @@ var previewEnv string
 var previewOverride string
 
 func main() {
+	// Read here, not in the deployer's Env func below, so Main checks them.
+	googleID := skrat.Env("PREVIEW_GOOGLE_CLIENT_ID")
+	googleSecret := skrat.Env("PREVIEW_GOOGLE_CLIENT_SECRET")
+
 	board := trello.New(trello.Options{
 		Board:  "FbGOL7Wb",
 		APIKey: skrat.Env("TRELLO_API_KEY"),
@@ -860,8 +868,8 @@ func main() {
 						"APP_URL":              e.Endpoints["api"],
 						"FRONTEND_URL":         e.Endpoints["web"],
 						"GOOGLE_REDIRECT_HOST": e.Endpoints["api"],
-						"GOOGLE_CLIENT_ID":     skrat.Env("PREVIEW_GOOGLE_CLIENT_ID"),
-						"GOOGLE_CLIENT_SECRET": skrat.Env("PREVIEW_GOOGLE_CLIENT_SECRET"),
+						"GOOGLE_CLIENT_ID":     googleID,
+						"GOOGLE_CLIENT_SECRET": googleSecret,
 					}
 				},
 				TLS: &dockercompose.TLS{ // Cloudflare Origin CA certificate for *.blanktracker.com

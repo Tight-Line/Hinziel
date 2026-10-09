@@ -35,6 +35,11 @@ type Options struct {
 	MaxAttempts int              // attempts per step for core.RetryableError; 0 = 3
 	RetryDelay  time.Duration    // first retry delay, doubled each attempt; 0 = 5s
 	Now         func() time.Time // nil = time.Now
+	// Config, if set, is called after every step and every deploy for the
+	// agent. An error fails that step: it means the factory's configuration
+	// turned out unusable while running, e.g. a variable read too late to be
+	// checked at startup.
+	Config func() error
 }
 
 // Engine executes runs for a set of projects.
@@ -345,6 +350,9 @@ func (x *execution) attempt(ctx context.Context, name string) error {
 		stepCtx, cancel := context.WithTimeout(ctx, stepTimeouts[name])
 		err := x.runStep(stepCtx, name)
 		cancel()
+		if err == nil {
+			err = x.checkConfig()
+		}
 		var retryable *core.RetryableError
 		if err == nil || !errors.As(err, &retryable) || n >= x.e.opts.MaxAttempts {
 			return err
@@ -357,6 +365,13 @@ func (x *execution) attempt(ctx context.Context, name string) error {
 		}
 		delay *= 2
 	}
+}
+
+func (x *execution) checkConfig() error {
+	if x.e.opts.Config == nil {
+		return nil
+	}
+	return x.e.opts.Config()
 }
 
 func (x *execution) fail(ctx context.Context, rec *run.StepRecord, err error) error {

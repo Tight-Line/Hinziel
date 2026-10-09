@@ -110,6 +110,9 @@ func (x *execution) deployWaiting(ctx context.Context) ([]string, error) {
 	for skip := false; ; skip = true {
 		report, err := x.deployAll(ctx, skip)
 		lines = append(lines, report...)
+		if err == nil {
+			err = x.checkConfig()
+		}
 		var wait *core.WaitError
 		if !errors.As(err, &wait) {
 			return lines, err
