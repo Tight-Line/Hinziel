@@ -195,6 +195,9 @@ func (a *Agent) systemPrompt() string {
 // Check verifies that Claude Code is installed.
 func (a *Agent) Check(ctx context.Context) error {
 	cmdline := a.command()
+	if err := core.NeedTools(cmdline[0]); err != nil {
+		return fmt.Errorf("%w (install Claude Code: https://claude.com/claude-code)", err)
+	}
 	out, err := exec.CommandContext(ctx, cmdline[0], append(cmdline[1:], "--version")...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("claude --version: %w: %s", err, strings.TrimSpace(string(out)))

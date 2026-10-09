@@ -6,6 +6,7 @@ package apiclient
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,6 +112,10 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, err
+		}
+		var unknownCA x509.UnknownAuthorityError
+		if errors.As(err, &unknownCA) {
+			return nil, fmt.Errorf("%s: %s %s: %w (are CA certificates installed? e.g. the ca-certificates package)", c.Name, method, path, err)
 		}
 		// The request may not have reached the server at all.
 		return nil, &core.RetryableError{Err: fmt.Errorf("%s: %s %s: %w", c.Name, method, path, err)}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Tight-Line/heinzel/core"
@@ -47,5 +48,17 @@ func TestDo(t *testing.T) {
 	}
 	if err.Error() != "test: GET /missing: 404 no such thing" {
 		t.Errorf("message: %q", err)
+	}
+}
+
+func TestMissingCAHint(t *testing.T) {
+	// httptest's certificate is signed by a CA no system trusts, which is
+	// exactly what every server looks like on a host without CA certificates.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	err := (&Client{Name: "test", BaseURL: srv.URL}).Do(context.Background(), "GET", "/", nil, nil, nil)
+	var retry *core.RetryableError
+	if err == nil || !strings.Contains(err.Error(), "ca-certificates") || errors.As(err, &retry) {
+		t.Fatalf("want a non-retryable error with a hint: %v", err)
 	}
 }

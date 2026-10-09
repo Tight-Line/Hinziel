@@ -166,3 +166,12 @@ func TestEnvRecordsMissingVariables(t *testing.T) {
 	}
 	missingEnv.names = nil
 }
+
+func TestRunCheckReportsMissingGit(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	var out bytes.Buffer
+	err := Run(context.Background(), []string{"check"}, &out, validFactory())
+	if err == nil || !strings.Contains(out.String(), "FAIL  heinzel: not installed on this host (or not on PATH): git") {
+		t.Fatalf("err %v, output:\n%s", err, out.String())
+	}
+}

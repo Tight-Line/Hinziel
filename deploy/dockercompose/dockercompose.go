@@ -270,9 +270,14 @@ func tlsCompose(t *TLS, dir string) string {
 	return b.String()
 }
 
-// Check verifies the options and that the TLS files are readable.
+// Check verifies the options, that the TLS files are readable and that ssh
+// is installed. Docker itself runs on the environment's host, not here.
 func (d *Deployer) Check(context.Context) error {
-	var errs []error
+	ssh := "ssh"
+	if len(d.ssh) > 0 {
+		ssh = d.ssh[0]
+	}
+	errs := []error{core.NeedTools(ssh)}
 	for i, x := range d.opts.PostDeploy {
 		if x.Service == "" || x.Command == "" {
 			errs = append(errs, fmt.Errorf("PostDeploy[%d] needs a Service and a Command", i))

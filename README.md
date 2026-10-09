@@ -449,6 +449,9 @@ These rules keep the interfaces from fighting each other:
    are fine in the factory's own wiring (`Endpoint.URL`).
 6. **Constructors don't fail.** `New(Options)` returns the component; bad
    options and credentials surface in `Check` (`core.Checker`) or on first use.
+   `Check` also names every command the component runs on the Heinzel host
+   that isn't installed (`core.NeedTools`), so one `check` on a fresh host
+   lists everything it's missing.
    That keeps a factory a single readable expression.
 7. **The engine owns the workflow; the agent owns the work.** The agent has
    full access (see the working assumption in §1). It commits and pushes, but
@@ -821,7 +824,7 @@ material the skill learns from.
 <factory> resume <run-id>              # continue a failed, needs_input or interrupted run
 <factory> approve <run-id>             # pass the current gate, confirm pending actions, continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
-<factory> check                        # validate factories and test component credentials
+<factory> check                        # test credentials and the tools this host needs (git, ssh, node, claude, …)
 <factory> serve                        # HTTP triggers + worker pool (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list                     # (M5)

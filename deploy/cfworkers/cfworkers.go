@@ -249,12 +249,24 @@ func short(commit string) string {
 	return commit
 }
 
-// Check verifies the token and account, and that the account has a
-// workers.dev subdomain for preview URLs.
+// Check verifies the token and account, that the account has a workers.dev
+// subdomain for preview URLs, and that the build tools are installed.
 func (d *Deployer) Check(ctx context.Context) error {
-	if d.opts.Worker == "" {
-		return errors.New("Worker is required")
+	var tools []string
+	if len(d.opts.Wrangler) > 0 {
+		tools = append(tools, d.opts.Wrangler[0])
+	} else {
+		tools = append(tools, "node", "npx")
 	}
-	_, err := d.accountSubdomain(ctx)
-	return err
+	if d.opts.Build != "" {
+		tools = append(tools, "sh")
+	}
+	errs := []error{core.NeedTools(tools...)}
+	if d.opts.Worker == "" {
+		errs = append(errs, errors.New("Worker is required"))
+	}
+	if _, err := d.accountSubdomain(ctx); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }

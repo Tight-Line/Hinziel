@@ -310,12 +310,18 @@ func (p *Provisioner) List(ctx context.Context) ([]env.Environment, error) {
 	}
 }
 
-// Check verifies the token and that every SSH key exists in the account.
+// Check verifies the token, that every SSH key exists in the account, and
+// that ssh is installed (Ensure uses it to wait for the droplet).
 func (p *Provisioner) Check(ctx context.Context) error {
-	if err := p.api.Do(ctx, http.MethodGet, "/account", nil, nil, nil); err != nil {
-		return err
+	ssh := "ssh"
+	if len(p.ssh) > 0 {
+		ssh = p.ssh[0]
 	}
-	var errs []error
+	toolErr := core.NeedTools(ssh)
+	if err := p.api.Do(ctx, http.MethodGet, "/account", nil, nil, nil); err != nil {
+		return errors.Join(toolErr, err)
+	}
+	errs := []error{toolErr}
 	for _, k := range p.opts.SSHKeys {
 		if err := p.api.Do(ctx, http.MethodGet, "/account/keys/"+url.PathEscape(k), nil, nil, nil); err != nil {
 			errs = append(errs, fmt.Errorf("SSH key %s: %w", k, err))

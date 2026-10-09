@@ -138,7 +138,7 @@ Commands:
   resume <run-id>                continue a failed, needs_input or interrupted run
   approve <run-id>               pass the gate a run is waiting at and continue it
   cancel <run-id>                cancel a run that isn't executing
-  check                          validate factories and test component credentials
+  check                          test credentials and the tools this host needs
   serve                          HTTP triggers + worker pool (not yet)
   env up | list | destroy        manage environments (not yet)
 
@@ -151,6 +151,13 @@ Used by the agent inside a run (found via $HEINZEL_SOCKET):
 // check runs core.Checker on every component that implements it.
 func check(ctx context.Context, out io.Writer, factories []Factory) error {
 	failed := 0
+	// The engine clones, branches and pushes with git.
+	if err := core.NeedTools("git"); err != nil {
+		failed++
+		fmt.Fprintf(out, "FAIL  heinzel: %v\n", err)
+	} else {
+		fmt.Fprintln(out, "ok    heinzel: git")
+	}
 	for _, f := range factories {
 		for _, c := range components(&f) {
 			ch, ok := c.value.(core.Checker)
