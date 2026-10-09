@@ -145,7 +145,10 @@ on a droplet. A preview environment looks like this:
   records, so the droplet needs a certificate Cloudflare trusts. One
   Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
   Heinzel host, and `deploy/dockercompose` adds a TLS proxy in front of the
-  stack's own nginx.
+  stack's own nginx. Every droplet gets the same key, and each runs
+  unreviewed code, so one leak exposes them all. That's acceptable for the
+  first runs only: certificates per environment are planned for M2 (see
+  [Per-environment certificates](#per-environment-certificates)).
 - **Previews are cheap and quiet.** The compose stack reads `.env`, which the
   deployer writes from a template in the factory: no third-party API keys,
   `ONSOCIAL_DISABLED` and `SCRAPECREATORS_DISABLED` set, mail to the log. An
@@ -903,7 +906,7 @@ try the CLI without any accounts.
 |---|---|
 | M0 ✅ | interface packages and the root `heinzel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`heinzel/`), not here |
-| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up` |
+| M2 | `serve` + `trigger/trellopowerup` (button, badges, confirming actions); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M5 | Gates/approve, `env list/destroy`, hardening |
@@ -953,6 +956,29 @@ try the CLI without any accounts.
     whether Cloudflare limits how many aliases a Worker keeps, or whether a
     later upload can push an old alias out. If it can, `deploy/cfworkers`
     needs a Worker per environment instead, deleted on teardown.
+
+### Per-environment certificates
+
+*Planned for M2.* Today Scenario A copies one wildcard Origin CA key to every
+droplet. Instead, `deploy/dockercompose`'s TLS option will be able to get a
+certificate for each environment from Cloudflare's Origin CA API:
+
+- **Issue.** On the first deploy to an environment, generate a key on the
+  Heinzel host, send a CSR for exactly that environment's hostnames (taken
+  from `e.Endpoints`) and install the issued certificate. A leaked key then
+  exposes one preview, for as long as it exists.
+- **Reuse.** Keep the key and certificate in the Heinzel state directory, per
+  environment, so later deploys reuse them. If they're lost, issue a new
+  certificate and revoke the old one, found by its hostnames, so no state is
+  needed to clean up.
+- **Revoke.** Teardown revokes the certificate. Deployers have no teardown
+  hook yet, so this adds an optional `deploy.Destroyer` interface
+  (`Destroy(ctx, e)`), called by `env destroy` before the provisioner's
+  `Destroy`. `deploy/cfworkers` can use the same hook for its aliases (open
+  question 10).
+- **Credentials.** A Cloudflare token with SSL and Certificates:Edit on the
+  zone, in place of the certificate files. The shared certificate stays
+  available as an option for teams without one.
 
 ---
 
