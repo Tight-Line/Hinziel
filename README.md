@@ -922,8 +922,15 @@ Trello Power-Up.
 The tunnel is the default because it's the same everywhere and needs nothing
 from the host. Its hostname is fixed, which Trello needs because the
 connector URL is registered once. Cloudflare's account-less "quick tunnels"
-change their address on every restart, so they don't qualify. A team whose
-main domain can't move to Cloudflare can use a spare domain there.
+change their address on every restart, so they don't qualify.
+
+The hostname is internal plumbing: only the Trello Power-Up admin page ever
+sees it, so it doesn't need to be on the team's own domain. Any domain whose
+DNS is on Cloudflare works, such as a cheap spare one. A CNAME from a domain
+hosted elsewhere does *not* work: Cloudflare only routes a tunnel for
+hostnames in a zone on the same account. (Cloudflare for SaaS custom
+hostnames could get around that, but it's extra setup for no benefit here.
+Verify both points against Cloudflare's docs when building this.)
 
 ## 9. Testing strategy
 
