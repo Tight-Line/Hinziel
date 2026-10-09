@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/tracker"
-	"github.com/Tight-Line/heinzel/tracker/trackertest"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/skrat/tracker/trackertest"
 )
 
 // fakeTrello serves the slice of the Trello API this package uses.
@@ -55,7 +55,7 @@ func newFakeTrello() *fakeTrello {
 			{"l-new", "New tickets"}, {"l-doing", "  In Progress"}, {"l-review", "Review"},
 			{"l-dup1", "Done"}, {"l-dup2", "done"},
 		}},
-		labels: map[string][]label{"b1": {{ID: "lb-blocked", Name: "Blocked"}, {ID: "lb-review", Name: "Heinzel: review"}, {ID: "lb-red", Color: "red"}}},
+		labels: map[string][]label{"b1": {{ID: "lb-blocked", Name: "Blocked"}, {ID: "lb-review", Name: "Skrat: review"}, {ID: "lb-red", Color: "red"}}},
 	}
 	return f
 }
@@ -83,7 +83,7 @@ func (f *fakeTrello) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case parts[0] == "members" && parts[1] == "me":
-		send(map[string]string{"username": "heinzel"})
+		send(map[string]string{"username": "skrat"})
 	case parts[0] == "boards" && len(parts) == 2:
 		if parts[1] != "b1" && parts[1] != "BoArD111" {
 			http.NotFound(w, r)
@@ -150,7 +150,7 @@ func idLabels(c map[string]any) []string {
 
 var stages = map[tracker.Stage]Stage{
 	tracker.StageInProgress: {List: "in progress"}, // the board says "  In Progress"
-	tracker.StageInReview:   {List: "l-review", Label: "heinzel:  REVIEW"},
+	tracker.StageInReview:   {List: "l-review", Label: "skrat:  REVIEW"},
 	tracker.StageBlocked:    {Label: "Blocked"},
 }
 
@@ -279,8 +279,8 @@ func TestCheck(t *testing.T) {
 // TestIntegration runs the conformance suite against real Trello. It posts a
 // comment, adds a link and moves the card, so use a sandbox card.
 func TestIntegration(t *testing.T) {
-	if os.Getenv("HEINZEL_IT_TRELLO") == "" {
-		t.Skip("set HEINZEL_IT_TRELLO=1, TRELLO_API_KEY, TRELLO_TOKEN and TRELLO_TEST_CARD")
+	if os.Getenv("SKRAT_IT_TRELLO") == "" {
+		t.Skip("set SKRAT_IT_TRELLO=1, TRELLO_API_KEY, TRELLO_TOKEN and TRELLO_TEST_CARD")
 	}
 	tr := New(Options{APIKey: os.Getenv("TRELLO_API_KEY"), Token: os.Getenv("TRELLO_TOKEN")})
 	if err := tr.Check(context.Background()); err != nil {

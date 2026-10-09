@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/forge"
-	"github.com/Tight-Line/heinzel/internal/gittest"
+	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/skrat/internal/gittest"
 )
 
 func setup(t *testing.T) (*Repo, string) {
@@ -35,13 +35,13 @@ func TestBranchCommitPushFlow(t *testing.T) {
 	ctx := context.Background()
 	r, bare := setup(t)
 
-	if err := r.CheckoutBranch(ctx, "heinzel/t-1", "origin/main"); err != nil {
+	if err := r.CheckoutBranch(ctx, "skrat/t-1", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Push(ctx, "heinzel/t-1"); err != nil {
+	if err := r.Push(ctx, "skrat/t-1"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := r.RemoteBranchExists(ctx, "heinzel/t-1"); err != nil || !ok {
+	if ok, err := r.RemoteBranchExists(ctx, "skrat/t-1"); err != nil || !ok {
 		t.Fatalf("remote branch: %v %v", ok, err)
 	}
 	if differs, err := r.DiffersFrom(ctx, "origin/main"); err != nil || differs {
@@ -61,7 +61,7 @@ func TestBranchCommitPushFlow(t *testing.T) {
 	if pushed, _ := r.IsPushed(ctx); pushed {
 		t.Fatal("new commit should not be pushed yet")
 	}
-	if err := r.Push(ctx, "heinzel/t-1"); err != nil {
+	if err := r.Push(ctx, "skrat/t-1"); err != nil {
 		t.Fatal(err)
 	}
 	if pushed, err := r.IsPushed(ctx); err != nil || !pushed {
@@ -72,18 +72,18 @@ func TestBranchCommitPushFlow(t *testing.T) {
 	}
 
 	head, _ := r.Head(ctx)
-	remoteHead, err := gittest.Output(bare, "rev-parse", "heinzel/t-1")
+	remoteHead, err := gittest.Output(bare, "rev-parse", "skrat/t-1")
 	if err != nil || remoteHead != head {
 		t.Fatalf("remote head %q, local %q (%v)", remoteHead, head, err)
 	}
 
-	if err := r.DeleteRemoteBranch(ctx, "heinzel/t-1"); err != nil {
+	if err := r.DeleteRemoteBranch(ctx, "skrat/t-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.DeleteRemoteBranch(ctx, "heinzel/t-1"); err != nil {
+	if err := r.DeleteRemoteBranch(ctx, "skrat/t-1"); err != nil {
 		t.Fatalf("deleting a missing branch: %v", err)
 	}
-	if ok, _ := r.RemoteBranchExists(ctx, "heinzel/t-1"); ok {
+	if ok, _ := r.RemoteBranchExists(ctx, "skrat/t-1"); ok {
 		t.Fatal("branch still exists")
 	}
 }
@@ -140,10 +140,10 @@ func TestNewBranchIsLocalUntilAPlainPushCreatesIt(t *testing.T) {
 	r, bare := setup(t)
 	mainBefore, _ := r.run(ctx, "rev-parse", "origin/main")
 
-	if err := r.CheckoutBranch(ctx, "heinzel/t-2", "origin/main"); err != nil {
+	if err := r.CheckoutBranch(ctx, "skrat/t-2", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
-	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/heinzel/t-2") == nil {
+	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/skrat/t-2") == nil {
 		t.Fatal("CheckoutBranch must not push")
 	}
 	// An unchanged branch counts as pushed: its commit is on origin/main.
@@ -157,13 +157,13 @@ func TestNewBranchIsLocalUntilAPlainPushCreatesIt(t *testing.T) {
 	if _, err := r.run(ctx, "push", "--quiet"); err != nil {
 		t.Fatalf("a plain push must create the branch on origin: %v", err)
 	}
-	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/heinzel/t-2") != nil {
+	if gittest.Git(bare, "rev-parse", "--verify", "--quiet", "refs/heads/skrat/t-2") != nil {
 		t.Error("the branch is not on origin")
 	}
 	if mainAfter, _ := r.run(ctx, "rev-parse", "origin/main"); mainAfter != mainBefore {
 		t.Error("the push moved main")
 	}
-	if err := r.DeleteRemoteBranch(ctx, "heinzel/never-pushed"); err != nil {
+	if err := r.DeleteRemoteBranch(ctx, "skrat/never-pushed"); err != nil {
 		t.Errorf("deleting a branch that was never pushed must be a no-op: %v", err)
 	}
 }

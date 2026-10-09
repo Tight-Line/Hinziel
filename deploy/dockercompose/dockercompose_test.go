@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/core/remote/remotetest"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/deploy/deploytest"
-	"github.com/Tight-Line/heinzel/env"
+	"github.com/Tight-Line/skrat/core/remote/remotetest"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/deploy/deploytest"
+	"github.com/Tight-Line/skrat/env"
 )
 
 // setup returns an environment whose host is this machine (through a local
@@ -31,11 +31,11 @@ func setup(t *testing.T) (*env.Environment, *deploy.Source, string) {
 	os.WriteFile(filepath.Join(src, ".git", "HEAD"), []byte("x"), 0o644)
 
 	e := &env.Environment{
-		Name:      "hz-abc",
+		Name:      "sk-abc",
 		Hosts:     []env.Host{{Name: "main", Address: "203.0.113.10", SSH: &env.SSHAccess{User: "root"}}},
-		Endpoints: map[string]string{"api": "https://hz-abc-api.example.com", "web": "https://hz-abc.example.dev"},
+		Endpoints: map[string]string{"api": "https://sk-abc-api.example.com", "web": "https://sk-abc.example.dev"},
 	}
-	return e, &deploy.Source{Repo: "app", Workdir: src, Branch: "heinzel/abc", Commit: "abc123"}, log
+	return e, &deploy.Source{Repo: "app", Workdir: src, Branch: "skrat/abc", Commit: "abc123"}, log
 }
 
 func newTestDeployer(t *testing.T, opts Options) (*Deployer, string) {
@@ -43,7 +43,7 @@ func newTestDeployer(t *testing.T, opts Options) (*Deployer, string) {
 	opts.RemoteDir = func(e *env.Environment, repo string) string { return filepath.Join(root, e.Name, repo) }
 	d := New(opts)
 	d.ssh = remotetest.LocalSSH(t)
-	return d, filepath.Join(root, "hz-abc", "app")
+	return d, filepath.Join(root, "sk-abc", "app")
 }
 
 func readFile(t *testing.T, path string) string {
@@ -82,7 +82,7 @@ func TestDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dep.URL != "https://hz-abc-api.example.com" || dep.Commit != "abc123" {
+	if dep.URL != "https://sk-abc-api.example.com" || dep.Commit != "abc123" {
 		t.Errorf("deployment %+v", dep)
 	}
 
@@ -90,12 +90,12 @@ func TestDeploy(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(srcDir, ".git")); !os.IsNotExist(err) {
 		t.Error(".git must not be uploaded")
 	}
-	wantEnv := "APP_ENV=preview\nONSOCIAL_DISABLED=true\n\n# Set by Heinzel for environment hz-abc\n" +
-		"APP_NAME='Blank Tracker'\nAPP_URL=https://hz-abc-api.example.com\nMULTI=\"a'b\"\nSECRET='p$ss\"word'\n"
+	wantEnv := "APP_ENV=preview\nONSOCIAL_DISABLED=true\n\n# Set by Skrat for environment sk-abc\n" +
+		"APP_NAME='Blank Tracker'\nAPP_URL=https://sk-abc-api.example.com\nMULTI=\"a'b\"\nSECRET='p$ss\"word'\n"
 	if got := readFile(t, filepath.Join(srcDir, ".env")); got != wantEnv {
 		t.Errorf(".env\n%s\nwant\n%s", got, wantEnv)
 	}
-	gen := filepath.Join(base, "heinzel")
+	gen := filepath.Join(base, "skrat")
 	if got := readFile(t, filepath.Join(gen, "override.yaml")); !strings.Contains(got, "profiles: [disabled]") {
 		t.Errorf("override %q", got)
 	}
@@ -115,10 +115,10 @@ func TestDeploy(t *testing.T) {
 		t.Fatalf("docker calls:\n%s", strings.Join(calls, "\n"))
 	}
 	files := "-f vibe.docker-compose.yaml -f " + gen + "/override.yaml -f " + gen + "/tls.yaml"
-	if want := srcDir + ": compose -p hz-abc-app " + files + " up -d --build --force-recreate --remove-orphans"; calls[0] != want {
+	if want := srcDir + ": compose -p sk-abc-app " + files + " up -d --build --force-recreate --remove-orphans"; calls[0] != want {
 		t.Errorf("up:\n%s\nwant\n%s", calls[0], want)
 	}
-	if want := "compose -p hz-abc-app " + files + " exec -T app sh -c php artisan migrate --force"; !strings.HasSuffix(calls[1], want) {
+	if want := "compose -p sk-abc-app " + files + " exec -T app sh -c php artisan migrate --force"; !strings.HasSuffix(calls[1], want) {
 		t.Errorf("post-deploy:\n%s", calls[1])
 	}
 }

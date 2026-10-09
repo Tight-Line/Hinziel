@@ -1,15 +1,15 @@
-package heinzel_test
+package skrat_test
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/agent/claudecode"
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy/cfworkers"
-	"github.com/Tight-Line/heinzel/deploy/dockercompose"
-	"github.com/Tight-Line/heinzel/env/digitalocean"
+	"github.com/Tight-Line/skrat/agent/claudecode"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy/cfworkers"
+	"github.com/Tight-Line/skrat/deploy/dockercompose"
+	"github.com/Tight-Line/skrat/env/digitalocean"
 )
 
 // On a host with nothing installed, every component's Check names the

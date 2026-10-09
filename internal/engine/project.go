@@ -6,17 +6,17 @@ package engine
 import (
 	"time"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/dns"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/forge"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/dns"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
-// Project is a validated factory, as the engine sees it. The root heinzel
-// package converts a heinzel.Factory into a Project.
+// Project is a validated factory, as the engine sees it. The root skrat
+// package converts a skrat.Factory into a Project.
 type Project struct {
 	Name        string
 	Tracker     tracker.Tracker

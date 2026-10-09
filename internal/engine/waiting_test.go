@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/deploy/deploytest"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/deploy/deploytest"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 // waitingDeployer waits (core.WaitError) a number of times before deploying

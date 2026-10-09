@@ -1,6 +1,6 @@
-package heinzel
+package skrat
 
-import "github.com/Tight-Line/heinzel/internal/engine"
+import "github.com/Tight-Line/skrat/internal/engine"
 
 // Step names a pipeline step, for Factory.Gates and Factory.DisabledSteps.
 // The names also appear in run state, `status` output and notifications.

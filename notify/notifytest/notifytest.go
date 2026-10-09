@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/internal/testutil"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/internal/testutil"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 // Fake records every event it is sent.
@@ -58,9 +58,9 @@ func (f *Fake) Types() []notify.EventType {
 func Run(t *testing.T, n notify.Notifier) {
 	snap := run.Snapshot{
 		ID:        "20261009-120000-abcdef",
-		Factory:   "heinzel-conformance",
-		Ticket:    &tracker.Ticket{Key: "HZ-1", Title: "Conformance test", URL: "https://example.com/HZ-1"},
-		Branch:    "heinzel/hz-1-conformance-test",
+		Factory:   "skrat-conformance",
+		Ticket:    &tracker.Ticket{Key: "SK-1", Title: "Conformance test", URL: "https://example.com/SK-1"},
+		Branch:    "skrat/sk-1-conformance-test",
 		StartedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -72,7 +72,7 @@ func Run(t *testing.T, n notify.Notifier) {
 			ev := &notify.Event{
 				Type:    typ,
 				Run:     snap,
-				Message: core.Message{Title: "Heinzel conformance: " + string(typ), Body: "Sent by **notifytest**."},
+				Message: core.Message{Title: "Skrat conformance: " + string(typ), Body: "Sent by **notifytest**."},
 			}
 			if typ == notify.EventRunActionRequired {
 				ev.Action = &env.Action{ID: "conformance", Title: "Conformance action", Body: "Nothing to do.", Before: "publish"}

@@ -17,7 +17,7 @@
 //     and allow access. It needs read and write (comments, moving cards,
 //     attachments) and should not expire. It acts as the Trello member who
 //     authorizes it, on every board they can see, so authorize it as a
-//     dedicated member (e.g. "Heinzel") who is only on the factory's board.
+//     dedicated member (e.g. "Skrat") who is only on the factory's board.
 //     Comments then also appear under that name.
 //   - Board: the board's ID or the shortLink from its URL
 //     (trello.com/b/<shortLink>/…). The lists and labels Stages name must
@@ -40,9 +40,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/internal/apiclient"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/internal/apiclient"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 // Options configure a Trello tracker. APIKey and Token come from

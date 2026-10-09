@@ -5,9 +5,9 @@ package notify
 import (
 	"context"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/run"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/run"
 )
 
 // Notifier tells people things. Routing (which events, which audience) is

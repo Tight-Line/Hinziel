@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/skrat/core"
 )
 
 // Tracker is where tickets come from and where progress is reported.

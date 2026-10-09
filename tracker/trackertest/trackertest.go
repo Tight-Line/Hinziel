@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/internal/testutil"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/internal/testutil"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 // Fake is an in-memory tracker.Tracker with every optional capability.
@@ -187,19 +187,19 @@ func Run(t *testing.T, tr tracker.Tracker, ticketID string) {
 		}
 	})
 	t.Run("FetchMissing", func(t *testing.T) {
-		if _, err := tr.Fetch(ctx, "heinzel-conformance-missing"); err == nil {
+		if _, err := tr.Fetch(ctx, "skrat-conformance-missing"); err == nil {
 			t.Fatal("Fetch of a missing ticket must fail")
 		}
 	})
 	t.Run("Comment", func(t *testing.T) {
-		msg := core.Message{Title: "Heinzel conformance test", Body: "This comment was posted by **trackertest**."}
+		msg := core.Message{Title: "Skrat conformance test", Body: "This comment was posted by **trackertest**."}
 		if err := tr.Comment(ctx, ticketID, msg); err != nil {
 			t.Fatal(err)
 		}
 	})
 	if l, ok := tr.(tracker.Linker); ok {
 		t.Run("AddLinkIsIdempotent", func(t *testing.T) {
-			link := core.Link{Title: "Heinzel conformance", URL: "https://example.com/heinzel-conformance"}
+			link := core.Link{Title: "Skrat conformance", URL: "https://example.com/skrat-conformance"}
 			for range 2 {
 				if err := l.AddLink(ctx, ticketID, link); err != nil {
 					t.Fatal(err)
@@ -212,7 +212,7 @@ func Run(t *testing.T, tr tracker.Tracker, ticketID string) {
 			if err := m.MoveTo(ctx, ticketID, tracker.StageInProgress); err != nil {
 				t.Fatal(err)
 			}
-			if err := m.MoveTo(ctx, ticketID, tracker.Stage("heinzel-unmapped-stage")); err != nil {
+			if err := m.MoveTo(ctx, ticketID, tracker.Stage("skrat-unmapped-stage")); err != nil {
 				t.Fatalf("an unmapped stage must be a no-op: %v", err)
 			}
 		})

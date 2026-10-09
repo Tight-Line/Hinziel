@@ -10,21 +10,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/agent/agenttest"
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy/deploytest"
-	"github.com/Tight-Line/heinzel/dns/dnstest"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/env/envtest"
-	"github.com/Tight-Line/heinzel/forge/forgetest"
-	"github.com/Tight-Line/heinzel/internal/gittest"
-	"github.com/Tight-Line/heinzel/internal/store"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/notify/notifytest"
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
-	"github.com/Tight-Line/heinzel/tracker/trackertest"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/agent/agenttest"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy/deploytest"
+	"github.com/Tight-Line/skrat/dns/dnstest"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/env/envtest"
+	"github.com/Tight-Line/skrat/forge/forgetest"
+	"github.com/Tight-Line/skrat/internal/gittest"
+	"github.com/Tight-Line/skrat/internal/store"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/notify/notifytest"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/skrat/tracker/trackertest"
 )
 
 // fixture is a project built entirely from fakes: two repos ("api", changed
@@ -169,9 +169,9 @@ func envVar(task *agent.Task, name string) string {
 	return ""
 }
 
-// agentDeploy is the agent running `$HEINZEL_BIN deploy`.
+// agentDeploy is the agent running `$SKRAT_BIN deploy`.
 func agentDeploy(ctx context.Context, task *agent.Task) (string, error) {
-	return Call(ctx, envVar(task, "HEINZEL_SOCKET"), "deploy")
+	return Call(ctx, envVar(task, "SKRAT_SOCKET"), "deploy")
 }
 
 func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
@@ -209,7 +209,7 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 	}
 
 	// Branch and change requests: only the changed repo gets one.
-	if r.Branch != "heinzel/t-1-add-csv-export" {
+	if r.Branch != "skrat/t-1-add-csv-export" {
 		t.Errorf("branch %q", r.Branch)
 	}
 	if crs := f.api.ChangeRequests(); len(crs) != 1 || crs[r.Branch].TargetBranch != "main" {
@@ -233,11 +233,11 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 	}
 
 	// Environment, endpoints and DNS.
-	wantURL := "https://hz-shop-t-1-api.preview.test"
+	wantURL := "https://sk-shop-t-1-api.preview.test"
 	if r.Environment == nil || r.Environment.Endpoints["api"] != wantURL {
 		t.Fatalf("environment: %+v", r.Environment)
 	}
-	if rec := f.dns.Records()["hz-shop-t-1-api.preview.test"]; rec.Type != "A" || rec.Value != "203.0.113.10" {
+	if rec := f.dns.Records()["sk-shop-t-1-api.preview.test"]; rec.Type != "A" || rec.Value != "203.0.113.10" {
 		t.Errorf("dns record: %+v", rec)
 	}
 
@@ -278,10 +278,10 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 		t.Fatalf("agent ran %d times", len(tasks))
 	}
 	task := tasks[0]
-	if len(task.Repos) != 2 || task.Environment == nil || envVar(&task, "HEINZEL_BIN") != "/usr/local/bin/shop-factory" {
+	if len(task.Repos) != 2 || task.Environment == nil || envVar(&task, "SKRAT_BIN") != "/usr/local/bin/shop-factory" {
 		t.Errorf("task: %+v", task)
 	}
-	for _, want := range []string{"T-1: Add CSV export", "Users want CSV.", r.Branch, "$HEINZEL_BIN deploy", wantURL} {
+	for _, want := range []string{"T-1: Add CSV export", "Users want CSV.", r.Branch, "$SKRAT_BIN deploy", wantURL} {
 		if !strings.Contains(task.Prompt, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, task.Prompt)
 		}
@@ -452,7 +452,7 @@ func TestDeployRefusesUnretrievedEnvironmentChanges(t *testing.T) {
 	org := &deploytest.FakeRetriever{}
 	f.project.Deployers[0].Deployer = org
 	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
-		if !strings.Contains(task.Prompt, "$HEINZEL_BIN retrieve") {
+		if !strings.Contains(task.Prompt, "$SKRAT_BIN retrieve") {
 			t.Error("prompt doesn't explain retrieve")
 		}
 		org.SetPending("flows/Approval.flow-meta.xml", "<Flow/>") // the agent clicked in the org
@@ -516,7 +516,7 @@ func TestWithoutEnvironmentTheEnvironmentStepsAreSkipped(t *testing.T) {
 		if task.Environment != nil {
 			t.Error("agent got an environment")
 		}
-		if strings.Contains(task.Prompt, "HEINZEL_BIN deploy") {
+		if strings.Contains(task.Prompt, "SKRAT_BIN deploy") {
 			t.Error("prompt mentions deploy without an environment")
 		}
 		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")

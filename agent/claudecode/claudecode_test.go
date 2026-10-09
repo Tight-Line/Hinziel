@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/core"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/core"
 )
 
 // fakeClaude behaves according to $FAKE_SCENARIO and records how it was run.
@@ -24,10 +24,10 @@ say '{"type":"assistant","message":{"content":[{"type":"text","text":"Looking at
 say '{"type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"rejected"}]}}'
 case "$FAKE_SCENARIO" in
 ok)
-  printf '%s' '{"summary":"Added CSV export.","commit_message":"T-1: CSV","manual_steps":["Set EXPORT_BUCKET"],"question":""}' > "$HEINZEL_OUTCOME"
+  printf '%s' '{"summary":"Added CSV export.","commit_message":"T-1: CSV","manual_steps":["Set EXPORT_BUCKET"],"question":""}' > "$SKRAT_OUTCOME"
   say '{"type":"result","subtype":"success","is_error":false,"result":"All done.","num_turns":7,"total_cost_usd":1.25,"usage":{"input_tokens":100,"cache_read_input_tokens":900,"output_tokens":50}}' ;;
 question)
-  printf '%s' '{"summary":"","question":"Which columns should the export have?"}' > "$HEINZEL_OUTCOME"
+  printf '%s' '{"summary":"","question":"Which columns should the export have?"}' > "$SKRAT_OUTCOME"
   say '{"type":"result","subtype":"success","is_error":false,"result":"I need input."}' ;;
 nooutcome)
   say '{"type":"result","subtype":"success","is_error":false,"result":"Done without a file."}' ;;
@@ -95,7 +95,7 @@ func TestImplement(t *testing.T) {
 		}
 	}
 	if !strings.Contains(args, "override anything the project's instructions") || !strings.Contains(args, "Run ./toolkit check.") {
-		t.Error("the system prompt must carry Heinzel's rules and the extra instructions")
+		t.Error("the system prompt must carry Skrat's rules and the extra instructions")
 	}
 
 	transcript := task.Log.(*strings.Builder).String()
@@ -158,8 +158,8 @@ func TestCheck(t *testing.T) {
 
 // TestIntegration runs real Claude Code on a tiny task in a scratch git repo.
 func TestIntegration(t *testing.T) {
-	if os.Getenv("HEINZEL_IT_CLAUDECODE") == "" {
-		t.Skip("set HEINZEL_IT_CLAUDECODE=1 (uses Claude Code as logged in, and costs a little)")
+	if os.Getenv("SKRAT_IT_CLAUDECODE") == "" {
+		t.Skip("set SKRAT_IT_CLAUDECODE=1 (uses Claude Code as logged in, and costs a little)")
 	}
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {

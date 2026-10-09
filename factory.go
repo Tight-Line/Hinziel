@@ -1,4 +1,4 @@
-package heinzel
+package skrat
 
 import (
 	"errors"
@@ -6,14 +6,14 @@ import (
 	"net"
 	"regexp"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/dns"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/forge"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/tracker"
-	"github.com/Tight-Line/heinzel/trigger"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/dns"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/skrat/trigger"
 )
 
 // Factory is one team's software factory: where tickets come from, which
@@ -42,10 +42,10 @@ type Factory struct {
 	// Optional behaviour. Zero values give the defaults.
 
 	Instructions string                         // extra agent instructions, added to the engine's prompt
-	BranchName   func(t *tracker.Ticket) string // nil = "heinzel/<key>-<slugged title>"
-	EnvName      func(t *tracker.Ticket) string // nil = "hz-<factory>-<key>"; must be a DNS label
+	BranchName   func(t *tracker.Ticket) string // nil = "skrat/<key>-<slugged title>"
+	EnvName      func(t *tracker.Ticket) string // nil = "sk-<factory>-<key>"; must be a DNS label
 	// EnvironmentActions are things a human must do for each new environment
-	// that Heinzel can't, such as registering its URLs with a third party.
+	// that Skrat can't, such as registering its URLs with a third party.
 	// They're announced right after provisioning (run.action_required) and,
 	// with Before set, hold the run back before that step until approved.
 	EnvironmentActions  func(e *env.Environment) []env.Action

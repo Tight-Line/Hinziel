@@ -1,5 +1,5 @@
 // Package gitlab is a forge.Forge for GitLab (gitlab.com or self-managed).
-// Heinzel and the agent push over https with the same token that opens
+// Skrat and the agent push over https with the same token that opens
 // merge requests.
 //
 // # Credentials
@@ -10,7 +10,7 @@
 //     on self-managed any tier), or a
 //     personal access token (avatar → Edit profile → Access tokens) of a
 //     dedicated user who is a Developer on the project.
-//   - The run branches (heinzel/… by default) must not be protected, or
+//   - The run branches (skrat/… by default) must not be protected, or
 //     pushes are refused.
 package gitlab
 
@@ -23,9 +23,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/forge"
-	"github.com/Tight-Line/heinzel/internal/apiclient"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/skrat/internal/apiclient"
 )
 
 // Options configure a GitLab forge.

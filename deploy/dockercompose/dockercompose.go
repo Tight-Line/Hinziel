@@ -7,7 +7,7 @@
 // and commands to run after each deploy (migrations, cache warm-up).
 //
 // On the host, each deploy uploads the commit to <RemoteDir>/src (replacing
-// the previous one) and writes Heinzel's own files to <RemoteDir>/heinzel,
+// the previous one) and writes Skrat's own files to <RemoteDir>/skrat,
 // outside the build context, so a `COPY . .` never bakes them into an image.
 // The host needs Docker with the compose plugin.
 //
@@ -34,10 +34,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/core/remote"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/env"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/core/remote"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/env"
 )
 
 // Options configure a compose deployment.
@@ -67,7 +67,7 @@ type Options struct {
 	// Host is the index of the environment host to deploy to.
 	Host int
 	// RemoteDir is where the deployment lives on the host;
-	// nil = /srv/heinzel/<environment>/<repo>.
+	// nil = /srv/skrat/<environment>/<repo>.
 	RemoteDir func(e *env.Environment, repo string) string
 	// URL, if set, is the deployment's URL (deploy.Deployment.URL).
 	URL func(e *env.Environment) string
@@ -77,8 +77,8 @@ type Options struct {
 // With Cloudflare proxying in "Full (strict)" mode, a Cloudflare Origin CA
 // certificate is enough.
 type TLS struct {
-	CertFile string // PEM certificate (chain) on the Heinzel host
-	KeyFile  string // PEM private key on the Heinzel host
+	CertFile string // PEM certificate (chain) on the Skrat host
+	KeyFile  string // PEM private key on the Skrat host
 	Upstream string // "service:port" of the stack to proxy to, e.g. "nginx:80"
 	// Network is the compose network Upstream is on; "" = the project's
 	// default network.
@@ -117,11 +117,11 @@ func (d *Deployer) Deploy(ctx context.Context, e *env.Environment, src *deploy.S
 	}
 	h.SSH = d.ssh
 
-	base := "/srv/heinzel/" + e.Name + "/" + src.Repo
+	base := "/srv/skrat/" + e.Name + "/" + src.Repo
 	if d.opts.RemoteDir != nil {
 		base = d.opts.RemoteDir(e, src.Repo)
 	}
-	srcDir, genDir := base+"/src", base+"/heinzel"
+	srcDir, genDir := base+"/src", base+"/skrat"
 	workDir := path.Join(srcDir, d.opts.Dir)
 
 	if err := h.Upload(ctx, src.Workdir, srcDir, ".git"); err != nil {
@@ -181,7 +181,7 @@ func (d *Deployer) envFile(e *env.Environment) string {
 	if d.opts.Env != nil {
 		vars := d.opts.Env(e)
 		if len(vars) > 0 {
-			b.WriteString("\n\n# Set by Heinzel for environment " + e.Name + "\n")
+			b.WriteString("\n\n# Set by Skrat for environment " + e.Name + "\n")
 		}
 		for _, k := range slices.Sorted(maps.Keys(vars)) {
 			b.WriteString(k + "=" + quoteEnv(vars[k]) + "\n")
@@ -241,8 +241,8 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) 
 func tlsConf(upstream string) string {
 	return `server {
     listen 443 ssl;
-    ssl_certificate /etc/nginx/heinzel/cert.pem;
-    ssl_certificate_key /etc/nginx/heinzel/key.pem;
+    ssl_certificate /etc/nginx/skrat/cert.pem;
+    ssl_certificate_key /etc/nginx/skrat/key.pem;
     client_max_body_size 0;
     resolver 127.0.0.11 valid=10s;
     set $upstream http://` + upstream + `;
@@ -264,14 +264,14 @@ func tlsCompose(t *TLS, dir string) string {
 	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, `services:
-  heinzel-tls:
+  skrat-tls:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
       - "%d:443"
     volumes:
       - %s/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - %s:/etc/nginx/heinzel:ro
+      - %s:/etc/nginx/skrat:ro
 `, port, dir, dir)
 	if t.Network != "" {
 		fmt.Fprintf(&b, "    networks:\n      - %s\n", t.Network)

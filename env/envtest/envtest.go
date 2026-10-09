@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/internal/testutil"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/internal/testutil"
 )
 
 // Fake is an in-memory env.Provisioner and env.Lister. Every environment gets
@@ -83,10 +83,10 @@ func clone(e *env.Environment) *env.Environment {
 }
 
 // Run checks p against the provisioner contract. It creates and destroys a
-// real environment named "hzct-<random>".
+// real environment named "skct-<random>".
 func Run(t *testing.T, p env.Provisioner) {
 	ctx := context.Background()
-	spec := env.Spec{Name: "hzct-" + testutil.Suffix(), Labels: map[string]string{"heinzel": "conformance"}}
+	spec := env.Spec{Name: "skct-" + testutil.Suffix(), Labels: map[string]string{"skrat": "conformance"}}
 	t.Cleanup(func() { p.Destroy(context.Background(), &env.Environment{Name: spec.Name}) })
 
 	e, err := p.Ensure(ctx, spec)

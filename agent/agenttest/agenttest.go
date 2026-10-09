@@ -7,7 +7,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Tight-Line/heinzel/agent"
+	"github.com/Tight-Line/skrat/agent"
 )
 
 // Fake runs Func for every task and records the tasks it was given.

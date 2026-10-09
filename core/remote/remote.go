@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/heinzel/env"
+	"github.com/Tight-Line/skrat/env"
 )
 
 // Host is one SSH-reachable machine.
@@ -123,7 +123,7 @@ func (h *Host) WriteFile(ctx context.Context, path string, data []byte, mode fs.
 func (h *Host) Upload(ctx context.Context, localDir, remoteDir string, exclude ...string) error {
 	pr, pw := io.Pipe()
 	go func() { pw.CloseWithError(writeTarGz(pw, localDir, exclude)) }()
-	next := remoteDir + ".heinzel-new"
+	next := remoteDir + ".skrat-new"
 	script := fmt.Sprintf("set -e; rm -rf %[1]s; mkdir -p %[1]s; tar -xzf - -C %[1]s; rm -rf %[2]s; mv %[1]s %[2]s",
 		Quote(next), Quote(remoteDir))
 	err := h.Run(ctx, script, pr, nil)

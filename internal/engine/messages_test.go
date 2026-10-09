@@ -4,19 +4,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 func TestPromptTellsTheAgentHowToReachHosts(t *testing.T) {
 	r := &run.Run{}
 	r.Ticket = &tracker.Ticket{Key: "T-1", Title: "Export"}
-	r.Branch = "heinzel/t-1-export"
+	r.Branch = "skrat/t-1-export"
 	task := &agent.Task{Workdir: "/w", Environment: &env.Environment{
-		Name:      "hz-t-1",
-		Endpoints: map[string]string{"api": "https://hz-t-1-api.example.com"},
+		Name:      "sk-t-1",
+		Endpoints: map[string]string{"api": "https://sk-t-1-api.example.com"},
 		Hosts: []env.Host{
 			{Name: "main", Address: "203.0.113.10", SSH: &env.SSHAccess{User: "root", Port: 22, KeyPath: "/k/id", KnownHostsPath: "/k/hosts"}},
 			{Name: "db", Address: "203.0.113.11", SSH: &env.SSHAccess{Port: 2222}},

@@ -8,7 +8,7 @@
 // overridden, so previews go to a Worker of their own and never touch the
 // production ones named in the configuration.
 //
-// The Heinzel host needs Node.js; wrangler comes from the repository's
+// The Skrat host needs Node.js; wrangler comes from the repository's
 // node_modules, or npx.
 //
 // # Credentials
@@ -38,10 +38,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/internal/apiclient"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/internal/apiclient"
 )
 
 // Options configure a Workers deployment.

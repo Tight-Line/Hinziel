@@ -1,8 +1,8 @@
-package heinzel
+package skrat
 
 import (
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/internal/engine"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/internal/engine"
 )
 
 // project converts a validated factory into the engine's form.

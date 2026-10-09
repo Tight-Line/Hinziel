@@ -24,17 +24,17 @@ func TestSlug(t *testing.T) {
 }
 
 func TestBranch(t *testing.T) {
-	if got := Branch("PROJ-7", "Add CSV export to the reports page"); got != "heinzel/proj-7-add-csv-export-to-the-reports" {
+	if got := Branch("PROJ-7", "Add CSV export to the reports page"); got != "skrat/proj-7-add-csv-export-to-the-reports" {
 		t.Errorf("got %q", got)
 	}
-	if got := Branch("aB3dE9", ""); got != "heinzel/ab3de9" {
+	if got := Branch("aB3dE9", ""); got != "skrat/ab3de9" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestEnvIsADNSLabel(t *testing.T) {
 	got := Env("blanktracker", strings.Repeat("X", 100))
-	if len(got) > 63 || strings.HasSuffix(got, "-") || !strings.HasPrefix(got, "hz-blanktracker-") {
+	if len(got) > 63 || strings.HasSuffix(got, "-") || !strings.HasPrefix(got, "sk-blanktracker-") {
 		t.Errorf("got %q", got)
 	}
 }

@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/notify"
-	"github.com/Tight-Line/heinzel/run"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/notify"
+	"github.com/Tight-Line/skrat/run"
 )
 
 // collectActions gathers the human actions of the run's environment: the

@@ -16,7 +16,7 @@ type Provisioner interface {
 	Destroy(ctx context.Context, e *Environment) error
 }
 
-// Lister is optional: lets `heinzel env list` find orphans not tracked in the run store.
+// Lister is optional: lets `skrat env list` find orphans not tracked in the run store.
 type Lister interface {
 	List(ctx context.Context) ([]Environment, error)
 }

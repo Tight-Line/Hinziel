@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/deploy/deploytest"
-	"github.com/Tight-Line/heinzel/env"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/deploy/deploytest"
+	"github.com/Tight-Line/skrat/env"
 )
 
 // fakeAPI serves the Workers subdomain endpoints for account "acct".
@@ -67,7 +67,7 @@ func setup(t *testing.T, aliasInOutput bool) (*Deployer, *fakeAPI, *env.Environm
 	out := "Worker Version ID: 0a1b2c3d-0000-1111-2222-333344445555\n"
 	if aliasInOutput {
 		out += "Version Preview URL: https://0a1b2c3d-previews.acme.workers.dev\n" +
-			"Version Preview Alias URL: https://hz-abc-previews.acme.workers.dev\n"
+			"Version Preview Alias URL: https://sk-abc-previews.acme.workers.dev\n"
 	}
 	script := "#!/bin/sh\necho \"$PWD|$CLOUDFLARE_ACCOUNT_ID|$CLOUDFLARE_API_TOKEN|$*\" >> " + log + "\n" +
 		"[ \"$1\" = deploy ] && touch " + created + "\n" +
@@ -98,8 +98,8 @@ func setup(t *testing.T, aliasInOutput bool) (*Deployer, *fakeAPI, *env.Environm
 		}
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	e := &env.Environment{Name: "hz-abc", Endpoints: map[string]string{"api": "https://hz-abc-api.example.com"}}
-	return d, api, e, &deploy.Source{Repo: "app", Workdir: src, Branch: "heinzel/abc", Commit: "0123456789abcdef"}, log
+	e := &env.Environment{Name: "sk-abc", Endpoints: map[string]string{"api": "https://sk-abc-api.example.com"}}
+	return d, api, e, &deploy.Source{Repo: "app", Workdir: src, Branch: "skrat/abc", Commit: "0123456789abcdef"}, log
 }
 
 type roundTripper func(*http.Request) (*http.Response, error)
@@ -117,10 +117,10 @@ func TestDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dep.URL != "https://hz-abc-previews.acme.workers.dev" || dep.Info["version_id"] != "0a1b2c3d-0000-1111-2222-333344445555" {
+	if dep.URL != "https://sk-abc-previews.acme.workers.dev" || dep.Info["version_id"] != "0a1b2c3d-0000-1111-2222-333344445555" {
 		t.Errorf("deployment %+v", dep)
 	}
-	if html, _ := os.ReadFile(filepath.Join(src.Workdir, "dist", "index.html")); string(html) != "https://hz-abc-api.example.com\n" {
+	if html, _ := os.ReadFile(filepath.Join(src.Workdir, "dist", "index.html")); string(html) != "https://sk-abc-api.example.com\n" {
 		t.Errorf("BuildEnv must reach the build: %q", html)
 	}
 	data, _ := os.ReadFile(log)
@@ -131,7 +131,7 @@ func TestDeploy(t *testing.T) {
 	if want := src.Workdir + "|acct|cf-token|deploy --name previews"; calls[0] != want {
 		t.Errorf("first use must create the worker:\n%s\nwant\n%s", calls[0], want)
 	}
-	if want := "versions upload --name previews --preview-alias hz-abc --message app 0123456789 (heinzel/abc)"; !strings.HasSuffix(calls[1], want) {
+	if want := "versions upload --name previews --preview-alias sk-abc --message app 0123456789 (skrat/abc)"; !strings.HasSuffix(calls[1], want) {
 		t.Errorf("upload:\n%s", calls[1])
 	}
 	if !api.workers["previews"]["previews_enabled"] || api.enabling != 1 {
@@ -154,14 +154,14 @@ func TestURLFallsBackToSubdomain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dep.URL != PreviewURL("hz-abc", "previews", "acme") {
+	if dep.URL != PreviewURL("sk-abc", "previews", "acme") {
 		t.Errorf("URL %s", dep.URL)
 	}
 }
 
 func TestAliasValidation(t *testing.T) {
 	d := New(Options{Worker: strings.Repeat("w", 50)})
-	for _, name := range []string{"Hz-ABC", "1abc", "hz_abc", "hz-" + strings.Repeat("x", 20)} {
+	for _, name := range []string{"Sk-ABC", "1abc", "sk_abc", "sk-" + strings.Repeat("x", 20)} {
 		if _, err := d.alias(&env.Environment{Name: name}); err == nil {
 			t.Errorf("alias %q must be refused", name)
 		}

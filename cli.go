@@ -1,4 +1,4 @@
-package heinzel
+package skrat
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/Tight-Line/heinzel/internal/engine"
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/internal/engine"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 type cli struct {
@@ -309,9 +309,9 @@ func (c *cli) logs(ctx context.Context, args []string) error {
 
 // agentCommand is `deploy` or `retrieve`, run by the agent inside a run.
 func agentCommand(ctx context.Context, out io.Writer, command string) error {
-	socket := os.Getenv("HEINZEL_SOCKET")
+	socket := os.Getenv("SKRAT_SOCKET")
 	if socket == "" {
-		return fmt.Errorf("%s only works inside a run, where Heinzel sets HEINZEL_SOCKET", command)
+		return fmt.Errorf("%s only works inside a run, where Skrat sets SKRAT_SOCKET", command)
 	}
 	output, err := engine.Call(ctx, socket, command)
 	if output != "" {

@@ -1,4 +1,4 @@
-package heinzel
+package skrat
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/dns"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/forge"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/dns"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 type fakeTracker struct{ checkErr error }
@@ -151,17 +151,17 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 }
 
 func TestEnvRecordsMissingVariables(t *testing.T) {
-	t.Setenv("HEINZEL_TEST_PRESENT", "x")
-	Env("HEINZEL_TEST_PRESENT")
-	Env("HEINZEL_TEST_MISSING")
-	Env("HEINZEL_TEST_MISSING")
+	t.Setenv("SKRAT_TEST_PRESENT", "x")
+	Env("SKRAT_TEST_PRESENT")
+	Env("SKRAT_TEST_MISSING")
+	Env("SKRAT_TEST_MISSING")
 
 	got := missingEnvNames()
-	if len(got) != 1 || got[0] != "HEINZEL_TEST_MISSING" {
+	if len(got) != 1 || got[0] != "SKRAT_TEST_MISSING" {
 		t.Fatalf("got %v", got)
 	}
 	err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory())
-	if err == nil || !strings.Contains(err.Error(), "HEINZEL_TEST_MISSING") {
+	if err == nil || !strings.Contains(err.Error(), "SKRAT_TEST_MISSING") {
 		t.Fatalf("got %v", err)
 	}
 	missingEnv.names = nil
@@ -171,7 +171,7 @@ func TestRunCheckReportsMissingGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var out bytes.Buffer
 	err := Run(context.Background(), []string{"check"}, &out, validFactory())
-	if err == nil || !strings.Contains(out.String(), "FAIL  heinzel: not installed on this host (or not on PATH): git") {
+	if err == nil || !strings.Contains(out.String(), "FAIL  skrat: not installed on this host (or not on PATH): git") {
 		t.Fatalf("err %v, output:\n%s", err, out.String())
 	}
 }

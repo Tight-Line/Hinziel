@@ -1,4 +1,4 @@
-package heinzel
+package skrat
 
 import (
 	"bytes"
@@ -10,17 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/heinzel/agent"
-	"github.com/Tight-Line/heinzel/agent/agenttest"
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/deploy"
-	"github.com/Tight-Line/heinzel/deploy/deploytest"
-	"github.com/Tight-Line/heinzel/env"
-	"github.com/Tight-Line/heinzel/env/envtest"
-	"github.com/Tight-Line/heinzel/forge/forgetest"
-	"github.com/Tight-Line/heinzel/internal/gittest"
-	"github.com/Tight-Line/heinzel/tracker"
-	"github.com/Tight-Line/heinzel/tracker/trackertest"
+	"github.com/Tight-Line/skrat/agent"
+	"github.com/Tight-Line/skrat/agent/agenttest"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/deploy"
+	"github.com/Tight-Line/skrat/deploy/deploytest"
+	"github.com/Tight-Line/skrat/env"
+	"github.com/Tight-Line/skrat/env/envtest"
+	"github.com/Tight-Line/skrat/forge/forgetest"
+	"github.com/Tight-Line/skrat/internal/gittest"
+	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/skrat/tracker/trackertest"
 )
 
 func cliFactory(t *testing.T, agentFunc func(context.Context, *agent.Task) (*agent.Outcome, error)) Factory {
@@ -50,7 +50,7 @@ func runCLI(t *testing.T, f Factory, args ...string) (string, error) {
 }
 
 func TestCLIRunStatusLogs(t *testing.T) {
-	t.Setenv("HEINZEL_STATE_DIR", t.TempDir())
+	t.Setenv("SKRAT_STATE_DIR", t.TempDir())
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		dir := task.Repos[0].Path
 		os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello\n"), 0o644)
@@ -66,7 +66,7 @@ func TestCLIRunStatusLogs(t *testing.T) {
 		t.Fatalf("no run id in output:\n%s", out)
 	}
 	id := m[1]
-	for _, want := range []string{"succeeded", "change request (app): https://forge.test/", "web: https://hz-demo-d-1.preview.test"} {
+	for _, want := range []string{"succeeded", "change request (app): https://forge.test/", "web: https://sk-demo-d-1.preview.test"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("run output lacks %q:\n%s", want, out)
 		}
@@ -77,7 +77,7 @@ func TestCLIRunStatusLogs(t *testing.T) {
 		t.Errorf("status: %v\n%s", err, out)
 	}
 	out, err = runCLI(t, f, "status", id)
-	if err != nil || !strings.Contains(out, "heinzel/d-1-say-hello") || !strings.Contains(out, "finalize_branch") {
+	if err != nil || !strings.Contains(out, "skrat/d-1-say-hello") || !strings.Contains(out, "finalize_branch") {
 		t.Errorf("status %s: %v\n%s", id, err, out)
 	}
 	out, err = runCLI(t, f, "logs", id)
@@ -87,7 +87,7 @@ func TestCLIRunStatusLogs(t *testing.T) {
 }
 
 func TestCLINeedsInputAndResume(t *testing.T) {
-	t.Setenv("HEINZEL_STATE_DIR", t.TempDir())
+	t.Setenv("SKRAT_STATE_DIR", t.TempDir())
 	asked := false
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		if !asked {
@@ -121,7 +121,7 @@ func TestCLINeedsInputAndResume(t *testing.T) {
 }
 
 func TestCLIRejectsUnknownGate(t *testing.T) {
-	t.Setenv("HEINZEL_STATE_DIR", t.TempDir())
+	t.Setenv("SKRAT_STATE_DIR", t.TempDir())
 	_, err := runCLI(t, cliFactory(t, nil), "run", "D-1", "--gate", "deploy_everything")
 	if err == nil || !strings.Contains(err.Error(), "unknown step") {
 		t.Fatalf("got %v", err)
@@ -129,7 +129,7 @@ func TestCLIRejectsUnknownGate(t *testing.T) {
 }
 
 func TestCLIAgentCommandsNeedARun(t *testing.T) {
-	t.Setenv("HEINZEL_SOCKET", "")
+	t.Setenv("SKRAT_SOCKET", "")
 	_, err := runCLI(t, cliFactory(t, nil), "deploy")
 	if err == nil || !strings.Contains(err.Error(), "only works inside a run") {
 		t.Fatalf("got %v", err)
@@ -151,7 +151,7 @@ func (d *onceWaiting) Deploy(ctx context.Context, e *env.Environment, src *deplo
 }
 
 func TestCLIRunFollowsAWait(t *testing.T) {
-	t.Setenv("HEINZEL_STATE_DIR", t.TempDir())
+	t.Setenv("SKRAT_STATE_DIR", t.TempDir())
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		os.WriteFile(filepath.Join(task.Repos[0].Path, "hello.txt"), []byte("hello\n"), 0o644)
 		return nil, nil

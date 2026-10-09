@@ -19,9 +19,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/Tight-Line/heinzel/core"
-	"github.com/Tight-Line/heinzel/internal/apiclient"
-	"github.com/Tight-Line/heinzel/notify"
+	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/skrat/internal/apiclient"
+	"github.com/Tight-Line/skrat/notify"
 )
 
 // Notifier posts to Slack.

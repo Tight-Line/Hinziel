@@ -7,8 +7,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/Tight-Line/heinzel/run"
-	"github.com/Tight-Line/heinzel/tracker"
+	"github.com/Tight-Line/skrat/run"
+	"github.com/Tight-Line/skrat/tracker"
 )
 
 // Trigger starts runs for the factory it belongs to.
