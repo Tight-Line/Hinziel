@@ -4,7 +4,7 @@
 
 > *Heinzelmännchen: in the legend of Cologne, little house spirits who came
 > out at night and did the townsfolk's work while they slept. Hinzele is an
-> anagram of Heinzel.*
+> anagram of Heinzel, chosen only to give the project a name of its own.*
 
 Hinzele is one of those spirits for a software team: you hand it a ticket
 before you leave, and the work is done when you come back. Concretely, it is
