@@ -8,7 +8,7 @@ import (
 )
 
 // Checker is implemented by any component that can verify what it needs at
-// run time: credentials, access, and the tools it runs on the Skrat host.
+// run time: credentials, access, and the tools it runs on the Hinzele host.
 // Used by the `check` command, which reports every failure at once.
 type Checker interface {
 	Check(ctx context.Context) error

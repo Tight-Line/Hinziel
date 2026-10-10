@@ -3,7 +3,7 @@ package trackertest
 import (
 	"testing"
 
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 func TestFakeConforms(t *testing.T) {

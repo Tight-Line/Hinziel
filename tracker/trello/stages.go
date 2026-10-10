@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 // Stage says how a lifecycle stage shows on a card: moved to a list, a label

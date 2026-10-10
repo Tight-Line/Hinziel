@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/skrat/run"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 func TestAttachmentsAreDownloadedForTheAgent(t *testing.T) {

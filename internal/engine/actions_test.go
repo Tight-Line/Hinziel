@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/skrat/agent"
-	"github.com/Tight-Line/skrat/env"
-	"github.com/Tight-Line/skrat/notify"
-	"github.com/Tight-Line/skrat/run"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/agent"
+	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinzele/notify"
+	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 func googleAction(e *env.Environment) []env.Action {

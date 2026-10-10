@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/skrat/deploy"
-	"github.com/Tight-Line/skrat/env"
-	"github.com/Tight-Line/skrat/internal/testutil"
+	"github.com/Tight-Line/hinzele/deploy"
+	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinzele/internal/testutil"
 )
 
 // Deployed records one Deploy call.

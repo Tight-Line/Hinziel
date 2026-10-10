@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/internal/store"
-	"github.com/Tight-Line/skrat/internal/workspace"
-	"github.com/Tight-Line/skrat/notify"
-	"github.com/Tight-Line/skrat/run"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/internal/store"
+	"github.com/Tight-Line/hinzele/internal/workspace"
+	"github.com/Tight-Line/hinzele/notify"
+	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 // Step record statuses.
@@ -31,7 +31,7 @@ const (
 // Options tune an Engine. Zero values give the defaults.
 type Options struct {
 	Out         io.Writer        // progress lines; nil = discard (the run log always gets them)
-	Bin         string           // factory binary, passed to the agent as SKRAT_BIN; "" = this executable
+	Bin         string           // factory binary, passed to the agent as HINZELE_BIN; "" = this executable
 	MaxAttempts int              // attempts per step for core.RetryableError; 0 = 3
 	RetryDelay  time.Duration    // first retry delay, doubled each attempt; 0 = 5s
 	Now         func() time.Time // nil = time.Now

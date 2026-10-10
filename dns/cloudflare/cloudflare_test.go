@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/skrat/dns"
-	"github.com/Tight-Line/skrat/dns/dnstest"
+	"github.com/Tight-Line/hinzele/dns"
+	"github.com/Tight-Line/hinzele/dns/dnstest"
 )
 
 // fakeCloudflare serves zones and DNS records for one zone, example.com.
@@ -103,7 +103,7 @@ func TestConformance(t *testing.T) {
 func TestEnsure(t *testing.T) {
 	p, f := newTestProvider(t, Options{Proxied: true})
 	ctx := context.Background()
-	name := "sk-abc-api.example.com"
+	name := "hz-abc-api.example.com"
 
 	if err := p.Ensure(ctx, dns.Record{Name: name, Type: "A", Value: "203.0.113.10"}); err != nil {
 		t.Fatal(err)
@@ -129,11 +129,11 @@ func TestEnsure(t *testing.T) {
 }
 
 func TestAllowedNamesProtectOtherRecords(t *testing.T) {
-	p, f := newTestProvider(t, Options{AllowedNames: "sk-*"})
+	p, f := newTestProvider(t, Options{AllowedNames: "hz-*"})
 	ctx := context.Background()
 	f.records["prod"] = record{ID: "prod", Type: "A", Name: "api.example.com", Content: "198.51.100.1"}
 
-	for _, name := range []string{"api.example.com", "example.com", "sk-x.api.example.com.evil.test", "sk-x.other.test"} {
+	for _, name := range []string{"api.example.com", "example.com", "hz-x.api.example.com.evil.test", "hz-x.other.test"} {
 		if err := p.Ensure(ctx, dns.Record{Name: name, Type: "A", Value: "203.0.113.10"}); err == nil {
 			t.Errorf("Ensure(%s) must be refused", name)
 		}
@@ -145,13 +145,13 @@ func TestAllowedNamesProtectOtherRecords(t *testing.T) {
 		t.Error("the production record changed")
 	}
 	// DNS names are case-insensitive and may end in a dot.
-	if err := p.Ensure(ctx, dns.Record{Name: "SK-x.Example.com.", Type: "A", Value: "203.0.113.10"}); err != nil {
+	if err := p.Ensure(ctx, dns.Record{Name: "HZ-x.Example.com.", Type: "A", Value: "203.0.113.10"}); err != nil {
 		t.Errorf("a matching name in another case must pass: %v", err)
 	}
 }
 
 func TestCheck(t *testing.T) {
-	p, _ := newTestProvider(t, Options{AllowedNames: "sk-*"})
+	p, _ := newTestProvider(t, Options{AllowedNames: "hz-*"})
 	if err := p.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -171,8 +171,8 @@ func TestCheck(t *testing.T) {
 
 // TestIntegration creates, updates and deletes a record "skct-<random>.<zone>".
 func TestIntegration(t *testing.T) {
-	if os.Getenv("SKRAT_IT_CLOUDFLARE") == "" {
-		t.Skip("set SKRAT_IT_CLOUDFLARE=1, CLOUDFLARE_DNS_TOKEN and CLOUDFLARE_TEST_ZONE")
+	if os.Getenv("HINZELE_IT_CLOUDFLARE") == "" {
+		t.Skip("set HINZELE_IT_CLOUDFLARE=1, CLOUDFLARE_DNS_TOKEN and CLOUDFLARE_TEST_ZONE")
 	}
 	zone := os.Getenv("CLOUDFLARE_TEST_ZONE")
 	p := New(Options{Token: os.Getenv("CLOUDFLARE_DNS_TOKEN"), Zone: zone, AllowedNames: "skct-*"})

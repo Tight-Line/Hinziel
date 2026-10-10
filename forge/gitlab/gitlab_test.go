@@ -12,10 +12,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/forge"
-	"github.com/Tight-Line/skrat/forge/forgetest"
-	"github.com/Tight-Line/skrat/internal/gittest"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/forge"
+	"github.com/Tight-Line/hinzele/forge/forgetest"
+	"github.com/Tight-Line/hinzele/internal/gittest"
 )
 
 // fakeGitLab serves the slice of the GitLab API this package uses, for one
@@ -121,7 +121,7 @@ func TestConformance(t *testing.T) {
 }
 
 func TestOpenChangeRequest(t *testing.T) {
-	fg, fake := newTestForge(t, Options{Labels: []string{"skrat"}})
+	fg, fake := newTestForge(t, Options{Labels: []string{"hinzele"}})
 	ctx := context.Background()
 	if err := gittest.Git(fake.repo, "branch", "feature", "main"); err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestOpenChangeRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	mr := fake.mrs[0]
-	if mr["title"] != "Draft: T-1: Export" || mr["labels"] != "skrat,preview" || mr["description"] != "Implements T-1." {
+	if mr["title"] != "Draft: T-1: Export" || mr["labels"] != "hinzele,preview" || mr["description"] != "Implements T-1." {
 		t.Errorf("merge request %+v", mr)
 	}
 	if ids, _ := json.Marshal(mr["reviewer_ids"]); string(ids) != "[42]" {
@@ -194,8 +194,8 @@ func TestCheck(t *testing.T) {
 // TestIntegration runs the conformance suite against a real GitLab project. It
 // pushes a branch and opens a draft merge request, so use a sandbox project.
 func TestIntegration(t *testing.T) {
-	if os.Getenv("SKRAT_IT_GITLAB") == "" {
-		t.Skip("set SKRAT_IT_GITLAB=1, GITLAB_TOKEN and GITLAB_TEST_PROJECT (and GITLAB_URL for self-managed)")
+	if os.Getenv("HINZELE_IT_GITLAB") == "" {
+		t.Skip("set HINZELE_IT_GITLAB=1, GITLAB_TOKEN and GITLAB_TEST_PROJECT (and GITLAB_URL for self-managed)")
 	}
 	forgetest.Run(t, New(Options{Project: os.Getenv("GITLAB_TEST_PROJECT"), Token: os.Getenv("GITLAB_TOKEN"), BaseURL: os.Getenv("GITLAB_URL")}))
 }

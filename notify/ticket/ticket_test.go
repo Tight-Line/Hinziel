@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/notify"
-	"github.com/Tight-Line/skrat/notify/notifytest"
-	"github.com/Tight-Line/skrat/run"
-	"github.com/Tight-Line/skrat/tracker"
-	"github.com/Tight-Line/skrat/tracker/trackertest"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/notify"
+	"github.com/Tight-Line/hinzele/notify/notifytest"
+	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinzele/tracker/trackertest"
 )
 
 func TestConformance(t *testing.T) {
-	tr := trackertest.NewFake(tracker.Ticket{Key: "SK-1", Title: "x"})
+	tr := trackertest.NewFake(tracker.Ticket{Key: "HZ-1", Title: "x"})
 	notifytest.Run(t, New(tr))
 }
 

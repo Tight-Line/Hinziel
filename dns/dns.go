@@ -18,7 +18,7 @@ type Provider interface {
 }
 
 type Record struct {
-	Name  string `json:"name"`  // FQDN, e.g. "sk-abc123-api.example.com"
+	Name  string `json:"name"`  // FQDN, e.g. "hz-abc123-api.example.com"
 	Type  string `json:"type"`  // "A", "AAAA", "CNAME"
 	Value string `json:"value"` // IP or target hostname
 }

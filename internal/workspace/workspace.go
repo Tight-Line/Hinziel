@@ -13,13 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Tight-Line/skrat/forge"
+	"github.com/Tight-Line/hinzele/forge"
 )
 
 // Identity used for commits made by the engine (and by default the agent).
 const (
-	CommitName  = "Skrat"
-	CommitEmail = "skrat@localhost"
+	CommitName  = "Hinzele"
+	CommitEmail = "hinzele@localhost"
 )
 
 // Repo is a checkout on disk.

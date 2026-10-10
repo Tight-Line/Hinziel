@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Tight-Line/skrat/env"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 // Deployer puts Source onto Environment. Redeploying the same commit must be safe.
@@ -18,13 +18,13 @@ type Deployer interface {
 // Retriever is optional: the inverse of Deploy. It brings changes made directly
 // in the environment (e.g. clicks in a Salesforce scratch org) into the working
 // tree as files, so they are committed and reviewed like code. It is called by
-// `skrat retrieve`, by `skrat deploy` as a guard (deploy is refused if
+// `hinzele retrieve`, by `hinzele deploy` as a guard (deploy is refused if
 // retrieve leaves uncommitted changes), and by the retrieve step after implement.
 type Retriever interface {
 	Retrieve(ctx context.Context, e *env.Environment, workdir string) error
 }
 
-// Source is always a pushed commit: Skrat never deploys uncommitted or
+// Source is always a pushed commit: Hinzele never deploys uncommitted or
 // unpushed work, so an environment only ever runs something in the forge.
 // Each deployer is bound to one of the project's repos in config.
 type Source struct {

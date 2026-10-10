@@ -1,3 +1,3 @@
-module github.com/Tight-Line/skrat
+module github.com/Tight-Line/hinzele
 
 go 1.25.8

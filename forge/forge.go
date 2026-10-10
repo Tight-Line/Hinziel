@@ -8,7 +8,7 @@ package forge
 import (
 	"context"
 
-	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/hinzele/core"
 )
 
 // Forge hosts the code: clone/push credentials and merge/pull requests.

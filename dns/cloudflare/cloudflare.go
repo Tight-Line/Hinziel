@@ -22,9 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/dns"
-	"github.com/Tight-Line/skrat/internal/apiclient"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/dns"
+	"github.com/Tight-Line/hinzele/internal/apiclient"
 )
 
 // Options configure Cloudflare DNS.
@@ -36,7 +36,7 @@ type Options struct {
 	Proxied bool
 	TTL     int // seconds; 0 = automatic
 	// AllowedNames, if set, is a glob (path.Match syntax) that the part of a
-	// record name before the zone must match, e.g. "sk-*". Records with other
+	// record name before the zone must match, e.g. "hz-*". Records with other
 	// names are never created, changed or deleted.
 	AllowedNames string
 	// BaseURL of the API; "" = https://api.cloudflare.com/client/v4.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/skrat/core"
+	"github.com/Tight-Line/hinzele/core"
 )
 
 func TestDo(t *testing.T) {

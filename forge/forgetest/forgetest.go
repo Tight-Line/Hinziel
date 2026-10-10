@@ -12,11 +12,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/forge"
-	"github.com/Tight-Line/skrat/internal/gittest"
-	"github.com/Tight-Line/skrat/internal/testutil"
-	"github.com/Tight-Line/skrat/internal/workspace"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/forge"
+	"github.com/Tight-Line/hinzele/internal/gittest"
+	"github.com/Tight-Line/hinzele/internal/testutil"
+	"github.com/Tight-Line/hinzele/internal/workspace"
 )
 
 // Fake is a forge.Forge whose git remote is a local bare repository. Change
@@ -143,14 +143,14 @@ func Run(t *testing.T, f forge.Forge) {
 	if err != nil {
 		t.Fatalf("cloning with Remote's credentials: %v", err)
 	}
-	branch := "skrat-conformance-" + testutil.Suffix()
+	branch := "hinzele-conformance-" + testutil.Suffix()
 	if err := repo.CheckoutBranch(ctx, branch, "origin/"+remote.DefaultBranch); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo.Dir, branch+".txt"), []byte("conformance\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.CommitAll(ctx, "Skrat conformance test"); err != nil {
+	if _, err := repo.CommitAll(ctx, "Hinzele conformance test"); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Push(ctx, branch); err != nil {
@@ -161,7 +161,7 @@ func Run(t *testing.T, f forge.Forge) {
 	in := forge.ChangeRequestInput{
 		SourceBranch: branch,
 		TargetBranch: remote.DefaultBranch,
-		Title:        "Skrat conformance test",
+		Title:        "Hinzele conformance test",
 		Description:  core.Message{Body: "Opened by **forgetest**. Safe to close."},
 		Draft:        true,
 	}

@@ -1,4 +1,4 @@
-package skrat
+package hinzele
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/skrat/agent"
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/deploy"
-	"github.com/Tight-Line/skrat/dns"
-	"github.com/Tight-Line/skrat/env"
-	"github.com/Tight-Line/skrat/forge"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/agent"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/deploy"
+	"github.com/Tight-Line/hinzele/dns"
+	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinzele/forge"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 type fakeTracker struct{ checkErr error }
@@ -152,17 +152,17 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 
 func TestEnvRecordsMissingVariables(t *testing.T) {
 	resetEnv()
-	t.Setenv("SKRAT_TEST_PRESENT", "x")
-	Env("SKRAT_TEST_PRESENT")
-	Env("SKRAT_TEST_MISSING")
-	Env("SKRAT_TEST_MISSING")
+	t.Setenv("HINZELE_TEST_PRESENT", "x")
+	Env("HINZELE_TEST_PRESENT")
+	Env("HINZELE_TEST_MISSING")
+	Env("HINZELE_TEST_MISSING")
 
 	got := missingEnvNames()
-	if len(got) != 1 || got[0] != "SKRAT_TEST_MISSING" {
+	if len(got) != 1 || got[0] != "HINZELE_TEST_MISSING" {
 		t.Fatalf("got %v", got)
 	}
 	err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory())
-	if err == nil || !strings.Contains(err.Error(), "SKRAT_TEST_MISSING") {
+	if err == nil || !strings.Contains(err.Error(), "HINZELE_TEST_MISSING") {
 		t.Fatalf("got %v", err)
 	}
 	resetEnv()
@@ -177,14 +177,14 @@ func TestEnvReadAfterStartupIsReportedAsLate(t *testing.T) {
 	if err := lateEnvError(); err != nil {
 		t.Fatalf("nothing read late yet: %v", err)
 	}
-	t.Setenv("SKRAT_TEST_PRESENT", "x")
-	Env("SKRAT_TEST_PRESENT") // read late but set: fine
-	Env("SKRAT_TEST_LATE")
+	t.Setenv("HINZELE_TEST_PRESENT", "x")
+	Env("HINZELE_TEST_PRESENT") // read late but set: fine
+	Env("HINZELE_TEST_LATE")
 	if got := missingEnvNames(); len(got) != 0 {
 		t.Errorf("a late read must not count as missing at startup: %v", got)
 	}
 	err := lateEnvError()
-	if err == nil || !strings.Contains(err.Error(), "missing environment variables: SKRAT_TEST_LATE.") {
+	if err == nil || !strings.Contains(err.Error(), "missing environment variables: HINZELE_TEST_LATE.") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -198,7 +198,7 @@ func resetEnv() {
 func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
 	resetEnv()
 	defer resetEnv()
-	Env("SKRAT_TEST_MISSING")
+	Env("HINZELE_TEST_MISSING")
 	f := validFactory()
 	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
 	var out bytes.Buffer
@@ -207,7 +207,7 @@ func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
 		t.Fatal("expected check to fail")
 	}
 	for _, want := range []string{
-		"FAIL  skrat: missing environment variables: SKRAT_TEST_MISSING",
+		"FAIL  hinzele: missing environment variables: HINZELE_TEST_MISSING",
 		"FAIL  blanktracker: tracker: bad token",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -220,7 +220,7 @@ func TestRunCheckReportsMissingGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var out bytes.Buffer
 	err := Run(context.Background(), []string{"check"}, &out, validFactory())
-	if err == nil || !strings.Contains(out.String(), "FAIL  skrat: not installed on this host (or not on PATH): git") {
+	if err == nil || !strings.Contains(out.String(), "FAIL  hinzele: not installed on this host (or not on PATH): git") {
 		t.Fatalf("err %v, output:\n%s", err, out.String())
 	}
 }

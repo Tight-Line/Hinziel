@@ -1,4 +1,4 @@
-package skrat
+package hinzele
 
 import (
 	"fmt"
@@ -62,7 +62,7 @@ func lateEnvError() error {
 	if len(missingEnv.late) == 0 {
 		return nil
 	}
-	return fmt.Errorf("missing environment variables: %s. They are read with skrat.Env inside a func "+
+	return fmt.Errorf("missing environment variables: %s. They are read with hinzele.Env inside a func "+
 		"of the factory, so they weren't checked at startup; set them and resume, and read them while "+
 		"building the Factory so Main checks them", strings.Join(missingEnv.late, ", "))
 }

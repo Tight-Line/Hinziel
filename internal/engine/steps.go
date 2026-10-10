@@ -10,15 +10,15 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Tight-Line/skrat/agent"
-	"github.com/Tight-Line/skrat/core"
-	"github.com/Tight-Line/skrat/deploy"
-	"github.com/Tight-Line/skrat/dns"
-	"github.com/Tight-Line/skrat/env"
-	"github.com/Tight-Line/skrat/forge"
-	"github.com/Tight-Line/skrat/internal/names"
-	"github.com/Tight-Line/skrat/internal/workspace"
-	"github.com/Tight-Line/skrat/tracker"
+	"github.com/Tight-Line/hinzele/agent"
+	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinzele/deploy"
+	"github.com/Tight-Line/hinzele/dns"
+	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinzele/forge"
+	"github.com/Tight-Line/hinzele/internal/names"
+	"github.com/Tight-Line/hinzele/internal/workspace"
+	"github.com/Tight-Line/hinzele/tracker"
 )
 
 func (x *execution) runStep(ctx context.Context, name string) error {
@@ -195,9 +195,9 @@ func (x *execution) provisionEnvironment(ctx context.Context) error {
 		name = f(x.r.Ticket)
 	}
 	spec := env.Spec{Name: name, Labels: map[string]string{
-		"skrat-factory": x.p.Name,
-		"skrat-ticket":  x.r.Ticket.Key,
-		"skrat-run":     string(x.r.ID),
+		"hinzele-factory": x.p.Name,
+		"hinzele-ticket":  x.r.Ticket.Key,
+		"hinzele-run":     string(x.r.ID),
 	}}
 	e, err := x.p.Provisioner.Ensure(ctx, spec)
 	if err != nil {
@@ -320,9 +320,9 @@ func (x *execution) implement(ctx context.Context) error {
 		Environment: x.r.Environment,
 		Log:         x.log,
 		Env: append(os.Environ(),
-			"SKRAT_BIN="+x.e.opts.Bin,
-			"SKRAT_RUN_ID="+string(x.r.ID),
-			"SKRAT_SOCKET="+srv.path,
+			"HINZELE_BIN="+x.e.opts.Bin,
+			"HINZELE_RUN_ID="+string(x.r.ID),
+			"HINZELE_SOCKET="+srv.path,
 		),
 	}
 	for _, cfg := range x.p.Repos {

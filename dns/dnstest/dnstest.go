@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/skrat/dns"
-	"github.com/Tight-Line/skrat/internal/testutil"
+	"github.com/Tight-Line/hinzele/dns"
+	"github.com/Tight-Line/hinzele/internal/testutil"
 )
 
 // Fake is an in-memory dns.Provider.
