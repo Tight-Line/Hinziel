@@ -27,13 +27,13 @@ func Slug(s string, max int) string {
 	return out
 }
 
-// Branch is the default run branch name: hinzele/<key>-<title>.
+// Branch is the default run branch name: hinziel/<key>-<title>.
 func Branch(key, title string) string {
 	name := Slug(key, 0)
 	if t := Slug(title, 30); t != "" {
 		name += "-" + t
 	}
-	return "hinzele/" + name
+	return "hinziel/" + name
 }
 
 // Env is the default environment name: hz-<factory>-<key>, a DNS label of at

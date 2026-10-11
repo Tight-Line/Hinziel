@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/forge"
+	"github.com/Tight-Line/hinziel/forge"
 )
 
 func TestFakeConforms(t *testing.T) {

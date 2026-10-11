@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/core/remote/remotetest"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinziel/core/remote/remotetest"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/env"
 )
 
 // setup returns an environment whose host is this machine (through a local
@@ -35,7 +35,7 @@ func setup(t *testing.T) (*env.Environment, *deploy.Source, string) {
 		Hosts:     []env.Host{{Name: "main", Address: "203.0.113.10", SSH: &env.SSHAccess{User: "root"}}},
 		Endpoints: map[string]string{"api": "https://hz-abc-api.example.com", "web": "https://hz-abc.example.dev"},
 	}
-	return e, &deploy.Source{Repo: "app", Workdir: src, Branch: "hinzele/abc", Commit: "abc123"}, log
+	return e, &deploy.Source{Repo: "app", Workdir: src, Branch: "hinziel/abc", Commit: "abc123"}, log
 }
 
 func newTestDeployer(t *testing.T, opts Options) (*Deployer, string) {
@@ -90,12 +90,12 @@ func TestDeploy(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(srcDir, ".git")); !os.IsNotExist(err) {
 		t.Error(".git must not be uploaded")
 	}
-	wantEnv := "APP_ENV=preview\nONSOCIAL_DISABLED=true\n\n# Set by Hinzele for environment hz-abc\n" +
+	wantEnv := "APP_ENV=preview\nONSOCIAL_DISABLED=true\n\n# Set by Hinziel for environment hz-abc\n" +
 		"APP_NAME='Blank Tracker'\nAPP_URL=https://hz-abc-api.example.com\nMULTI=\"a'b\"\nSECRET='p$ss\"word'\n"
 	if got := readFile(t, filepath.Join(srcDir, ".env")); got != wantEnv {
 		t.Errorf(".env\n%s\nwant\n%s", got, wantEnv)
 	}
-	gen := filepath.Join(base, "hinzele")
+	gen := filepath.Join(base, "hinziel")
 	if got := readFile(t, filepath.Join(gen, "override.yaml")); !strings.Contains(got, "profiles: [disabled]") {
 		t.Errorf("override %q", got)
 	}

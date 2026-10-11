@@ -10,8 +10,8 @@ package ticket
 import (
 	"context"
 
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 // Notifier comments on tickets.

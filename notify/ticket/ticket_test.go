@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/notify/notifytest"
-	"github.com/Tight-Line/hinzele/run"
-	"github.com/Tight-Line/hinzele/tracker"
-	"github.com/Tight-Line/hinzele/tracker/trackertest"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/notify/notifytest"
+	"github.com/Tight-Line/hinziel/run"
+	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/tracker/trackertest"
 )
 
 func TestConformance(t *testing.T) {

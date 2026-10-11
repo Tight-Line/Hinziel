@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
 )
 
 func TestFakesConform(t *testing.T) {
 	e := &env.Environment{Name: "hz-test"}
-	src := &deploy.Source{Repo: "app", Workdir: t.TempDir(), Branch: "hinzele/t-1", Commit: "abc123"}
+	src := &deploy.Source{Repo: "app", Workdir: t.TempDir(), Branch: "hinziel/t-1", Commit: "abc123"}
 	t.Run("Fake", func(t *testing.T) { Run(t, &Fake{}, e, src) })
 	t.Run("FakeRetriever", func(t *testing.T) { Run(t, &FakeRetriever{}, e, src) })
 }

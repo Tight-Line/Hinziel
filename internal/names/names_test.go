@@ -24,10 +24,10 @@ func TestSlug(t *testing.T) {
 }
 
 func TestBranch(t *testing.T) {
-	if got := Branch("PROJ-7", "Add CSV export to the reports page"); got != "hinzele/proj-7-add-csv-export-to-the-reports" {
+	if got := Branch("PROJ-7", "Add CSV export to the reports page"); got != "hinziel/proj-7-add-csv-export-to-the-reports" {
 		t.Errorf("got %q", got)
 	}
-	if got := Branch("aB3dE9", ""); got != "hinzele/ab3de9" {
+	if got := Branch("aB3dE9", ""); got != "hinziel/ab3de9" {
 		t.Errorf("got %q", got)
 	}
 }

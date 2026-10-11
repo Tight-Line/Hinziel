@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/hinzele/run"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/run"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 func newRun(s *FS, at time.Time, factory, ticket string, status run.Status) *run.Run {

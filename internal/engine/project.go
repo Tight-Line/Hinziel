@@ -6,17 +6,17 @@ package engine
 import (
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/forge"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
-// Project is a validated factory, as the engine sees it. The root hinzele
-// package converts a hinzele.Factory into a Project.
+// Project is a validated factory, as the engine sees it. The root hinziel
+// package converts a hinziel.Factory into a Project.
 type Project struct {
 	Name        string
 	Tracker     tracker.Tracker

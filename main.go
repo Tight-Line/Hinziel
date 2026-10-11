@@ -1,4 +1,4 @@
-package hinzele
+package hinziel
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/internal/engine"
-	"github.com/Tight-Line/hinzele/internal/store"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/internal/engine"
+	"github.com/Tight-Line/hinziel/internal/store"
 )
 
 // Main is the entry point of a factory binary. It validates the factories,
@@ -103,20 +103,20 @@ func missingEnvError() error {
 	return nil
 }
 
-// stateDir is where runs are kept: $HINZELE_STATE_DIR, else
-// $XDG_STATE_HOME/hinzele, else ~/.local/state/hinzele.
+// stateDir is where runs are kept: $HINZIEL_STATE_DIR, else
+// $XDG_STATE_HOME/hinziel, else ~/.local/state/hinziel.
 func stateDir() (string, error) {
-	if d := os.Getenv("HINZELE_STATE_DIR"); d != "" {
+	if d := os.Getenv("HINZIEL_STATE_DIR"); d != "" {
 		return d, nil
 	}
 	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return filepath.Join(d, "hinzele"), nil
+		return filepath.Join(d, "hinziel"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "hinzele"), nil
+	return filepath.Join(home, ".local", "state", "hinziel"), nil
 }
 
 func newEngine(out io.Writer, factories []Factory) (*engine.Engine, error) {
@@ -151,7 +151,7 @@ Commands:
   daemon                         run triggers and execute runs continuously (not yet)
   env up | list | destroy        manage environments (not yet)
 
-Used by the agent inside a run (found via $HINZELE_SOCKET):
+Used by the agent inside a run (found via $HINZIEL_SOCKET):
   deploy                         deploy every repo's pushed HEAD to the environment
   retrieve                       pull environment changes into the working tree
 `, bin)
@@ -164,14 +164,14 @@ func check(ctx context.Context, out io.Writer, factories []Factory) error {
 	failed := 0
 	if err := missingEnvError(); err != nil {
 		failed++
-		fmt.Fprintf(out, "FAIL  hinzele: %v\n", err)
+		fmt.Fprintf(out, "FAIL  hinziel: %v\n", err)
 	}
 	// The engine clones, branches and pushes with git.
 	if err := core.NeedTools("git"); err != nil {
 		failed++
-		fmt.Fprintf(out, "FAIL  hinzele: %v\n", err)
+		fmt.Fprintf(out, "FAIL  hinziel: %v\n", err)
 	} else {
-		fmt.Fprintln(out, "ok    hinzele: git")
+		fmt.Fprintln(out, "ok    hinziel: git")
 	}
 	for _, f := range factories {
 		for _, c := range components(&f) {

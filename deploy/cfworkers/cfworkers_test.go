@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/env"
 )
 
 // fakeAPI serves the Workers subdomain endpoints for account "acct".
@@ -99,7 +99,7 @@ func setup(t *testing.T, aliasInOutput bool) (*Deployer, *fakeAPI, *env.Environm
 		return http.DefaultTransport.RoundTrip(r)
 	})}
 	e := &env.Environment{Name: "hz-abc", Endpoints: map[string]string{"api": "https://hz-abc-api.example.com"}}
-	return d, api, e, &deploy.Source{Repo: "app", Workdir: src, Branch: "hinzele/abc", Commit: "0123456789abcdef"}, log
+	return d, api, e, &deploy.Source{Repo: "app", Workdir: src, Branch: "hinziel/abc", Commit: "0123456789abcdef"}, log
 }
 
 type roundTripper func(*http.Request) (*http.Response, error)
@@ -131,7 +131,7 @@ func TestDeploy(t *testing.T) {
 	if want := src.Workdir + "|acct|cf-token|deploy --name previews"; calls[0] != want {
 		t.Errorf("first use must create the worker:\n%s\nwant\n%s", calls[0], want)
 	}
-	if want := "versions upload --name previews --preview-alias hz-abc --message app 0123456789 (hinzele/abc)"; !strings.HasSuffix(calls[1], want) {
+	if want := "versions upload --name previews --preview-alias hz-abc --message app 0123456789 (hinziel/abc)"; !strings.HasSuffix(calls[1], want) {
 		t.Errorf("upload:\n%s", calls[1])
 	}
 	if !api.workers["previews"]["previews_enabled"] || api.enabling != 1 {

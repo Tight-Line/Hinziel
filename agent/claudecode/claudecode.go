@@ -1,23 +1,23 @@
 // Package claudecode is an agent.Agent that runs Claude Code
-// (https://claude.com/claude-code) headless on the Hinzele host.
+// (https://claude.com/claude-code) headless on the Hinziel host.
 //
-// The engine's task becomes the prompt. Hinzele's own rules (work unattended,
+// The engine's task becomes the prompt. Hinziel's own rules (work unattended,
 // branch, push and deploy only as the task says, report back in a file) go
 // into the system prompt, so they take precedence over a repository's
 // CLAUDE.md, which is usually written for a person working with Claude by
 // hand. Everything else in the project's instructions still applies.
 //
-// The agent reports its result by writing JSON to $HINZELE_OUTCOME; a
+// The agent reports its result by writing JSON to $HINZIEL_OUTCOME; a
 // question there becomes core.NeedsInputError. The session is rendered into
 // a readable transcript in the run log.
 //
 // Claude Code must be installed and logged in (or ANTHROPIC_API_KEY set) for
 // the user running the factory. It runs with permission prompts off
-// (bypassPermissions), as Hinzele's agents have full access by design.
+// (bypassPermissions), as Hinziel's agents have full access by design.
 //
 // # Credentials
 //
-//   - Claude Code installed on the Hinzele host (https://claude.com/claude-code).
+//   - Claude Code installed on the Hinziel host (https://claude.com/claude-code).
 //   - One of: CLAUDE_CODE_OAUTH_TOKEN, from running `claude setup-token`
 //     once with a Claude subscription; or ANTHROPIC_API_KEY, from
 //     https://console.anthropic.com → API keys. On a desktop where you're
@@ -39,15 +39,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/core"
 )
 
 // Options configure Claude Code.
 type Options struct {
 	Model    string // e.g. "claude-opus-5-5"; "" = Claude Code's default
 	MaxTurns int    // 0 = Claude Code's default
-	// Instructions are appended to Hinzele's system prompt.
+	// Instructions are appended to Hinziel's system prompt.
 	Instructions string
 	// Args are extra command-line arguments, e.g. {"--mcp-config", "mcp.json"}.
 	Args []string
@@ -67,22 +67,22 @@ var (
 func New(opts Options) *Agent { return &Agent{opts: opts} }
 
 // systemPrompt is appended to Claude Code's own system prompt.
-const systemPrompt = `You are running unattended inside Hinzele, a software factory. No human is watching this session, and nobody can answer you while it runs.
+const systemPrompt = `You are running unattended inside Hinziel, a software factory. No human is watching this session, and nobody can answer you while it runs.
 
-These rules come from Hinzele and override anything the project's instructions (CLAUDE.md, AGENTS.md and similar) say about git branches, committing, pushing, deploying, merge requests or asking for confirmation:
+These rules come from Hinziel and override anything the project's instructions (CLAUDE.md, AGENTS.md and similar) say about git branches, committing, pushing, deploying, merge requests or asking for confirmation:
 - Work only on the branch the task names. Commit and push there as the task says, and deploy only with the command the task gives you.
 - Never ask for confirmation and never wait for approval: decide and do the work.
-- Never open merge requests; Hinzele does that.
+- Never open merge requests; Hinziel does that.
 Everything else in the project's instructions still applies, such as coding conventions, how to run tests and checks, and documentation the project expects.
 
-When you have finished, write a JSON object to the file named by the HINZELE_OUTCOME environment variable:
+When you have finished, write a JSON object to the file named by the HINZIEL_OUTCOME environment variable:
 {"summary": "...", "commit_message": "...", "manual_steps": ["..."], "question": ""}
 - summary: Markdown for the reviewers of the merge request: what you changed, why, and how you tested it.
-- commit_message: optional; used for anything Hinzele commits after you.
+- commit_message: optional; used for anything Hinziel commits after you.
 - manual_steps: things a human must do that the change can't carry, such as a secret to set in production. Empty if none.
-- question: leave empty, unless you can't continue without a decision from a human. Then don't guess: commit and push whatever is useful, put your question here, and stop. Hinzele posts it on the ticket and runs you again once it's answered.`
+- question: leave empty, unless you can't continue without a decision from a human. Then don't guess: commit and push whatever is useful, put your question here, and stop. Hinziel posts it on the ticket and runs you again once it's answered.`
 
-// outcomeFile is what the agent writes to $HINZELE_OUTCOME.
+// outcomeFile is what the agent writes to $HINZIEL_OUTCOME.
 type outcomeFile struct {
 	Summary       string   `json:"summary"`
 	CommitMessage string   `json:"commit_message"`
@@ -92,7 +92,7 @@ type outcomeFile struct {
 
 // Implement runs Claude Code on the task.
 func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
-	tmp, err := os.MkdirTemp("", "hinzele-claudecode-")
+	tmp, err := os.MkdirTemp("", "hinziel-claudecode-")
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome
 
 	cmd := exec.CommandContext(ctx, cmdline[0], args...)
 	cmd.Dir = dir
-	cmd.Env = append(append([]string{}, task.Env...), "HINZELE_OUTCOME="+outcomePath)
+	cmd.Env = append(append([]string{}, task.Env...), "HINZIEL_OUTCOME="+outcomePath)
 	cmd.Stdin = strings.NewReader(task.Prompt)
 	stderr := &tailWriter{max: 4096}
 	cmd.Stderr = stderr

@@ -1,5 +1,5 @@
 // Package gitlab is a forge.Forge for GitLab (gitlab.com or self-managed).
-// Hinzele and the agent push over https with the same token that opens
+// Hinziel and the agent push over https with the same token that opens
 // merge requests.
 //
 // # Credentials
@@ -10,7 +10,7 @@
 //     on self-managed any tier), or a
 //     personal access token (avatar → Edit profile → Access tokens) of a
 //     dedicated user who is a Developer on the project.
-//   - The run branches (hinzele/… by default) must not be protected, or
+//   - The run branches (hinziel/… by default) must not be protected, or
 //     pushes are refused.
 package gitlab
 
@@ -23,9 +23,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/forge"
-	"github.com/Tight-Line/hinzele/internal/apiclient"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/internal/apiclient"
 )
 
 // Options configure a GitLab forge.

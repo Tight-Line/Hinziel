@@ -10,21 +10,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/agent/agenttest"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/dns/dnstest"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/env/envtest"
-	"github.com/Tight-Line/hinzele/forge/forgetest"
-	"github.com/Tight-Line/hinzele/internal/gittest"
-	"github.com/Tight-Line/hinzele/internal/store"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/notify/notifytest"
-	"github.com/Tight-Line/hinzele/run"
-	"github.com/Tight-Line/hinzele/tracker"
-	"github.com/Tight-Line/hinzele/tracker/trackertest"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/agent/agenttest"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/dns/dnstest"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/env/envtest"
+	"github.com/Tight-Line/hinziel/forge/forgetest"
+	"github.com/Tight-Line/hinziel/internal/gittest"
+	"github.com/Tight-Line/hinziel/internal/store"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/notify/notifytest"
+	"github.com/Tight-Line/hinziel/run"
+	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/tracker/trackertest"
 )
 
 // fixture is a project built entirely from fakes: two repos ("api", changed
@@ -169,9 +169,9 @@ func envVar(task *agent.Task, name string) string {
 	return ""
 }
 
-// agentDeploy is the agent running `$HINZELE_BIN deploy`.
+// agentDeploy is the agent running `$HINZIEL_BIN deploy`.
 func agentDeploy(ctx context.Context, task *agent.Task) (string, error) {
-	return Call(ctx, envVar(task, "HINZELE_SOCKET"), "deploy")
+	return Call(ctx, envVar(task, "HINZIEL_SOCKET"), "deploy")
 }
 
 func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
@@ -209,7 +209,7 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 	}
 
 	// Branch and change requests: only the changed repo gets one.
-	if r.Branch != "hinzele/t-1-add-csv-export" {
+	if r.Branch != "hinziel/t-1-add-csv-export" {
 		t.Errorf("branch %q", r.Branch)
 	}
 	if crs := f.api.ChangeRequests(); len(crs) != 1 || crs[r.Branch].TargetBranch != "main" {
@@ -278,10 +278,10 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 		t.Fatalf("agent ran %d times", len(tasks))
 	}
 	task := tasks[0]
-	if len(task.Repos) != 2 || task.Environment == nil || envVar(&task, "HINZELE_BIN") != "/usr/local/bin/shop-factory" {
+	if len(task.Repos) != 2 || task.Environment == nil || envVar(&task, "HINZIEL_BIN") != "/usr/local/bin/shop-factory" {
 		t.Errorf("task: %+v", task)
 	}
-	for _, want := range []string{"T-1: Add CSV export", "Users want CSV.", r.Branch, "$HINZELE_BIN deploy", wantURL} {
+	for _, want := range []string{"T-1: Add CSV export", "Users want CSV.", r.Branch, "$HINZIEL_BIN deploy", wantURL} {
 		if !strings.Contains(task.Prompt, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, task.Prompt)
 		}
@@ -452,7 +452,7 @@ func TestDeployRefusesUnretrievedEnvironmentChanges(t *testing.T) {
 	org := &deploytest.FakeRetriever{}
 	f.project.Deployers[0].Deployer = org
 	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
-		if !strings.Contains(task.Prompt, "$HINZELE_BIN retrieve") {
+		if !strings.Contains(task.Prompt, "$HINZIEL_BIN retrieve") {
 			t.Error("prompt doesn't explain retrieve")
 		}
 		org.SetPending("flows/Approval.flow-meta.xml", "<Flow/>") // the agent clicked in the org
@@ -516,7 +516,7 @@ func TestWithoutEnvironmentTheEnvironmentStepsAreSkipped(t *testing.T) {
 		if task.Environment != nil {
 			t.Error("agent got an environment")
 		}
-		if strings.Contains(task.Prompt, "HINZELE_BIN deploy") {
+		if strings.Contains(task.Prompt, "HINZIEL_BIN deploy") {
 			t.Error("prompt mentions deploy without an environment")
 		}
 		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")

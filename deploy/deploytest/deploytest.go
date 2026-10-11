@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/internal/testutil"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/internal/testutil"
 )
 
 // Deployed records one Deploy call.

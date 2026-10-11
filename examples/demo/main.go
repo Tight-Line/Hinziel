@@ -2,11 +2,11 @@
 // without any accounts:
 //
 //	go build -o /tmp/demo ./examples/demo
-//	HINZELE_STATE_DIR=/tmp/hinzele-demo /tmp/demo run DEMO-1
-//	HINZELE_STATE_DIR=/tmp/hinzele-demo /tmp/demo status
+//	HINZIEL_STATE_DIR=/tmp/hinziel-demo /tmp/demo run DEMO-1
+//	HINZIEL_STATE_DIR=/tmp/hinziel-demo /tmp/demo status
 //
 // The "agent" writes a file, commits and pushes it, then runs
-// `$HINZELE_BIN deploy` as a separate process, exactly like a real agent.
+// `$HINZIEL_BIN deploy` as a separate process, exactly like a real agent.
 // The git remote is a fresh bare repository in a temp directory per process,
 // so resuming a run from another process won't find it; everything else is
 // as real as it gets.
@@ -20,21 +20,21 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/Tight-Line/hinzele"
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/agent/agenttest"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/dns/dnstest"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/env/envtest"
-	"github.com/Tight-Line/hinzele/forge/forgetest"
-	"github.com/Tight-Line/hinzele/notify/notifytest"
-	"github.com/Tight-Line/hinzele/tracker"
-	"github.com/Tight-Line/hinzele/tracker/trackertest"
+	"github.com/Tight-Line/hinziel"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/agent/agenttest"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/dns/dnstest"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/env/envtest"
+	"github.com/Tight-Line/hinziel/forge/forgetest"
+	"github.com/Tight-Line/hinziel/notify/notifytest"
+	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/tracker/trackertest"
 )
 
 func main() {
-	tmp, err := os.MkdirTemp("", "hinzele-demo-remote-")
+	tmp, err := os.MkdirTemp("", "hinziel-demo-remote-")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	hinzele.Main(hinzele.Factory{
+	hinziel.Main(hinziel.Factory{
 		Name: "demo",
 		Tracker: trackertest.NewFake(tracker.Ticket{
 			Key:         "DEMO-1",
@@ -52,17 +52,17 @@ func main() {
 			Description: "Create hello.txt saying hello.",
 			URL:         "https://tracker.test/DEMO-1",
 		}),
-		Repos:       []hinzele.Repo{{Name: "app", Forge: repo, TargetBranch: "main"}},
+		Repos:       []hinziel.Repo{{Name: "app", Forge: repo, TargetBranch: "main"}},
 		Agent:       &agenttest.Fake{Func: scriptedAgent},
 		Environment: envtest.NewFake(),
 		DNS:         dnstest.NewFake(),
-		Endpoints: []hinzele.Endpoint{{
+		Endpoints: []hinziel.Endpoint{{
 			Name: "web",
 			URL:  func(e *env.Environment) string { return "https://" + e.Name + ".preview.test" },
-			DNS:  hinzele.HostAddress(0),
+			DNS:  hinziel.HostAddress(0),
 		}},
-		Deployers: []hinzele.Deployer{{Name: "web", Repo: "app", Deployer: &deploytest.Fake{URL: "https://demo.preview.test"}}},
-		Notifiers: []hinzele.Notifier{{Notifier: &notifytest.Fake{}}},
+		Deployers: []hinziel.Deployer{{Name: "web", Repo: "app", Deployer: &deploytest.Fake{URL: "https://demo.preview.test"}}},
+		Notifiers: []hinziel.Notifier{{Notifier: &notifytest.Fake{}}},
 	})
 }
 
@@ -77,7 +77,7 @@ func scriptedAgent(ctx context.Context, task *agent.Task) (*agent.Outcome, error
 			return nil, err
 		}
 	}
-	if err := runIn(ctx, task, dir, "$HINZELE_BIN", "deploy"); err != nil {
+	if err := runIn(ctx, task, dir, "$HINZIEL_BIN", "deploy"); err != nil {
 		return nil, err
 	}
 	return &agent.Outcome{Summary: "Added hello.txt."}, nil
@@ -85,9 +85,9 @@ func scriptedAgent(ctx context.Context, task *agent.Task) (*agent.Outcome, error
 
 func runIn(ctx context.Context, task *agent.Task, dir string, args ...string) error {
 	name := args[0]
-	if name == "$HINZELE_BIN" {
+	if name == "$HINZIEL_BIN" {
 		for _, kv := range task.Env {
-			if v, ok := cutPrefix(kv, "HINZELE_BIN="); ok {
+			if v, ok := cutPrefix(kv, "HINZIEL_BIN="); ok {
 				name = v
 			}
 		}

@@ -22,9 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/internal/apiclient"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/internal/apiclient"
 )
 
 // Options configure Cloudflare DNS.

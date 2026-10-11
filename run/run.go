@@ -6,11 +6,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/forge"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 type ID string
@@ -86,7 +86,7 @@ type StepRecord struct {
 	Error    string    `json:"error,omitempty"`
 }
 
-// Store persists runs. v1: one JSON file per run under $XDG_STATE_HOME/hinzele.
+// Store persists runs. v1: one JSON file per run under $XDG_STATE_HOME/hinziel.
 type Store interface {
 	Save(ctx context.Context, r *Run) error
 	Load(ctx context.Context, id ID) (*Run, error)

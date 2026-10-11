@@ -1,4 +1,4 @@
-package hinzele
+package hinziel
 
 import (
 	"bytes"
@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/forge"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 type fakeTracker struct{ checkErr error }
@@ -152,17 +152,17 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 
 func TestEnvRecordsMissingVariables(t *testing.T) {
 	resetEnv()
-	t.Setenv("HINZELE_TEST_PRESENT", "x")
-	Env("HINZELE_TEST_PRESENT")
-	Env("HINZELE_TEST_MISSING")
-	Env("HINZELE_TEST_MISSING")
+	t.Setenv("HINZIEL_TEST_PRESENT", "x")
+	Env("HINZIEL_TEST_PRESENT")
+	Env("HINZIEL_TEST_MISSING")
+	Env("HINZIEL_TEST_MISSING")
 
 	got := missingEnvNames()
-	if len(got) != 1 || got[0] != "HINZELE_TEST_MISSING" {
+	if len(got) != 1 || got[0] != "HINZIEL_TEST_MISSING" {
 		t.Fatalf("got %v", got)
 	}
 	err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory())
-	if err == nil || !strings.Contains(err.Error(), "HINZELE_TEST_MISSING") {
+	if err == nil || !strings.Contains(err.Error(), "HINZIEL_TEST_MISSING") {
 		t.Fatalf("got %v", err)
 	}
 	resetEnv()
@@ -177,14 +177,14 @@ func TestEnvReadAfterStartupIsReportedAsLate(t *testing.T) {
 	if err := lateEnvError(); err != nil {
 		t.Fatalf("nothing read late yet: %v", err)
 	}
-	t.Setenv("HINZELE_TEST_PRESENT", "x")
-	Env("HINZELE_TEST_PRESENT") // read late but set: fine
-	Env("HINZELE_TEST_LATE")
+	t.Setenv("HINZIEL_TEST_PRESENT", "x")
+	Env("HINZIEL_TEST_PRESENT") // read late but set: fine
+	Env("HINZIEL_TEST_LATE")
 	if got := missingEnvNames(); len(got) != 0 {
 		t.Errorf("a late read must not count as missing at startup: %v", got)
 	}
 	err := lateEnvError()
-	if err == nil || !strings.Contains(err.Error(), "missing environment variables: HINZELE_TEST_LATE.") {
+	if err == nil || !strings.Contains(err.Error(), "missing environment variables: HINZIEL_TEST_LATE.") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -198,7 +198,7 @@ func resetEnv() {
 func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
 	resetEnv()
 	defer resetEnv()
-	Env("HINZELE_TEST_MISSING")
+	Env("HINZIEL_TEST_MISSING")
 	f := validFactory()
 	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
 	var out bytes.Buffer
@@ -207,7 +207,7 @@ func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
 		t.Fatal("expected check to fail")
 	}
 	for _, want := range []string{
-		"FAIL  hinzele: missing environment variables: HINZELE_TEST_MISSING",
+		"FAIL  hinziel: missing environment variables: HINZIEL_TEST_MISSING",
 		"FAIL  blanktracker: tracker: bad token",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -220,7 +220,7 @@ func TestRunCheckReportsMissingGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var out bytes.Buffer
 	err := Run(context.Background(), []string{"check"}, &out, validFactory())
-	if err == nil || !strings.Contains(out.String(), "FAIL  hinzele: not installed on this host (or not on PATH): git") {
+	if err == nil || !strings.Contains(out.String(), "FAIL  hinziel: not installed on this host (or not on PATH): git") {
 		t.Fatalf("err %v, output:\n%s", err, out.String())
 	}
 }

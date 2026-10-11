@@ -8,7 +8,7 @@
 // overridden, so previews go to a Worker of their own and never touch the
 // production ones named in the configuration.
 //
-// The Hinzele host needs Node.js; wrangler comes from the repository's
+// The Hinziel host needs Node.js; wrangler comes from the repository's
 // node_modules, or npx.
 //
 // # Credentials
@@ -38,10 +38,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/internal/apiclient"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/internal/apiclient"
 )
 
 // Options configure a Workers deployment.

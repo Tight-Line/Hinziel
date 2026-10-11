@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/run"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/run"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 // waitingDeployer waits (core.WaitError) a number of times before deploying

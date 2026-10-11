@@ -1,15 +1,15 @@
-package hinzele_test
+package hinziel_test
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/agent/claudecode"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy/cfworkers"
-	"github.com/Tight-Line/hinzele/deploy/dockercompose"
-	"github.com/Tight-Line/hinzele/env/digitalocean"
+	"github.com/Tight-Line/hinziel/agent/claudecode"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy/cfworkers"
+	"github.com/Tight-Line/hinziel/deploy/dockercompose"
+	"github.com/Tight-Line/hinziel/env/digitalocean"
 )
 
 // On a host with nothing installed, every component's Check names the

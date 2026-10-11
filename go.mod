@@ -1,3 +1,3 @@
-module github.com/Tight-Line/hinzele
+module github.com/Tight-Line/hinziel
 
 go 1.25.8

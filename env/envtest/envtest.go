@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/internal/testutil"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/internal/testutil"
 )
 
 // Fake is an in-memory env.Provisioner and env.Lister. Every environment gets
@@ -86,7 +86,7 @@ func clone(e *env.Environment) *env.Environment {
 // real environment named "skct-<random>".
 func Run(t *testing.T, p env.Provisioner) {
 	ctx := context.Background()
-	spec := env.Spec{Name: "skct-" + testutil.Suffix(), Labels: map[string]string{"hinzele": "conformance"}}
+	spec := env.Spec{Name: "skct-" + testutil.Suffix(), Labels: map[string]string{"hinziel": "conformance"}}
 	t.Cleanup(func() { p.Destroy(context.Background(), &env.Environment{Name: spec.Name}) })
 
 	e, err := p.Ensure(ctx, spec)

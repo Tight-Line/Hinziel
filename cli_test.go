@@ -1,4 +1,4 @@
-package hinzele
+package hinziel
 
 import (
 	"bytes"
@@ -10,17 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/agent/agenttest"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/deploy/deploytest"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/env/envtest"
-	"github.com/Tight-Line/hinzele/forge/forgetest"
-	"github.com/Tight-Line/hinzele/internal/gittest"
-	"github.com/Tight-Line/hinzele/tracker"
-	"github.com/Tight-Line/hinzele/tracker/trackertest"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/agent/agenttest"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/deploy/deploytest"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/env/envtest"
+	"github.com/Tight-Line/hinziel/forge/forgetest"
+	"github.com/Tight-Line/hinziel/internal/gittest"
+	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/tracker/trackertest"
 )
 
 func cliFactory(t *testing.T, agentFunc func(context.Context, *agent.Task) (*agent.Outcome, error)) Factory {
@@ -50,7 +50,7 @@ func runCLI(t *testing.T, f Factory, args ...string) (string, error) {
 }
 
 func TestCLIRunStatusLogs(t *testing.T) {
-	t.Setenv("HINZELE_STATE_DIR", t.TempDir())
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		dir := task.Repos[0].Path
 		os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("hello\n"), 0o644)
@@ -77,7 +77,7 @@ func TestCLIRunStatusLogs(t *testing.T) {
 		t.Errorf("status: %v\n%s", err, out)
 	}
 	out, err = runCLI(t, f, "status", id)
-	if err != nil || !strings.Contains(out, "hinzele/d-1-say-hello") || !strings.Contains(out, "finalize_branch") {
+	if err != nil || !strings.Contains(out, "hinziel/d-1-say-hello") || !strings.Contains(out, "finalize_branch") {
 		t.Errorf("status %s: %v\n%s", id, err, out)
 	}
 	out, err = runCLI(t, f, "logs", id)
@@ -87,7 +87,7 @@ func TestCLIRunStatusLogs(t *testing.T) {
 }
 
 func TestCLINeedsInputAndResume(t *testing.T) {
-	t.Setenv("HINZELE_STATE_DIR", t.TempDir())
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
 	asked := false
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		if !asked {
@@ -121,7 +121,7 @@ func TestCLINeedsInputAndResume(t *testing.T) {
 }
 
 func TestCLIRejectsUnknownGate(t *testing.T) {
-	t.Setenv("HINZELE_STATE_DIR", t.TempDir())
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
 	_, err := runCLI(t, cliFactory(t, nil), "run", "D-1", "--gate", "deploy_everything")
 	if err == nil || !strings.Contains(err.Error(), "unknown step") {
 		t.Fatalf("got %v", err)
@@ -129,7 +129,7 @@ func TestCLIRejectsUnknownGate(t *testing.T) {
 }
 
 func TestCLIAgentCommandsNeedARun(t *testing.T) {
-	t.Setenv("HINZELE_SOCKET", "")
+	t.Setenv("HINZIEL_SOCKET", "")
 	_, err := runCLI(t, cliFactory(t, nil), "deploy")
 	if err == nil || !strings.Contains(err.Error(), "only works inside a run") {
 		t.Fatalf("got %v", err)
@@ -151,7 +151,7 @@ func (d *onceWaiting) Deploy(ctx context.Context, e *env.Environment, src *deplo
 }
 
 func TestCLIRunFollowsAWait(t *testing.T) {
-	t.Setenv("HINZELE_STATE_DIR", t.TempDir())
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
 	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
 		os.WriteFile(filepath.Join(task.Repos[0].Path, "hello.txt"), []byte("hello\n"), 0o644)
 		return nil, nil

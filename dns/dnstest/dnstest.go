@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/internal/testutil"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/internal/testutil"
 )
 
 // Fake is an in-memory dns.Provider.

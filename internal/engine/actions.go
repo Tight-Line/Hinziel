@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/run"
 )
 
 // collectActions gathers the human actions of the run's environment: the

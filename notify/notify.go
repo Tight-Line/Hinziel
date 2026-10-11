@@ -5,9 +5,9 @@ package notify
 import (
 	"context"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/run"
 )
 
 // Notifier tells people things. Routing (which events, which audience) is

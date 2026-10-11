@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/core/remote"
-	"github.com/Tight-Line/hinzele/core/remote/remotetest"
-	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinziel/core/remote"
+	"github.com/Tight-Line/hinziel/core/remote/remotetest"
+	"github.com/Tight-Line/hinziel/env"
 )
 
 func TestRunOutputAndQuoting(t *testing.T) {

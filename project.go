@@ -1,8 +1,8 @@
-package hinzele
+package hinziel
 
 import (
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/internal/engine"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/internal/engine"
 )
 
 // project converts a validated factory into the engine's form.

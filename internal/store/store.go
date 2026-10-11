@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinziel/run"
 )
 
 var (

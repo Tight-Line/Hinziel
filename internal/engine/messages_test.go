@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/run"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/run"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 func TestPromptTellsTheAgentHowToReachHosts(t *testing.T) {
 	r := &run.Run{}
 	r.Ticket = &tracker.Ticket{Key: "T-1", Title: "Export"}
-	r.Branch = "hinzele/t-1-export"
+	r.Branch = "hinziel/t-1-export"
 	task := &agent.Task{Workdir: "/w", Environment: &env.Environment{
 		Name:      "hz-t-1",
 		Endpoints: map[string]string{"api": "https://hz-t-1-api.example.com"},

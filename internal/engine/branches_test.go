@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/run"
 )
 
 func TestBranchesAreCreatedOnlyWhereSomethingChanges(t *testing.T) {
@@ -13,7 +13,7 @@ func TestBranchesAreCreatedOnlyWhereSomethingChanges(t *testing.T) {
 	var branch string
 	var remoteBeforePush bool
 	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
-		branch = f.load(run.ID(envVar(task, "HINZELE_RUN_ID"))).Branch
+		branch = f.load(run.ID(envVar(task, "HINZIEL_RUN_ID"))).Branch
 		remoteBeforePush = f.api.BranchExists(branch) || f.docs.BranchExists(branch)
 		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
 		return nil, nil

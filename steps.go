@@ -1,6 +1,6 @@
-package hinzele
+package hinziel
 
-import "github.com/Tight-Line/hinzele/internal/engine"
+import "github.com/Tight-Line/hinziel/internal/engine"
 
 // Step names a pipeline step, for Factory.Gates and Factory.DisabledSteps.
 // The names also appear in run state, `status` output and notifications.

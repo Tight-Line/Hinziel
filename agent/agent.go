@@ -7,12 +7,12 @@ import (
 	"io"
 	"time"
 
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/tracker"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/tracker"
 )
 
 // Agent implements the task in the working tree. It works in a loop: edit,
-// commit, push to the run branch, `hinzele deploy`, test against the
+// commit, push to the run branch, `hinziel deploy`, test against the
 // environment. It MUST push only to the run branch, and MUST NOT open the
 // change request; the engine does that, and commits whatever is left over.
 type Agent interface {
@@ -30,7 +30,7 @@ type Task struct {
 	// project has no environment.
 	Environment *env.Environment
 	Prompt      string    // built by the engine from the ticket and the factory's Instructions
-	Env         []string  // process environment: whatever access the agent needs, plus HINZELE_BIN and HINZELE_RUN_ID for `$HINZELE_BIN deploy`/`retrieve`
+	Env         []string  // process environment: whatever access the agent needs, plus HINZIEL_BIN and HINZIEL_RUN_ID for `$HINZIEL_BIN deploy`/`retrieve`
 	Log         io.Writer // full agent transcript goes here (run log)
 }
 

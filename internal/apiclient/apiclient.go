@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/hinzele/core"
+	"github.com/Tight-Line/hinziel/core"
 )
 
 // Client calls one API. Auth sets credentials on every request.

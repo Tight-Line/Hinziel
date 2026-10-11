@@ -7,7 +7,7 @@
 // and commands to run after each deploy (migrations, cache warm-up).
 //
 // On the host, each deploy uploads the commit to <RemoteDir>/src (replacing
-// the previous one) and writes Hinzele's own files to <RemoteDir>/hinzele,
+// the previous one) and writes Hinziel's own files to <RemoteDir>/hinziel,
 // outside the build context, so a `COPY . .` never bakes them into an image.
 // The host needs Docker with the compose plugin.
 //
@@ -34,10 +34,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/core/remote"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/core/remote"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
 )
 
 // Options configure a compose deployment.
@@ -67,7 +67,7 @@ type Options struct {
 	// Host is the index of the environment host to deploy to.
 	Host int
 	// RemoteDir is where the deployment lives on the host;
-	// nil = /srv/hinzele/<environment>/<repo>.
+	// nil = /srv/hinziel/<environment>/<repo>.
 	RemoteDir func(e *env.Environment, repo string) string
 	// URL, if set, is the deployment's URL (deploy.Deployment.URL).
 	URL func(e *env.Environment) string
@@ -77,8 +77,8 @@ type Options struct {
 // With Cloudflare proxying in "Full (strict)" mode, a Cloudflare Origin CA
 // certificate is enough.
 type TLS struct {
-	CertFile string // PEM certificate (chain) on the Hinzele host
-	KeyFile  string // PEM private key on the Hinzele host
+	CertFile string // PEM certificate (chain) on the Hinziel host
+	KeyFile  string // PEM private key on the Hinziel host
 	Upstream string // "service:port" of the stack to proxy to, e.g. "nginx:80"
 	// Network is the compose network Upstream is on; "" = the project's
 	// default network.
@@ -117,11 +117,11 @@ func (d *Deployer) Deploy(ctx context.Context, e *env.Environment, src *deploy.S
 	}
 	h.SSH = d.ssh
 
-	base := "/srv/hinzele/" + e.Name + "/" + src.Repo
+	base := "/srv/hinziel/" + e.Name + "/" + src.Repo
 	if d.opts.RemoteDir != nil {
 		base = d.opts.RemoteDir(e, src.Repo)
 	}
-	srcDir, genDir := base+"/src", base+"/hinzele"
+	srcDir, genDir := base+"/src", base+"/hinziel"
 	workDir := path.Join(srcDir, d.opts.Dir)
 
 	if err := h.Upload(ctx, src.Workdir, srcDir, ".git"); err != nil {
@@ -181,7 +181,7 @@ func (d *Deployer) envFile(e *env.Environment) string {
 	if d.opts.Env != nil {
 		vars := d.opts.Env(e)
 		if len(vars) > 0 {
-			b.WriteString("\n\n# Set by Hinzele for environment " + e.Name + "\n")
+			b.WriteString("\n\n# Set by Hinziel for environment " + e.Name + "\n")
 		}
 		for _, k := range slices.Sorted(maps.Keys(vars)) {
 			b.WriteString(k + "=" + quoteEnv(vars[k]) + "\n")
@@ -241,8 +241,8 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) 
 func tlsConf(upstream string) string {
 	return `server {
     listen 443 ssl;
-    ssl_certificate /etc/nginx/hinzele/cert.pem;
-    ssl_certificate_key /etc/nginx/hinzele/key.pem;
+    ssl_certificate /etc/nginx/hinziel/cert.pem;
+    ssl_certificate_key /etc/nginx/hinziel/key.pem;
     client_max_body_size 0;
     resolver 127.0.0.11 valid=10s;
     set $upstream http://` + upstream + `;
@@ -264,14 +264,14 @@ func tlsCompose(t *TLS, dir string) string {
 	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, `services:
-  hinzele-tls:
+  hinziel-tls:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
       - "%d:443"
     volumes:
       - %s/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - %s:/etc/nginx/hinzele:ro
+      - %s:/etc/nginx/hinziel:ro
 `, port, dir, dir)
 	if t.Network != "" {
 		fmt.Fprintf(&b, "    networks:\n      - %s\n", t.Network)

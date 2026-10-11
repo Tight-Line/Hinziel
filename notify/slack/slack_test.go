@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/notify/notifytest"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/notify/notifytest"
 )
 
 type fakeWebhook struct {
@@ -91,8 +91,8 @@ func TestErrors(t *testing.T) {
 
 // TestIntegration posts one message of each event type to a real channel.
 func TestIntegration(t *testing.T) {
-	if os.Getenv("HINZELE_IT_SLACK") == "" {
-		t.Skip("set HINZELE_IT_SLACK=1 and SLACK_TEST_WEBHOOK")
+	if os.Getenv("HINZIEL_IT_SLACK") == "" {
+		t.Skip("set HINZIEL_IT_SLACK=1 and SLACK_TEST_WEBHOOK")
 	}
 	notifytest.Run(t, New(os.Getenv("SLACK_TEST_WEBHOOK")))
 }

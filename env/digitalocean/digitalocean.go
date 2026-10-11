@@ -1,9 +1,9 @@
 // Package digitalocean is an env.Provisioner that gives every environment
 // its own DigitalOcean droplet.
 //
-// Droplets are named after the environment and tagged "hinzele", plus one tag
-// per label (e.g. "hinzele-factory:shop"). Ensure only ever adopts a droplet
-// that carries the "hinzele" tag, so it never takes over, or later destroys,
+// Droplets are named after the environment and tagged "hinziel", plus one tag
+// per label (e.g. "hinziel-factory:shop"). Ensure only ever adopts a droplet
+// that carries the "hinziel" tag, so it never takes over, or later destroys,
 // a droplet it didn't create.
 //
 // # Credentials
@@ -14,7 +14,7 @@
 //     account:read. DigitalOcean adds the read scopes droplet:create
 //     depends on (regions, sizes, images, actions, snapshots, VPCs).
 //   - An SSH key pair for reaching the droplets: create one with
-//     `ssh-keygen -t ed25519 -N "" -f ~/.config/hinzele/id_ed25519`, add the
+//     `ssh-keygen -t ed25519 -N "" -f ~/.config/hinziel/id_ed25519`, add the
 //     .pub file under Settings → Security → SSH Keys, and pass its
 //     fingerprint (shown there, or `ssh-keygen -E md5 -lf <file>.pub` without
 //     the "MD5:" prefix) as SSHKeys and the private key's path as SSHKeyPath.
@@ -34,14 +34,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/core/remote"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/internal/apiclient"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/core/remote"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/internal/apiclient"
 )
 
 // Tag marks every droplet this package creates.
-const Tag = "hinzele"
+const Tag = "hinziel"
 
 // Options configure the droplets.
 type Options struct {
@@ -52,7 +52,7 @@ type Options struct {
 	// SSHKeys are fingerprints or IDs of keys in the DigitalOcean account,
 	// installed for SSHUser on every droplet.
 	SSHKeys []string
-	// SSHKeyPath is the private key Hinzele and the deployers use to reach
+	// SSHKeyPath is the private key Hinziel and the deployers use to reach
 	// the droplets; "" = ssh's defaults and agent.
 	SSHKeyPath string
 	SSHUser    string // "" = "root"
@@ -62,7 +62,7 @@ type Options struct {
 	Tags     []string // extra tags
 	VPC      string   // VPC UUID; "" = the region's default
 	// KnownHostsDir holds one known_hosts file per environment, pinning each
-	// droplet's host key on first contact. "" = $XDG_STATE_HOME/hinzele/known_hosts.
+	// droplet's host key on first contact. "" = $XDG_STATE_HOME/hinziel/known_hosts.
 	KnownHostsDir string
 	// BaseURL of the API; "" = https://api.digitalocean.com.
 	BaseURL string
@@ -151,7 +151,7 @@ func (p *Provisioner) Ensure(ctx context.Context, spec env.Spec) (*env.Environme
 }
 
 // find returns the droplet named name, or nil. A droplet of that name that
-// Hinzele didn't create is an error, never adopted.
+// Hinziel didn't create is an error, never adopted.
 func (p *Provisioner) find(ctx context.Context, name string) (*droplet, error) {
 	var resp struct {
 		Droplets []droplet `json:"droplets"`
@@ -164,7 +164,7 @@ func (p *Provisioner) find(ctx context.Context, name string) (*droplet, error) {
 			continue
 		}
 		if !slices.Contains(d.Tags, Tag) {
-			return nil, fmt.Errorf("droplet %s (%d) exists but wasn't created by Hinzele (no %q tag); refusing to use it", name, d.ID, Tag)
+			return nil, fmt.Errorf("droplet %s (%d) exists but wasn't created by Hinziel (no %q tag); refusing to use it", name, d.ID, Tag)
 		}
 		return &d, nil
 	}
@@ -303,7 +303,7 @@ func (p *Provisioner) Destroy(ctx context.Context, e *env.Environment) error {
 	}
 }
 
-// List returns every Hinzele droplet in the account.
+// List returns every Hinziel droplet in the account.
 func (p *Provisioner) List(ctx context.Context) ([]env.Environment, error) {
 	var out []env.Environment
 	for page := 1; ; page++ {
@@ -354,7 +354,7 @@ func (p *Provisioner) knownHosts(name string) string {
 			home, _ := os.UserHomeDir()
 			state = filepath.Join(home, ".local", "state")
 		}
-		dir = filepath.Join(state, "hinzele", "known_hosts")
+		dir = filepath.Join(state, "hinziel", "known_hosts")
 	}
 	return filepath.Join(dir, name)
 }

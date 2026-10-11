@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
 )
 
 // The agent's `deploy` and `retrieve` commands reach the executing engine
@@ -34,7 +34,7 @@ type socketReply struct {
 // serveSocket starts the socket for the duration of implement. The path is
 // kept short (Unix socket paths are limited to ~108 bytes).
 func (x *execution) serveSocket(ctx context.Context) (*socketServer, error) {
-	path := filepath.Join(os.TempDir(), "hinzele-"+string(x.r.ID)+".sock")
+	path := filepath.Join(os.TempDir(), "hinziel-"+string(x.r.ID)+".sock")
 	os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
@@ -180,7 +180,7 @@ func Call(ctx context.Context, socket, command string) (string, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
 	}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://hinzele/"+command, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://hinziel/"+command, nil)
 	if err != nil {
 		return "", err
 	}

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/dns/dnstest"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/dns/dnstest"
 )
 
 // fakeCloudflare serves zones and DNS records for one zone, example.com.
@@ -171,8 +171,8 @@ func TestCheck(t *testing.T) {
 
 // TestIntegration creates, updates and deletes a record "skct-<random>.<zone>".
 func TestIntegration(t *testing.T) {
-	if os.Getenv("HINZELE_IT_CLOUDFLARE") == "" {
-		t.Skip("set HINZELE_IT_CLOUDFLARE=1, CLOUDFLARE_DNS_TOKEN and CLOUDFLARE_TEST_ZONE")
+	if os.Getenv("HINZIEL_IT_CLOUDFLARE") == "" {
+		t.Skip("set HINZIEL_IT_CLOUDFLARE=1, CLOUDFLARE_DNS_TOKEN and CLOUDFLARE_TEST_ZONE")
 	}
 	zone := os.Getenv("CLOUDFLARE_TEST_ZONE")
 	p := New(Options{Token: os.Getenv("CLOUDFLARE_DNS_TOKEN"), Zone: zone, AllowedNames: "skct-*"})

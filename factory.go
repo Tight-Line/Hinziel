@@ -1,4 +1,4 @@
-package hinzele
+package hinziel
 
 import (
 	"errors"
@@ -6,14 +6,14 @@ import (
 	"net"
 	"regexp"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/dns"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/forge"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/tracker"
-	"github.com/Tight-Line/hinzele/trigger"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/dns"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/trigger"
 )
 
 // Factory is one team's software factory: where tickets come from, which
@@ -42,10 +42,10 @@ type Factory struct {
 	// Optional behaviour. Zero values give the defaults.
 
 	Instructions string                         // extra agent instructions, added to the engine's prompt
-	BranchName   func(t *tracker.Ticket) string // nil = "hinzele/<key>-<slugged title>"
+	BranchName   func(t *tracker.Ticket) string // nil = "hinziel/<key>-<slugged title>"
 	EnvName      func(t *tracker.Ticket) string // nil = "hz-<factory>-<key>"; must be a DNS label
 	// EnvironmentActions are things a human must do for each new environment
-	// that Hinzele can't, such as registering its URLs with a third party.
+	// that Hinziel can't, such as registering its URLs with a third party.
 	// They're announced right after provisioning (run.action_required) and,
 	// with Before set, hold the run back before that step until approved.
 	EnvironmentActions  func(e *env.Environment) []env.Action

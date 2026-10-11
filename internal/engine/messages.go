@@ -5,12 +5,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Tight-Line/hinzele/agent"
-	"github.com/Tight-Line/hinzele/core"
-	"github.com/Tight-Line/hinzele/deploy"
-	"github.com/Tight-Line/hinzele/env"
-	"github.com/Tight-Line/hinzele/notify"
-	"github.com/Tight-Line/hinzele/run"
+	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/deploy"
+	"github.com/Tight-Line/hinziel/env"
+	"github.com/Tight-Line/hinziel/notify"
+	"github.com/Tight-Line/hinziel/run"
 )
 
 // prompt is the task description given to the agent.
@@ -67,11 +67,11 @@ func prompt(p *Project, r *run.Run, task *agent.Task) string {
 	}
 
 	b.WriteString("\n## How to work\n\n")
-	fmt.Fprintf(&b, "- Commit your work and push it to `%s` (a plain `git push` creates it on the remote). Push only the repositories you change; the others stay as they are. Never push to any other branch and never open merge requests; Hinzele does that.\n", r.Branch)
+	fmt.Fprintf(&b, "- Commit your work and push it to `%s` (a plain `git push` creates it on the remote). Push only the repositories you change; the others stay as they are. Never push to any other branch and never open merge requests; Hinziel does that.\n", r.Branch)
 	if task.Environment != nil {
-		b.WriteString("- To try your work, push it, then run `$HINZELE_BIN deploy`. It deploys every repository's pushed HEAD to your environment and prints the result. Then test against the URLs above. Repeat as needed.\n")
+		b.WriteString("- To try your work, push it, then run `$HINZIEL_BIN deploy`. It deploys every repository's pushed HEAD to your environment and prints the result. Then test against the URLs above. Repeat as needed.\n")
 		if slices.ContainsFunc(p.Deployers, isRetriever) {
-			b.WriteString("- Changes you make directly in the environment are not in git. Run `$HINZELE_BIN retrieve` to pull them into your checkout, then review, commit and push them. `$HINZELE_BIN deploy` refuses to run while such changes are not committed.\n")
+			b.WriteString("- Changes you make directly in the environment are not in git. Run `$HINZIEL_BIN retrieve` to pull them into your checkout, then review, commit and push them. `$HINZIEL_BIN deploy` refuses to run while such changes are not committed.\n")
 		}
 	}
 	b.WriteString("- If something must be done by a human (a setting you can't change, a secret to add), say so in your final summary under \"Manual steps\".\n")
@@ -117,7 +117,7 @@ func changeRequestMessage(r *run.Run) core.Message {
 	}
 	writeManualSteps(&b, r)
 	writeActions(&b, r)
-	fmt.Fprintf(&b, "\n_Opened by Hinzele, run `%s`._\n", r.ID)
+	fmt.Fprintf(&b, "\n_Opened by Hinziel, run `%s`._\n", r.ID)
 	msg := core.Message{Body: b.String()}
 	if r.Ticket.URL != "" {
 		msg.Links = append(msg.Links, core.Link{Title: r.Ticket.Key, URL: r.Ticket.URL})
@@ -164,12 +164,12 @@ func publishMessage(r *run.Run) core.Message {
 	}
 	writeManualSteps(&b, r)
 	writeActions(&b, r)
-	return core.Message{Title: "Hinzele: " + r.Ticket.Key + " is ready for review", Body: b.String(), Links: links}
+	return core.Message{Title: "Hinziel: " + r.Ticket.Key + " is ready for review", Body: b.String(), Links: links}
 }
 
 func questionMessage(r *run.Run, question string) core.Message {
 	return core.Message{
-		Title: "Hinzele needs input",
+		Title: "Hinziel needs input",
 		Body:  question + fmt.Sprintf("\n\n_Run `%s`. After answering, resume it with `resume %s`._\n", r.ID, r.ID),
 	}
 }
