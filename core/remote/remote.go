@@ -62,6 +62,7 @@ func (h *Host) command(ctx context.Context, script string) *exec.Cmd {
 		"-o", "ConnectTimeout=15",
 		"-o", "ServerAliveInterval=30",
 	)
+	args = append(args, SharedConnection()...)
 	if h.KnownHostsPath != "" {
 		args = append(args, "-o", "UserKnownHostsFile="+h.KnownHostsPath)
 	}
@@ -79,6 +80,26 @@ func (h *Host) command(ctx context.Context, script string) *exec.Cmd {
 	// script in `sh -c` makes it run the same whatever that shell is.
 	args = append(args, target, "sh -c "+Quote(script))
 	return exec.CommandContext(ctx, ssh[0], args...)
+}
+
+// SharedConnection are ssh options that make every command to a host share
+// one connection: a deploy runs dozens, and hosts often rate-limit new SSH
+// connections (Ubuntu images with `ufw limit ssh` refuse a 7th within 30
+// seconds). Give them to anything else that runs ssh, such as the agent, so
+// it shares the connection too.
+func SharedConnection() []string {
+	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + controlPath(), "-o", "ControlPersist=60"}
+}
+
+// controlPath is where ssh keeps the shared connection to each host (%C is a
+// hash of user, host and port). A socket path must stay under ~100 bytes, so
+// it doesn't use os.TempDir, which can be long.
+func controlPath() string {
+	dir := os.Getenv("XDG_RUNTIME_DIR")
+	if dir == "" {
+		dir = "/tmp"
+	}
+	return filepath.Join(dir, "hinziel-ssh-%C")
 }
 
 // Run runs a POSIX shell script on the host. Its output goes to out (nil =
@@ -132,6 +153,8 @@ func (h *Host) Upload(ctx context.Context, localDir, remoteDir string, exclude .
 }
 
 // WaitReady retries a no-op command until SSH answers or ctx is done.
+// Against a real server, keep interval above 5s: every attempt is a new
+// connection, and `ufw limit ssh` refuses a 7th within 30 seconds.
 func (h *Host) WaitReady(ctx context.Context, interval time.Duration) error {
 	for {
 		err := h.Run(ctx, "true", nil, nil)

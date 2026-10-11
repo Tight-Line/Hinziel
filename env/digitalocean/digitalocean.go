@@ -75,7 +75,10 @@ type Provisioner struct {
 
 	// Tests replace these.
 	poll time.Duration
-	ssh  []string
+	// sshPoll is how often Ensure tries SSH on a new droplet. Above 5s: the
+	// Docker 1-Click limits SSH with ufw to 6 new connections in 30 seconds.
+	sshPoll time.Duration
+	ssh     []string
 }
 
 var (
@@ -93,7 +96,7 @@ func New(opts Options) *Provisioner {
 	if opts.SSHUser == "" {
 		opts.SSHUser = "root"
 	}
-	return &Provisioner{opts: opts, poll: 5 * time.Second, api: &apiclient.Client{
+	return &Provisioner{opts: opts, poll: 5 * time.Second, sshPoll: 6 * time.Second, api: &apiclient.Client{
 		Name:    "digitalocean",
 		BaseURL: base + "/v2",
 		Auth:    func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+opts.Token) },
@@ -266,7 +269,7 @@ func (p *Provisioner) waitReady(ctx context.Context, e *env.Environment) error {
 		return err
 	}
 	h.SSH = p.ssh
-	if err := h.WaitReady(ctx, p.poll); err != nil {
+	if err := h.WaitReady(ctx, p.sshPoll); err != nil {
 		return err
 	}
 	const cloudInit = "if command -v cloud-init >/dev/null; then cloud-init status --wait >/dev/null 2>&1 || true; fi"

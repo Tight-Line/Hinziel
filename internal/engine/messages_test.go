@@ -23,10 +23,12 @@ func TestPromptTellsTheAgentHowToReachHosts(t *testing.T) {
 			{Name: "lb", Address: "203.0.113.12"}, // no SSH access
 		},
 	}}
+	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1")
 	p := prompt(&Project{}, r, task)
+	shared := "-o ControlMaster=auto -o ControlPath=/run/user/1/hinziel-ssh-%C -o ControlPersist=60"
 	for _, want := range []string{
-		"- main: `ssh -i /k/id -o UserKnownHostsFile=/k/hosts root@203.0.113.10`",
-		"- db: `ssh -p 2222 203.0.113.11`",
+		"- main: `ssh " + shared + " -i /k/id -o IdentitiesOnly=yes -o UserKnownHostsFile=/k/hosts root@203.0.113.10`",
+		"- db: `ssh " + shared + " -p 2222 203.0.113.11`",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt must contain %q:\n%s", want, p)

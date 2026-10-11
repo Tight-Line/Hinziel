@@ -7,6 +7,7 @@ import (
 
 	"github.com/Tight-Line/hinziel/agent"
 	"github.com/Tight-Line/hinziel/core"
+	"github.com/Tight-Line/hinziel/core/remote"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/notify"
@@ -243,9 +244,11 @@ func sortedKeys[V any](m map[string]V) []string {
 
 // sshCommand is the command that opens a shell on h, with its pinned host key.
 func sshCommand(h env.Host) string {
-	cmd := "ssh"
+	cmd := "ssh " + strings.Join(remote.SharedConnection(), " ")
 	if h.SSH.KeyPath != "" {
-		cmd += " -i " + h.SSH.KeyPath
+		// Without IdentitiesOnly, ssh offers the agent's keys first, and a
+		// server stops after a few: "Too many authentication failures".
+		cmd += " -i " + h.SSH.KeyPath + " -o IdentitiesOnly=yes"
 	}
 	if h.SSH.KnownHostsPath != "" {
 		cmd += " -o UserKnownHostsFile=" + h.SSH.KnownHostsPath

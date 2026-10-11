@@ -118,7 +118,7 @@ func newTestProvisioner(t *testing.T) (*Provisioner, *fakeDO) {
 		SSHKeys: []string{"ab:cd"}, SSHKeyPath: "/keys/hinziel", UserData: "#cloud-config\n",
 		KnownHostsDir: t.TempDir(), BaseURL: srv.URL,
 	})
-	p.poll = time.Millisecond
+	p.poll, p.sshPoll = time.Millisecond, time.Millisecond
 	p.ssh = remotetest.LocalSSH(t)
 	return p, f
 }
