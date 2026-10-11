@@ -255,15 +255,33 @@ func (e executingError) Error() string {
 }
 
 // Cancel marks an unfinished run as cancelled. A run executing in another
-// process must be stopped there first.
+// process must be stopped there first. A run interrupted during implement
+// may have left what the agent started running, so the factory's cleaners
+// run too.
 func (e *Engine) Cancel(ctx context.Context, id run.ID) error {
-	return e.prepare(ctx, id, func(r *run.Run) error {
+	err := e.prepare(ctx, id, func(r *run.Run) error {
 		if r.Status == run.StatusSucceeded || r.Status == run.StatusCancelled {
 			return fmt.Errorf("run %s is already %s", r.ID, r.Status)
 		}
 		r.Status = run.StatusCancelled
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	r, err := e.store.Load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p := e.projects[r.Factory]; p != nil && len(p.Cleaners) > 0 {
+		x, err := e.newExecution(p, r)
+		if err != nil {
+			return err
+		}
+		defer x.close()
+		x.cleanUp(ctx)
+	}
+	return nil
 }
 
 // prepare changes a run's state while holding its lock.

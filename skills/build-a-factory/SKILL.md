@@ -104,7 +104,15 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    credentials. The factory's agent gets only what the factory gives it,
    so decide each one on purpose: wire it in, or leave it out.
 5. **Choose components** from the README's package map. Name any that must
-   be written, and say why none of the existing ones fits.
+   be written, and say why none of the existing ones fits. Include what
+   stops the agent's local work: the agent runs on the factory's host, and
+   whatever the repository's instructions have it bring up to test (a
+   Compose dev stack, a database, a server) outlives the run unless the
+   factory's `Cleanup` stops it. Find how a developer stops it today
+   (`./toolkit down`, `make stop`) and pick `cleanup/dockercompose` or
+   `cleanup/command`. Docker publishes ports past ufw, so on an always-on
+   host a leftover stack is open to the internet; put a cloud firewall in
+   front of that host either way.
 6. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it

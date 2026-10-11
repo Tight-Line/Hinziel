@@ -597,6 +597,7 @@ and the plain data types around it.
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
 | [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
+| [`cleanup`](./cleanup/cleanup.go) | `Cleaner`; `Workspace`, `Checkout` | — |
 | [`notify`](./notify/notify.go) | `Notifier`; `Event`, `EventType`, the `Finished` / `Problems` event sets | core, run |
 | [`trigger`](./trigger/trigger.go) | `Trigger`, `Dispatcher` | run, tracker |
 | [`hinziel`](./factory.go) (root) | `Factory`, `Repo`, `Endpoint`, `DNSTarget` (+ `HostAddress`, `CNAME`), `Deployer`, `Notifier`, `Trigger`, `Step`, `Main`, `Run`, `Env` | all of the above |
@@ -637,6 +638,7 @@ third-party module) follow the same interfaces and are used the same way.
 |---|---|
 | [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§9) |
 | [`agent/agenttest`](./agent/agenttest) | public: a scriptable fake agent. No conformance suite; agents are tested end to end |
+| [`cleanup/cleanuptest`](./cleanup/cleanuptest) | public: a recording fake cleaner. No conformance suite |
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
 | [`internal/workspace`](./internal/workspace) | git via the git CLI: clone, branch, commit, push, "is it pushed?", deploy worktrees |
@@ -724,6 +726,19 @@ These rules keep the interfaces from fighting each other:
   prompt) and says that it replaces any branching, deploying or
   confirmation rules in the project's instructions. Everything else in them,
   such as coding conventions and how to run the tests, still applies.
+- **What the agent leaves running.** The agent starts things on the
+  factory's host to test its work: a dev stack, a database, a server. An
+  agent component stops its own processes when the agent exits
+  (`agent/claudecode` kills its process group). What outlives them, such as
+  containers a Docker daemon runs, is for the factory's `Cleanup`: cleaners
+  the engine calls with the run's checkouts when `implement` ends, whether
+  it succeeded or not, and when a run is cancelled. Hinziel doesn't guess
+  how a project runs locally; the factory says, with `cleanup/dockercompose`
+  (the Compose projects started from the run's checkouts), `cleanup/command`
+  (the team's own command, e.g. `./toolkit down`) or a cleaner of its own.
+  A cleaner's error is logged and never fails the run. A cleaner runs with
+  the agent's environment, not the factory's, because the checkout holds
+  code the agent wrote.
 - **Several repos.** Each repo has its own forge, so one factory can span
   GitLab and GitHub. The agent sees all checkouts (`Task.Repos`). Each
   deployer is bound to one repo and gets that repo's `Source`.
@@ -803,6 +818,8 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent/claudecode"
+	"github.com/Tight-Line/hinziel/cleanup"
+	cleancompose "github.com/Tight-Line/hinziel/cleanup/dockercompose"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/cfworkers"
 	"github.com/Tight-Line/hinziel/deploy/dockercompose"
@@ -943,6 +960,10 @@ func main() {
 				},
 			})},
 		},
+
+		// The agent runs the repository's dev stack to test (`./toolkit check`);
+		// it is stopped when implement ends, so it doesn't outlive the run.
+		Cleanup: []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
 
 		// "@hinzielsoftwarefactory implement" in a comment on a card starts a run.
 		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
@@ -1409,7 +1430,8 @@ hostnames might get around that, but it's extra setup for no benefit here.)
    interface. BlankTracker showed why it matters. Its instructions ask for
    `./toolkit check`, which only runs in the repository's local dev stack,
    so the agent started that stack on the runner and left it running after
-   the run. Its published ports (Postgres, Redis, nginx, …) were open to
+   the run (since then, the factory stops it with `cleanup/dockercompose`
+   when `implement` ends; see §4). Its published ports (Postgres, Redis, nginx, …) were open to
    the internet, because Docker's port publishing bypasses ufw; only a
    cloud firewall in front of the host closes them. Two such runs at once
    would also collide: the same fixed host ports, and the same Compose

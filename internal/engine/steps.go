@@ -332,6 +332,7 @@ func (x *execution) implement(ctx context.Context) error {
 
 	out, err := x.p.Agent.Implement(ctx, task)
 	srv.close() // wait for in-flight deploys before touching run state
+	x.cleanUp(ctx)
 	if err != nil {
 		return err
 	}

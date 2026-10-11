@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/cleanup"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/dns"
 	"github.com/Tight-Line/hinziel/env"
@@ -39,6 +40,10 @@ type Factory struct {
 
 	Triggers  []Trigger
 	Notifiers []Notifier
+	// Cleanup stops what the agent leaves running on the factory's host,
+	// such as the repository's dev stack, when implement ends and when a
+	// run is cancelled (cleanup/dockercompose, cleanup/command).
+	Cleanup []cleanup.Cleaner
 
 	// Optional behaviour. Zero values give the defaults.
 
@@ -221,6 +226,12 @@ func (f *Factory) validate() error {
 	for i, n := range f.Notifiers {
 		if n.Notifier == nil {
 			bad("Notifiers[%d]: Notifier is required", i)
+		}
+	}
+
+	for i, c := range f.Cleanup {
+		if c == nil {
+			bad("Cleanup[%d]: Cleaner is required", i)
 		}
 	}
 

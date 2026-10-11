@@ -29,6 +29,10 @@ ok)
 question)
   printf '%s' '{"summary":"","question":"Which columns should the export have?"}' > "$HINZIEL_OUTCOME"
   say '{"type":"result","subtype":"success","is_error":false,"result":"I need input."}' ;;
+background)
+  sleep 300 >/dev/null 2>&1 &
+  echo $! > "$FAKE_LOG.bgpid"
+  say '{"type":"result","subtype":"success","is_error":false,"result":"Left a server running."}' ;;
 nooutcome)
   say '{"type":"result","subtype":"success","is_error":false,"result":"Done without a file."}' ;;
 maxturns)

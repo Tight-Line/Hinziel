@@ -13,6 +13,7 @@ func (f *Factory) project() *engine.Project {
 		Agent:       f.Agent,
 		Provisioner: f.Environment,
 		DNS:         f.DNS,
+		Cleaners:    f.Cleanup,
 		Settings: engine.Settings{
 			Instructions:        f.Instructions,
 			BranchName:          f.BranchName,

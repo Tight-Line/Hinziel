@@ -129,6 +129,7 @@ func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome
 
 	cmd := exec.CommandContext(ctx, cmdline[0], args...)
 	cmd.Dir = dir
+	inOwnGroup(cmd)
 	cmd.Env = append(append(append([]string{}, task.Env...), credentials()...), "HINZIEL_OUTCOME="+outcomePath)
 	cmd.Stdin = strings.NewReader(task.Prompt)
 	stderr := &tailWriter{max: 4096}
@@ -147,6 +148,7 @@ func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome
 	}
 	res := transcribe(stdout, log)
 	waitErr := cmd.Wait()
+	killGroup(cmd)
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()

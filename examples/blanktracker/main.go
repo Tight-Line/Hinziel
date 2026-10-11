@@ -8,6 +8,8 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent/claudecode"
+	"github.com/Tight-Line/hinziel/cleanup"
+	cleancompose "github.com/Tight-Line/hinziel/cleanup/dockercompose"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/cfworkers"
 	"github.com/Tight-Line/hinziel/deploy/dockercompose"
@@ -101,6 +103,7 @@ func main() {
 				},
 			})},
 		},
+		Cleanup: []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
 		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
 			APIKey: hinziel.Env("TRELLO_API_KEY"), Token: hinziel.Env("TRELLO_TOKEN"), Board: "FbGOL7Wb",
 		})}},
