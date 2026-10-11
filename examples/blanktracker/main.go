@@ -50,7 +50,7 @@ func main() {
 		EnvName: func(t *tracker.Ticket) string { return "hz-" + strings.ToLower(t.Key) },
 
 		Environment: digitalocean.New(digitalocean.Options{
-			Token: hinziel.Env("DO_TOKEN"), Region: "fra1", Size: "s-2vcpu-4gb", Image: "docker-24-04",
+			Token: hinziel.Env("DO_TOKEN"), Region: "fra1", Size: "s-2vcpu-4gb", Image: "docker-20-04",
 			SSHKeys: []string{"ab:cd:…"}, SSHKeyPath: hinziel.Env("HINZIEL_SSH_KEY"),
 		}),
 		DNS: cloudflare.New(cloudflare.Options{

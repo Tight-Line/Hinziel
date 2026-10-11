@@ -48,7 +48,7 @@ type Options struct {
 	Token  string
 	Region string // e.g. "fra1"
 	Size   string // e.g. "s-2vcpu-4gb"
-	Image  string // slug or ID, e.g. "docker-24-04" (Ubuntu with Docker)
+	Image  string // slug or ID, e.g. "docker-20-04" (the Docker 1-Click, Ubuntu 22.04 despite the slug)
 	// SSHKeys are fingerprints or IDs of keys in the DigitalOcean account,
 	// installed for SSHUser on every droplet.
 	SSHKeys []string
@@ -345,8 +345,28 @@ func (p *Provisioner) Check(ctx context.Context) error {
 	}
 	if p.opts.Region == "" || p.opts.Size == "" || p.opts.Image == "" {
 		errs = append(errs, errors.New("Region, Size and Image are required"))
+	} else {
+		errs = append(errs, p.checkImage(ctx))
 	}
 	return errors.Join(errs...)
+}
+
+// checkImage reports an Image that doesn't exist or isn't in Region, which
+// otherwise only shows when the first droplet is created. Marketplace slugs
+// are easy to get wrong: Docker's is "docker-20-04", whatever Ubuntu it runs.
+func (p *Provisioner) checkImage(ctx context.Context) error {
+	var resp struct {
+		Image struct {
+			Regions []string `json:"regions"`
+		} `json:"image"`
+	}
+	if err := p.api.Do(ctx, http.MethodGet, "/images/"+url.PathEscape(p.opts.Image), nil, nil, &resp); err != nil {
+		return fmt.Errorf("Image %q: %w", p.opts.Image, err)
+	}
+	if !slices.Contains(resp.Image.Regions, p.opts.Region) {
+		return fmt.Errorf("Image %q is not available in Region %q", p.opts.Image, p.opts.Region)
+	}
+	return nil
 }
 
 func (p *Provisioner) knownHosts(name string) string {

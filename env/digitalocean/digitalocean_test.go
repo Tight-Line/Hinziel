@@ -51,6 +51,12 @@ func (f *fakeDO) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		send(map[string]any{"ssh_key": map[string]string{}})
+	case strings.HasPrefix(path, "/images/"):
+		if strings.TrimPrefix(path, "/images/") != "docker-20-04" {
+			http.Error(w, `{"id":"not_found"}`, http.StatusNotFound)
+			return
+		}
+		send(map[string]any{"image": map[string]any{"regions": []string{"fra1", "nyc3"}}})
 	case path == "/droplets" && r.Method == "GET":
 		out := []map[string]any{}
 		for _, d := range f.droplets {
@@ -108,7 +114,7 @@ func newTestProvisioner(t *testing.T) (*Provisioner, *fakeDO) {
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	p := New(Options{
-		Token: "do-token", Region: "fra1", Size: "s-2vcpu-4gb", Image: "docker-24-04",
+		Token: "do-token", Region: "fra1", Size: "s-2vcpu-4gb", Image: "docker-20-04",
 		SSHKeys: []string{"ab:cd"}, SSHKeyPath: "/keys/hinziel", UserData: "#cloud-config\n",
 		KnownHostsDir: t.TempDir(), BaseURL: srv.URL,
 	})
@@ -150,7 +156,7 @@ func TestEnsure(t *testing.T) {
 	if string(tags) != `["hinziel","hinziel-factory:shop","hinziel-ticket:T_1"]` {
 		t.Errorf("tags %s", tags)
 	}
-	if body["user_data"] != "#cloud-config\n" || body["image"] != "docker-24-04" {
+	if body["user_data"] != "#cloud-config\n" || body["image"] != "docker-20-04" {
 		t.Errorf("request %+v", body)
 	}
 }
@@ -178,6 +184,15 @@ func TestCheck(t *testing.T) {
 	p.opts.SSHKeys = []string{"ab:cd", "ff:ff"}
 	if err := p.Check(context.Background()); err == nil || !strings.Contains(err.Error(), "ff:ff") {
 		t.Errorf("a missing SSH key must fail the check: %v", err)
+	}
+	p.opts.SSHKeys = nil
+	p.opts.Image = "docker-24-04"
+	if err := p.Check(context.Background()); err == nil || !strings.Contains(err.Error(), `Image "docker-24-04"`) {
+		t.Errorf("an unknown image must fail the check: %v", err)
+	}
+	p.opts.Image, p.opts.Region = "docker-20-04", "sgp1"
+	if err := p.Check(context.Background()); err == nil || !strings.Contains(err.Error(), `not available in Region "sgp1"`) {
+		t.Errorf("an image missing from the region must fail the check: %v", err)
 	}
 }
 

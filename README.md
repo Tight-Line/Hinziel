@@ -866,7 +866,7 @@ func main() {
 			Token:      hinziel.Env("DO_TOKEN"),
 			Region:     "fra1",
 			Size:       "s-2vcpu-4gb", // the first build compiles every PHP extension
-			Image:      "docker-24-04",
+			Image:      "docker-20-04", // the Docker 1-Click; its slug predates its Ubuntu
 			SSHKeys:    []string{"ab:cd:…"},          // fingerprints of keys in the DO account
 			SSHKeyPath: hinziel.Env("HINZIEL_SSH_KEY"), // the matching private key on the Hinziel host
 		}),
