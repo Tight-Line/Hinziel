@@ -2,15 +2,33 @@
 
 *Specification — draft v0.3*
 
-> *Heinzelmännchen: in the legend of Cologne, little house spirits who came
-> out at night and did the townsfolk's work while they slept. Hinziel is
-> derived from Heinzel, and it is also the stem of the German *hinzielen*, to
-> aim at: a factory works toward one ticket's goal.*
+> **Heinzelmännchen**: in the legend of Cologne, little house spirits who
+> came out at night and did the townsfolk's work while they slept.
+>
+> **hinzielen** (German): to aim at, to work toward. Split it and it says the
+> same thing twice: *hin*, toward, and *Ziel*, the goal.
 
-Hinziel is one of those spirits for a software team: you hand it a ticket
-before you leave, and the work is done when you come back. Concretely, it is
-a **Go library for building software factories.** A factory takes a ticket
-and, without human help:
+Hinziel is derived from Heinzel and is the stem of *hinzielen*. Hand a ticket
+to a Heinzel before you leave and the work is done when you come back. The
+ticket is the *Ziel*. Everything between it and a reviewed change is the
+*hin*, the way there, and no human has to walk it.
+
+Hinziel doesn't walk it itself. It isn't an agent: it **builds the agent
+that does**, a **software factory** made for one team's tickets, repositories
+and deployment. It comes in two parts:
+
+1. **A Go library for building software factories**: the pipeline, run
+   state, interfaces and ready-made components a factory is made of.
+2. **The build-a-factory skill**, which works out how a team's app is really
+   deployed and then writes and tests the team's factory with the library.
+
+A team uses the skill; the skill uses the library. The library is still an
+ordinary Go library, open to any team that would rather write its factory by
+hand.
+
+### The library
+
+A factory takes a ticket and, without human help:
 
 1. creates a branch
 2. provisions an environment
@@ -45,21 +63,26 @@ func main() {
 Every component is either a ready-made one from this repository or the team's
 own code implementing the same interface. The compiler checks the wiring.
 
-The coding agent (Claude Code, OpenHands, …) is a component like any other.
-Hinziel's value is the pipeline, the run state, the interfaces, and a growing
-**library of ready-made components**.
+The coding agent (Claude Code, OpenHands, …) is a component like any other:
+the factory aims it at the ticket. The library's value is the pipeline, the
+run state, the interfaces, and a growing **library of ready-made components**.
 
-**Its killer feature is a new environment whenever you need one.** Most teams
+### The skill
+
+**Hinziel's killer feature is a new environment whenever you need one.** Most teams
 run a handful of environments (production, staging, perhaps a shared dev),
 and standing up another one is a project they rarely take on. The hard part
 is knowing how the app actually gets deployed, and that knowledge is tacit,
-scattered and often partly wrong. Hinziel's **build-a-factory skill** (§6)
-goes into a team's repositories and running environments, works out how the
-app is really deployed, and reproduces it, so that every ticket gets an
-environment of its own. It then writes the rest of the factory and tests it
-end to end, so a team never has to learn Hinziel itself. A team that only
-wants the environments can stop there: `env up` gives them a fresh one on
-demand, with no tickets or agents involved.
+scattered and often partly wrong. The **build-a-factory skill** (§6) goes
+into a team's repositories and running environments, works out how the app
+is really deployed, and reproduces it, so that every ticket gets an
+environment of its own. A factory can only aim at a ticket once it knows the
+ground in between.
+
+The skill then writes the rest of the factory and tests it end to end, so a
+team never has to learn the library itself. A team that only wants the
+environments can stop there: `env up` gives them a fresh one on demand, with
+no tickets or agents involved.
 
 ---
 
