@@ -88,9 +88,16 @@ and what BlankTracker showed.
   environment.
 - **BlankTracker:** two Google redirect URIs per preview. The person added
   them while the agent worked, and asked for a way to never do it again.
-  The answer was an OAuth relay (`deploy/cfoauthrelay` with
-  `dockercompose.TLS.ReturnCookie`): one callback host registered once,
-  forwarding to the preview that started the login.
+  The answer was an OAuth relay: one callback host registered once,
+  forwarding to the host a cookie (`oauth_return`) says the login started
+  on. The owner chose to put it in the app (a middleware sets the cookie,
+  the relay Worker lives in the repository), so any environment uses it,
+  not only previews. Without app changes, Hinziel does both halves:
+  `dockercompose.TLS.ReturnCookie` and `deploy/cfoauthrelay`.
+- **Ask whether a fix should outlive Hinziel.** Friction a preview hits is
+  often friction any new environment hits. Offer to solve it in the app or
+  its infrastructure, where every environment benefits, and keep the
+  factory-only workaround for teams that can't change the app.
 - **Prefer removing the action to announcing it.** For OAuth login, check
   whether the app's flow is stateless or keeps its state somewhere that
   survives one more redirect; if so, use the relay. Only fall back to a

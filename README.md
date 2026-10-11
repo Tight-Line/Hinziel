@@ -1567,17 +1567,20 @@ someone runs `approve`.
 **Then the human action went away.** On the first real runs the action
 worked, and it still meant a person in Google Cloud Console for every
 preview. BlankTracker's login is stateless (Socialite's `stateless()`) and
-its redirect URI comes from one setting, so the factory now gives every
-preview the same callback host: `deploy/cfoauthrelay` keeps a small
-Cloudflare Worker on `hz-auth.blanktracker.com`, whose two callback URLs
-were registered once. When a login starts on a preview, Hinziel's TLS
-proxy (`dockercompose.TLS.ReturnCookie`) sets a ten-minute cookie on
-`.blanktracker.com` naming the preview, and the relay sends Google's
-callback there, path and query unchanged. The app needed no changes. Many
-apps log in with Google this way, so the relay is a component, not a
-BlankTracker workaround; an action per environment is the fallback for
-providers and flows it can't serve (state kept in a session cookie on the
-app's own host, say).
+its redirect URI comes from one setting, so every environment that opts in
+now shares one callback host, an **OAuth relay**
+(`auth-relay.blanktracker.com`) whose two callback URLs were registered
+once. When a login starts, a ten-minute cookie on `.blanktracker.com`,
+`oauth_return`, names the host it started on, and the relay sends Google's
+callback there, path and query unchanged, to hosts under the domain only.
+The owner chose to make it independent of Hinziel: the app sets the cookie
+itself (a middleware, off unless configured), and the relay is a Worker in
+the app's repository, so a staging copy or an environment made by hand uses
+it just like a preview. Hinziel's pieces are for teams that want the same
+without changing their app: `dockercompose.TLS.ReturnCookie` sets the
+cookie in the preview's proxy, and `deploy/cfoauthrelay` keeps the relay
+Worker running. An action per environment is the fallback for flows a relay
+can't serve (state kept in a session cookie on the app's own host, say).
 
 ### 12.3 Installing Hinziel on an app that wasn't built for it
 

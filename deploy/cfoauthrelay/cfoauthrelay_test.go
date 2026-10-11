@@ -92,7 +92,7 @@ func newTest(t *testing.T) (*Deployer, *fakeCF) {
 	t.Cleanup(srv.Close)
 	return New(Options{
 		AccountID: "acc", WorkersToken: "work", DNSToken: "dns", BaseURL: srv.URL,
-		Zone: "example.com", Host: "hz-auth.example.com", Target: "https://{env}-api.example.com",
+		Zone: "example.com", Host: "hz-auth.example.com",
 	}), f
 }
 
@@ -107,7 +107,7 @@ func TestDeployKeepsTheRelayInPlace(t *testing.T) {
 			t.Errorf("URL %s", dep.URL)
 		}
 	}
-	if src := f.scripts["hinziel-oauth-relay"]; !strings.Contains(src, `const TARGET = "https://{env}-api.example.com";`) {
+	if src := f.scripts["hinziel-oauth-relay"]; !strings.Contains(src, `const ALLOWED_SUFFIX = ".example.com";`) {
 		t.Errorf("uploaded script:\n%s", src)
 	}
 	if len(f.routes) != 1 || f.routes[0].Pattern != "hz-auth.example.com/*" || f.routes[0].Script != "hinziel-oauth-relay" {
@@ -123,10 +123,10 @@ func TestCheck(t *testing.T) {
 	if err := d.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	d.opts.Target = "http://{env}.example.com"
+	d.opts.AllowedSuffix = ".other.com"
 	d.opts.Host = "auth.other.com"
 	err := d.Check(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "Target") || !strings.Contains(err.Error(), "not in Zone") {
+	if err == nil || !strings.Contains(err.Error(), "AllowedSuffix") || !strings.Contains(err.Error(), "not in Zone") {
 		t.Errorf("got %v", err)
 	}
 }
@@ -143,9 +143,12 @@ func TestRelayScript(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(`
 import relay from "./relay.mjs";
 const cases = [
-  ["other=1; hinziel_return=hz-r56z2ye4", "/api/auth/google/callback?code=abc&scope=email"],
+  ["other=1; oauth_return=hz-r56z2ye4-api.example.com", "/api/auth/google/callback?code=abc&scope=email"],
+  ["oauth_return=api-staging.example.com", "/auth/google/callback?code=abc"],
   ["", "/auth/google/callback?code=abc"],
-  ["hinziel_return=evil.com/x", "/auth/google/callback"],
+  ["oauth_return=evil.com", "/auth/google/callback"],
+  ["oauth_return=evilexample.com", "/auth/google/callback"],
+  ["oauth_return=hz-auth.example.com", "/auth/google/callback"],
 ];
 for (const [cookie, path] of cases) {
   const res = await relay.fetch(new Request("https://hz-auth.example.com" + path, { headers: { Cookie: cookie } }));
@@ -156,7 +159,8 @@ for (const [cookie, path] of cases) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	want := "302 https://hz-r56z2ye4-api.example.com/api/auth/google/callback?code=abc&scope=email\n400 -\n400 -\n"
+	want := "302 https://hz-r56z2ye4-api.example.com/api/auth/google/callback?code=abc&scope=email\n" +
+		"302 https://api-staging.example.com/auth/google/callback?code=abc\n400 -\n400 -\n400 -\n400 -\n"
 	if string(out) != want {
 		t.Errorf("got:\n%swant:\n%s", out, want)
 	}

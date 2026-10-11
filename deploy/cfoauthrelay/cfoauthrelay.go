@@ -9,12 +9,16 @@
 //     https://hz-auth.example.com/auth/google/callback.
 //  2. Every environment uses the relay as its OAuth redirect host
 //     (GOOGLE_REDIRECT_HOST or similar in its configuration).
-//  3. When a login starts on an environment, its proxy sets a short-lived
-//     cookie on the parent domain naming the environment
-//     (dockercompose.TLS.ReturnCookie does this).
+//  3. When a login starts on an environment, a short-lived cookie on the
+//     parent domain, oauth_return, names the host it started on. The app can
+//     set it (a few lines in its login-start route), or the environment's
+//     proxy can (dockercompose.TLS.ReturnCookie).
 //  4. The provider sends the browser to the relay, which redirects it, path
-//     and query unchanged, to the environment the cookie names. The app
-//     completes the login there, with the same redirect URI it sent.
+//     and query unchanged, to the host the cookie names. The app completes
+//     the login there, with the same redirect URI it sent.
+//
+// Nothing in that contract is Hinziel's: environments made by hand use the
+// same relay, as long as they set the cookie and the redirect host.
 //
 // It works with apps whose OAuth flow keeps no state in a session cookie
 // of their own host between the start and the callback (Laravel Socialite's
@@ -22,10 +26,9 @@
 //
 // The relay is a Cloudflare Worker on Host, with a route and a proxied DNS
 // record. This Deployer keeps all three in place on every deploy, so it
-// needs no setup of its own; list it among the factory's Deployers. The
-// cookie only names an environment: the relay builds the target from
-// Target, so it can only ever send a browser to one of the factory's
-// environments.
+// needs no setup of its own; list it among the factory's Deployers. A team
+// may as well deploy the same Worker with its own tooling (Script returns
+// it). It redirects only to hosts under AllowedSuffix, never to itself.
 //
 // # Credentials
 //
@@ -62,12 +65,10 @@ type Options struct {
 	DNSToken     string
 	Zone         string // e.g. "example.com"
 	Host         string // the relay's hostname in Zone, e.g. "hz-auth.example.com"
-	// Target is where the relay sends the browser, with {env} for the
-	// environment's name, e.g. "https://{env}-api.example.com". The path and
-	// query of the callback are appended.
-	Target string
-	// Cookie is the cookie naming the environment; "" = "hinziel_return".
-	// It must match the proxy's (dockercompose.ReturnCookie.Name).
+	// AllowedSuffix limits where the relay sends browsers: hosts ending in
+	// it, such as ".example.com". "" = "." + Zone.
+	AllowedSuffix string
+	// Cookie names the host to return to; "" = "oauth_return".
 	Cookie string
 	// Worker is the relay Worker's name; "" = "hinziel-oauth-relay".
 	Worker string
@@ -87,7 +88,7 @@ var (
 )
 
 // DefaultCookie is the cookie both ends use unless told otherwise.
-const DefaultCookie = "hinziel_return"
+const DefaultCookie = "oauth_return"
 
 func New(opts Options) *Deployer {
 	if opts.Cookie == "" {
@@ -95,6 +96,9 @@ func New(opts Options) *Deployer {
 	}
 	if opts.Worker == "" {
 		opts.Worker = "hinziel-oauth-relay"
+	}
+	if opts.AllowedSuffix == "" && opts.Zone != "" {
+		opts.AllowedSuffix = "." + opts.Zone
 	}
 	base := strings.TrimRight(opts.BaseURL, "/")
 	if base == "" {
@@ -139,7 +143,7 @@ var cookieName = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 func (d *Deployer) Check(ctx context.Context) error {
 	if err := core.NeedSettings(map[string]string{
 		"AccountID": d.opts.AccountID, "WorkersToken": d.opts.WorkersToken, "DNSToken": d.opts.DNSToken,
-		"Zone": d.opts.Zone, "Host": d.opts.Host, "Target": d.opts.Target,
+		"Zone": d.opts.Zone, "Host": d.opts.Host,
 	}); err != nil {
 		return err
 	}
@@ -147,8 +151,8 @@ func (d *Deployer) Check(ctx context.Context) error {
 	if !strings.HasSuffix(d.opts.Host, "."+d.opts.Zone) {
 		errs = append(errs, fmt.Errorf("Host %q is not in Zone %q", d.opts.Host, d.opts.Zone))
 	}
-	if !strings.HasPrefix(d.opts.Target, "https://") || !strings.Contains(d.opts.Target, "{env}") {
-		errs = append(errs, fmt.Errorf("Target %q must start with https:// and contain {env}", d.opts.Target))
+	if !strings.HasPrefix(d.opts.AllowedSuffix, ".") || !strings.HasSuffix(d.opts.AllowedSuffix, "."+d.opts.Zone) && d.opts.AllowedSuffix != "."+d.opts.Zone {
+		errs = append(errs, fmt.Errorf("AllowedSuffix %q must start with a dot and be in Zone %q", d.opts.AllowedSuffix, d.opts.Zone))
 	}
 	if !cookieName.MatchString(d.opts.Cookie) {
 		errs = append(errs, fmt.Errorf("Cookie %q is not a valid cookie name", d.opts.Cookie))
@@ -170,27 +174,30 @@ func (d *Deployer) Check(ctx context.Context) error {
 // Script is the relay Worker's source.
 func (d *Deployer) Script() string {
 	cookie, _ := json.Marshal(d.opts.Cookie)
-	target, _ := json.Marshal(d.opts.Target)
-	return `// Hinziel's OAuth relay: sends the browser back to the environment that
-// started the login, named by a cookie its proxy set. Kept in place by
-// Hinziel's deploy/cfoauthrelay; changes made here are overwritten.
+	suffix, _ := json.Marshal(d.opts.AllowedSuffix)
+	return `// An OAuth relay: the provider calls back here for every environment that
+// uses it, and this sends the browser on to the host the login started on,
+// which a cookie names. Kept in place by Hinziel's deploy/cfoauthrelay;
+// changes made here are overwritten.
 const COOKIE = ` + string(cookie) + `;
-const TARGET = ` + string(target) + `;
+const ALLOWED_SUFFIX = ` + string(suffix) + `;
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 export default {
   async fetch(request) {
     const url = new URL(request.url);
-    let env = "";
+    let host = "";
     for (const part of (request.headers.get("Cookie") || "").split(";")) {
       const [name, ...rest] = part.trim().split("=");
-      if (name === COOKIE) env = rest.join("=");
+      if (name === COOKIE) host = rest.join("=").toLowerCase();
     }
-    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(env)) {
-      return new Response("This is the OAuth relay of a Hinziel factory. It didn't find the environment " +
-        "you started the login on: start it there again, within ten minutes.\n",
+    // Only hosts of our own domain, and never the relay itself.
+    if (!HOSTNAME.test(host) || !host.endsWith(ALLOWED_SUFFIX) || host === url.hostname) {
+      return new Response("This is an OAuth relay. It couldn't tell which environment you started " +
+        "the login on: start it there again, within ten minutes.\n",
         { status: 400, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
-    return Response.redirect(TARGET.replace("{env}", env) + url.pathname + url.search, 302);
+    return Response.redirect("https://" + host + url.pathname + url.search, 302);
   },
 };
 `

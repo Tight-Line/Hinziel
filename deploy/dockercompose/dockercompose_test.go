@@ -159,11 +159,11 @@ func TestCheckNamesMissingTools(t *testing.T) {
 
 func TestTLSReturnCookie(t *testing.T) {
 	tls := &TLS{Upstream: "nginx:80", ReturnCookie: &ReturnCookie{Domain: ".example.com", Paths: []string{"/auth/google", "/api/auth/google"}}}
-	conf := tlsConf(tls, "hz-t-1")
+	conf := tlsConf(tls)
 	for _, want := range []string{
 		"location = /auth/google {",
 		"location = /api/auth/google {",
-		`add_header Set-Cookie "hinziel_return=hz-t-1; Domain=.example.com; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax" always;`,
+		`add_header Set-Cookie "oauth_return=$host; Domain=.example.com; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax" always;`,
 		"location / {",
 	} {
 		if !strings.Contains(conf, want) {
@@ -173,7 +173,7 @@ func TestTLSReturnCookie(t *testing.T) {
 	if strings.Count(conf, "proxy_pass $upstream;") != 3 {
 		t.Errorf("every location must proxy:\n%s", conf)
 	}
-	if strings.Contains(tlsConf(&TLS{Upstream: "nginx:80"}, "hz-t-1"), "Set-Cookie") {
+	if strings.Contains(tlsConf(&TLS{Upstream: "nginx:80"}), "Set-Cookie") {
 		t.Error("no cookie without ReturnCookie")
 	}
 	if os.Getenv("HZ_DUMP_NGINX_CONF") != "" {

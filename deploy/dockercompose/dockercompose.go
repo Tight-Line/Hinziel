@@ -84,17 +84,18 @@ type TLS struct {
 	// default network.
 	Network string
 	Port    int // published port; 0 = 443
-	// ReturnCookie makes the proxy name the environment in a cookie when a
-	// login starts, for a shared OAuth callback (deploy/cfoauthrelay).
+	// ReturnCookie makes the proxy name the host a login started on, for a
+	// shared OAuth callback (deploy/cfoauthrelay), when the app can't.
 	ReturnCookie *ReturnCookie
 }
 
 // ReturnCookie is set on responses to the paths that start a login: a
-// cookie on the parent Domain naming the environment, for ten minutes, so
-// the OAuth relay on another host of that domain knows where to send the
-// browser back.
+// cookie on the parent Domain holding the request's host, for ten minutes,
+// so an OAuth relay on another host of that domain knows where to send the
+// browser back. Apps that can set it themselves should; this is for those
+// that can't be changed.
 type ReturnCookie struct {
-	Name   string   // "" = "hinziel_return", as deploy/cfoauthrelay expects
+	Name   string   // "" = "oauth_return", as deploy/cfoauthrelay expects
 	Domain string   // the parent domain, e.g. ".example.com"
 	Paths  []string // exact paths that start a login, e.g. "/auth/google"
 }
@@ -152,7 +153,7 @@ func (d *Deployer) Deploy(ctx context.Context, e *env.Environment, src *deploy.S
 		files = append(files, f)
 	}
 	if d.opts.TLS != nil {
-		f, err := d.writeTLS(ctx, h, genDir, e.Name)
+		f, err := d.writeTLS(ctx, h, genDir)
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +230,7 @@ func (d *Deployer) project(e *env.Environment, repo string) string {
 	return strings.Trim(projectUnsafe.ReplaceAllString(strings.ToLower(e.Name+"-"+repo), "-"), "-")
 }
 
-func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir, envName string) (string, error) {
+func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) (string, error) {
 	t := d.opts.TLS
 	cert, err := os.ReadFile(t.CertFile)
 	if err != nil {
@@ -240,7 +241,7 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir, envName
 		return "", fmt.Errorf("TLS key: %w", err)
 	}
 	dir := genDir + "/tls"
-	for name, data := range map[string][]byte{"cert.pem": cert, "key.pem": key, "nginx.conf": []byte(tlsConf(t, envName))} {
+	for name, data := range map[string][]byte{"cert.pem": cert, "key.pem": key, "nginx.conf": []byte(tlsConf(t))} {
 		if err := h.WriteFile(ctx, dir+"/"+name, data, 0o600); err != nil {
 			return "", err
 		}
@@ -252,7 +253,7 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir, envName
 // tlsConf proxies HTTPS to t.Upstream. The upstream is resolved per request
 // through Docker's DNS, so the proxy starts even before the upstream does.
 // With a ReturnCookie, the paths that start a login also set the cookie.
-func tlsConf(t *TLS, envName string) string {
+func tlsConf(t *TLS) string {
 	const proxy = `        proxy_pass $upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -273,9 +274,9 @@ func tlsConf(t *TLS, envName string) string {
 	if c := t.ReturnCookie; c != nil {
 		name := c.Name
 		if name == "" {
-			name = "hinziel_return"
+			name = "oauth_return"
 		}
-		cookie := fmt.Sprintf("%s=%s; Domain=%s; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax", name, envName, c.Domain)
+		cookie := fmt.Sprintf("%s=$host; Domain=%s; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax", name, c.Domain)
 		for _, p := range c.Paths {
 			fmt.Fprintf(&b, "    location = %s {\n        add_header Set-Cookie %q always;\n%s    }\n", p, cookie, proxy)
 		}
