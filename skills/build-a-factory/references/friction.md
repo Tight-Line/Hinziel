@@ -111,6 +111,15 @@ and what BlankTracker showed.
   `manager-reports` skill over the developer's SSH access. The team keeps
   that replica for agents on purpose. On a hosted factory none of it would
   be there unless the factory sets it up.
+- **The judgement call:** give the agent the narrowest credential that
+  does the job, directly. For BlankTracker that meant the replica's own
+  read-only database URL in `AgentEnv`, not an SSH key to the server that
+  holds the database's keys, even though the repo's skill and `CLAUDE.md`
+  go through that server. A team's own route was built for people on
+  laptops; the factory's agent can often skip a hop. Decide case by case,
+  and say when you deviate from the team's documented route and why.
+  Check the network too: a replica that only trusts known IPs must trust
+  the factory's host.
 - **Since then:** the agent no longer inherits the factory's environment.
   It gets a minimal base, its own credentials and the factory's
   `AgentEnv`. Decide with the team what goes in `AgentEnv` (a read-only
