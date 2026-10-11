@@ -1,9 +1,11 @@
-package hinziel
+package clitest
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/Tight-Line/hinziel"
+	"io"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/Tight-Line/hinziel/dns"
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/internal/envcheck"
 	"github.com/Tight-Line/hinziel/tracker"
 )
 
@@ -52,27 +55,32 @@ type fakeDNS struct{}
 func (fakeDNS) Ensure(context.Context, dns.Record) error { return nil }
 func (fakeDNS) Delete(context.Context, string) error     { return nil }
 
-func validFactory() Factory {
-	return Factory{
+func validFactory() hinziel.Factory {
+	return hinziel.Factory{
 		Name:        "blanktracker",
 		Tracker:     fakeTracker{},
-		Repos:       []Repo{{Name: "app", Forge: fakeForge{}, TargetBranch: "staging"}},
+		Repos:       []hinziel.Repo{{Name: "app", Forge: fakeForge{}, TargetBranch: "staging"}},
 		Agent:       fakeAgent{},
 		Environment: fakeEnv{},
 		DNS:         fakeDNS{},
-		Endpoints: []Endpoint{{
+		Endpoints: []hinziel.Endpoint{{
 			Name: "api",
 			URL:  func(e *env.Environment) string { return "https://" + e.Name + "-api.example.com" },
-			DNS:  HostAddress(0),
+			DNS:  hinziel.HostAddress(0),
 		}},
-		Deployers: []Deployer{{Name: "api", Repo: "app", Deployer: fakeDeployer{}}},
-		Gates:     []Step{StepDeploy},
+		Deployers: []hinziel.Deployer{{Name: "api", Repo: "app", Deployer: fakeDeployer{}}},
+		Gates:     []hinziel.Step{hinziel.StepDeploy},
 	}
+}
+
+// validate runs f's validation, which Run does before anything else.
+func validate(f hinziel.Factory) error {
+	return hinziel.Run(context.Background(), nil, io.Discard, f)
 }
 
 func TestValidateAcceptsValidFactory(t *testing.T) {
 	f := validFactory()
-	if err := f.validate(); err != nil {
+	if err := validate(f); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -81,11 +89,11 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 	f := validFactory()
 	f.Name = "Blank Tracker"
 	f.Agent = nil
-	f.Repos = append(f.Repos, Repo{Name: "app", Forge: fakeForge{}, TargetBranch: "main"})
+	f.Repos = append(f.Repos, hinziel.Repo{Name: "app", Forge: fakeForge{}, TargetBranch: "main"})
 	f.Deployers[0].Repo = "web"
-	f.Gates = []Step{"deploy_everything"}
+	f.Gates = []hinziel.Step{"deploy_everything"}
 
-	err := f.validate()
+	err := validate(f)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -105,7 +113,7 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 func TestValidateRequiresEnvironmentForDeployers(t *testing.T) {
 	f := validFactory()
 	f.Environment = nil
-	if err := f.validate(); err == nil || !strings.Contains(err.Error(), "need an Environment") {
+	if err := validate(f); err == nil || !strings.Contains(err.Error(), "need an Environment") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -113,7 +121,7 @@ func TestValidateRequiresEnvironmentForDeployers(t *testing.T) {
 func TestValidateRequiresDNSProviderForDNSTargets(t *testing.T) {
 	f := validFactory()
 	f.DNS = nil
-	if err := f.validate(); err == nil || !strings.Contains(err.Error(), "no DNS provider") {
+	if err := validate(f); err == nil || !strings.Contains(err.Error(), "no DNS provider") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -121,17 +129,17 @@ func TestValidateRequiresDNSProviderForDNSTargets(t *testing.T) {
 func TestHostAddress(t *testing.T) {
 	e := &env.Environment{Hosts: []env.Host{{Address: "203.0.113.7"}, {Address: "2001:db8::1"}, {Address: "box.example.com"}}}
 	for i, want := range []string{"A", "AAAA", "CNAME"} {
-		if typ, _ := HostAddress(i)(e); typ != want {
+		if typ, _ := hinziel.HostAddress(i)(e); typ != want {
 			t.Errorf("host %d: got %q, want %q", i, typ, want)
 		}
 	}
-	if typ, _ := HostAddress(5)(e); typ != "" {
+	if typ, _ := hinziel.HostAddress(5)(e); typ != "" {
 		t.Errorf("out of range: got %q, want no record", typ)
 	}
 }
 
 func TestRunRejectsDuplicateFactories(t *testing.T) {
-	err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory(), validFactory())
+	err := hinziel.Run(context.Background(), nil, &bytes.Buffer{}, validFactory(), validFactory())
 	if err == nil || !strings.Contains(err.Error(), "duplicate factory name") {
 		t.Fatalf("got %v", err)
 	}
@@ -141,7 +149,7 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 	f := validFactory()
 	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
 	var out bytes.Buffer
-	err := Run(context.Background(), []string{"check"}, &out, f)
+	err := hinziel.Run(context.Background(), []string{"check"}, &out, f)
 	if err == nil {
 		t.Fatal("expected check to fail")
 	}
@@ -150,59 +158,36 @@ func TestRunCheckCallsCheckers(t *testing.T) {
 	}
 }
 
-func TestEnvRecordsMissingVariables(t *testing.T) {
-	resetEnv()
-	t.Setenv("HINZIEL_TEST_PRESENT", "x")
-	Env("HINZIEL_TEST_PRESENT")
-	Env("HINZIEL_TEST_MISSING")
-	Env("HINZIEL_TEST_MISSING")
-
-	got := missingEnvNames()
-	if len(got) != 1 || got[0] != "HINZIEL_TEST_MISSING" {
-		t.Fatalf("got %v", got)
-	}
-	err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory())
-	if err == nil || !strings.Contains(err.Error(), "HINZIEL_TEST_MISSING") {
+func TestRunReportsMissingEnv(t *testing.T) {
+	envcheck.Reset()
+	defer envcheck.Reset()
+	hinziel.Env("HINZIEL_TEST_MISSING")
+	err := hinziel.Run(context.Background(), nil, &bytes.Buffer{}, validFactory())
+	if err == nil || !strings.Contains(err.Error(), "missing environment variables: HINZIEL_TEST_MISSING") {
 		t.Fatalf("got %v", err)
 	}
-	resetEnv()
 }
 
-func TestEnvReadAfterStartupIsReportedAsLate(t *testing.T) {
-	resetEnv()
-	defer resetEnv()
-	if err := Run(context.Background(), nil, &bytes.Buffer{}, validFactory()); err != nil {
+func TestEnvReadAfterRunIsReportedAsLate(t *testing.T) {
+	envcheck.Reset()
+	defer envcheck.Reset()
+	if err := hinziel.Run(context.Background(), nil, &bytes.Buffer{}, validFactory()); err != nil {
 		t.Fatal(err)
 	}
-	if err := lateEnvError(); err != nil {
-		t.Fatalf("nothing read late yet: %v", err)
-	}
-	t.Setenv("HINZIEL_TEST_PRESENT", "x")
-	Env("HINZIEL_TEST_PRESENT") // read late but set: fine
-	Env("HINZIEL_TEST_LATE")
-	if got := missingEnvNames(); len(got) != 0 {
-		t.Errorf("a late read must not count as missing at startup: %v", got)
-	}
-	err := lateEnvError()
-	if err == nil || !strings.Contains(err.Error(), "missing environment variables: HINZIEL_TEST_LATE.") {
+	hinziel.Env("HINZIEL_TEST_LATE")
+	if err := envcheck.LateError(); err == nil || !strings.Contains(err.Error(), "HINZIEL_TEST_LATE") {
 		t.Fatalf("got %v", err)
 	}
-}
-
-func resetEnv() {
-	missingEnv.Lock()
-	missingEnv.started, missingEnv.names, missingEnv.late = false, nil, nil
-	missingEnv.Unlock()
 }
 
 func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
-	resetEnv()
-	defer resetEnv()
-	Env("HINZIEL_TEST_MISSING")
+	envcheck.Reset()
+	defer envcheck.Reset()
+	hinziel.Env("HINZIEL_TEST_MISSING")
 	f := validFactory()
 	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
 	var out bytes.Buffer
-	err := Run(context.Background(), []string{"check"}, &out, f)
+	err := hinziel.Run(context.Background(), []string{"check"}, &out, f)
 	if err == nil {
 		t.Fatal("expected check to fail")
 	}
@@ -219,7 +204,7 @@ func TestRunCheckReportsMissingEnvAndStillChecks(t *testing.T) {
 func TestRunCheckReportsMissingGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	var out bytes.Buffer
-	err := Run(context.Background(), []string{"check"}, &out, validFactory())
+	err := hinziel.Run(context.Background(), []string{"check"}, &out, validFactory())
 	if err == nil || !strings.Contains(out.String(), "FAIL  hinziel: not installed on this host (or not on PATH): git") {
 		t.Fatalf("err %v, output:\n%s", err, out.String())
 	}

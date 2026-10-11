@@ -13,6 +13,7 @@ import (
 
 	"github.com/Tight-Line/hinziel/core"
 	"github.com/Tight-Line/hinziel/internal/engine"
+	"github.com/Tight-Line/hinziel/internal/envcheck"
 	"github.com/Tight-Line/hinziel/internal/store"
 )
 
@@ -34,7 +35,7 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if err := validateAll(factories); err != nil {
 		return err
 	}
-	envChecked()
+	envcheck.Checked()
 	if len(args) > 0 && args[0] == "check" {
 		return check(ctx, out, factories)
 	}
@@ -97,7 +98,7 @@ func validateAll(factories []Factory) error {
 }
 
 func missingEnvError() error {
-	if missing := missingEnvNames(); len(missing) > 0 {
+	if missing := envcheck.Missing(); len(missing) > 0 {
 		return fmt.Errorf("missing environment variables: %s", strings.Join(missing, ", "))
 	}
 	return nil
@@ -132,7 +133,7 @@ func newEngine(out io.Writer, factories []Factory) (*engine.Engine, error) {
 	for i := range factories {
 		projects = append(projects, factories[i].project())
 	}
-	return engine.New(st, projects, engine.Options{Out: out, Config: lateEnvError}), nil
+	return engine.New(st, projects, engine.Options{Out: out, Config: envcheck.LateError}), nil
 }
 
 func usage(out io.Writer) {

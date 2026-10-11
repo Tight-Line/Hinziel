@@ -156,6 +156,15 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+// On a host with nothing installed, Check names the tools it needs.
+func TestCheckNamesMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	err := New(Options{}).Check(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "not installed on this host (or not on PATH): claude") {
+		t.Errorf("want missing claude, got %v", err)
+	}
+}
+
 // TestIntegration runs real Claude Code on a tiny task in a scratch git repo.
 func TestIntegration(t *testing.T) {
 	if os.Getenv("HINZIEL_IT_CLAUDECODE") == "" {

@@ -186,3 +186,13 @@ func TestCheck(t *testing.T) {
 		t.Error("a bad token must fail the check")
 	}
 }
+
+// On a host with nothing installed, Check names the tools it needs,
+// even though the API call fails too (nothing listens at the BaseURL).
+func TestCheckNamesMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	err := New(Options{Worker: "w", Build: "npm run build", BaseURL: "http://127.0.0.1:1"}).Check(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "not installed on this host (or not on PATH): node, npx, sh") {
+		t.Errorf("want missing node, npx, sh, got %v", err)
+	}
+}

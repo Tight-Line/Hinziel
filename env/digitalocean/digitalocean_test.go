@@ -181,6 +181,16 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+// On a host with nothing installed, Check names the tools it needs,
+// even though the API call fails too (nothing listens at the BaseURL).
+func TestCheckNamesMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	err := New(Options{BaseURL: "http://127.0.0.1:1"}).Check(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "not installed on this host (or not on PATH): ssh") {
+		t.Errorf("want missing ssh, got %v", err)
+	}
+}
+
 // TestIntegration creates and destroys a real droplet "skct-<random>". It
 // costs a few cents.
 func TestIntegration(t *testing.T) {

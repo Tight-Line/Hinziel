@@ -783,8 +783,8 @@ there fails the step that read it.
 ### Scenario A: BlankTracker
 
 Every component below exists except `trigger/trellopowerup` (M2).
-[`example_test.go`](./example_test.go) compiles this factory, minus the
-trigger, against the real packages.
+[`examples/blanktracker`](./examples/blanktracker/main.go) compiles this
+factory, minus the trigger, against the real packages.
 
 ```go
 package main

@@ -1,4 +1,7 @@
-package hinziel_test
+// Command blanktracker is the factory of README.md's Scenario A, built from
+// the ready-made components. It keeps the README honest: it's compiled with
+// the rest of the module, so a change that breaks the README breaks the build.
+package main
 
 import (
 	"strings"
@@ -19,9 +22,7 @@ import (
 	"github.com/Tight-Line/hinziel/tracker/trello"
 )
 
-// The factory of README.md's Scenario A, built from the ready-made
-// components. It's compiled, not run: it keeps the README honest.
-func Example_blanktracker() {
+func main() {
 	const (
 		zone          = "blanktracker.com"
 		previewWorker = "blanktracker-frontend-preview"

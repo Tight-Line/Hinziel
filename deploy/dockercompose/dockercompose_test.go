@@ -147,3 +147,12 @@ func TestCheck(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// On a host with nothing installed, Check names the tools it needs.
+func TestCheckNamesMissingTools(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	err := New(Options{}).Check(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "not installed on this host (or not on PATH): ssh") {
+		t.Errorf("want missing ssh, got %v", err)
+	}
+}

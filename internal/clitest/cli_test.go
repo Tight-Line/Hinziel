@@ -1,8 +1,11 @@
-package hinziel
+// Package clitest tests package hinziel from the outside, through Run: Go
+// keeps a package's own tests next to it, and the root stays free of them.
+package clitest
 
 import (
 	"bytes"
 	"context"
+	"github.com/Tight-Line/hinziel"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,29 +26,29 @@ import (
 	"github.com/Tight-Line/hinziel/tracker/trackertest"
 )
 
-func cliFactory(t *testing.T, agentFunc func(context.Context, *agent.Task) (*agent.Outcome, error)) Factory {
+func cliFactory(t *testing.T, agentFunc func(context.Context, *agent.Task) (*agent.Outcome, error)) hinziel.Factory {
 	t.Helper()
 	repo, err := forgetest.NewFake(filepath.Join(t.TempDir(), "app.git"), "main", map[string]string{"README.md": "app\n"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Factory{
+	return hinziel.Factory{
 		Name:        "demo",
 		Tracker:     trackertest.NewFake(tracker.Ticket{Key: "D-1", Title: "Say hello"}),
-		Repos:       []Repo{{Name: "app", Forge: repo, TargetBranch: "main"}},
+		Repos:       []hinziel.Repo{{Name: "app", Forge: repo, TargetBranch: "main"}},
 		Agent:       &agenttest.Fake{Func: agentFunc},
 		Environment: envtest.NewFake(),
-		Endpoints: []Endpoint{{Name: "web", URL: func(e *env.Environment) string {
+		Endpoints: []hinziel.Endpoint{{Name: "web", URL: func(e *env.Environment) string {
 			return "https://" + e.Name + ".preview.test"
 		}}},
-		Deployers: []Deployer{{Name: "web", Repo: "app", Deployer: &deploytest.Fake{}}},
+		Deployers: []hinziel.Deployer{{Name: "web", Repo: "app", Deployer: &deploytest.Fake{}}},
 	}
 }
 
-func runCLI(t *testing.T, f Factory, args ...string) (string, error) {
+func runCLI(t *testing.T, f hinziel.Factory, args ...string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
-	err := Run(context.Background(), args, &out, f)
+	err := hinziel.Run(context.Background(), args, &out, f)
 	return out.String(), err
 }
 
