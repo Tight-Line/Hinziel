@@ -42,6 +42,12 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if len(args) > 0 && args[0] == "check" {
 		return check(ctx, out, factories, args[1:])
 	}
+	// The agent runs these inside a run, with only the environment the
+	// factory gives it: they talk to the run's engine over its socket and
+	// need none of the factory's own variables.
+	if len(args) > 0 && (args[0] == "deploy" || args[0] == "retrieve") {
+		return agentCommand(ctx, out, args[0])
+	}
 	if err := missingEnvError(); err != nil {
 		return err
 	}
@@ -54,8 +60,6 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	case "help", "-h", "--help":
 		usage(out)
 		return nil
-	case "deploy", "retrieve":
-		return agentCommand(ctx, out, cmd)
 	case "env":
 		return fmt.Errorf("%s: not implemented yet (milestone M2)", cmd)
 	}

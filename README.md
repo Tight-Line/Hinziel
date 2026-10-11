@@ -2,20 +2,10 @@
 
 *Specification — draft v0.3*
 
-> **Heinzelmännchen**: in the legend of Cologne, little house spirits who
-> came out at night and did the townsfolk's work while they slept.
->
-> **hinzielen** (German): to aim at, to work toward. Split it and it says the
-> same thing twice: *hin*, toward, and *Ziel*, the goal.
-
-Hinziel is derived from Heinzel and is the stem of *hinzielen*. Hand a ticket
-to a Heinzel before you leave and the work is done when you come back. The
-ticket is the *Ziel*. Everything between it and a reviewed change is the
-*hin*, the way there, and no human has to walk it.
-
-Hinziel doesn't walk it itself. It isn't an agent: it **builds the agent
-that does**, a **software factory** made for one team's tickets, repositories
-and deployment. It comes in two parts:
+Hinziel is a toolkit for building **software factories**: agents made for one
+team's tickets, repositories and deployment. Hand a factory a ticket and it
+comes back as merge requests, deployed to a preview environment for you to
+try. Hinziel comes in two parts:
 
 1. **A Go library for building software factories**: the pipeline, run
    state, interfaces and ready-made components a factory is made of.
@@ -25,6 +15,10 @@ and deployment. It comes in two parts:
 A team uses the skill; the skill uses the library. The library is still an
 ordinary Go library, open to any team that would rather write its factory by
 hand.
+
+> Note: the name is a play on *hinzielen* (German: to aim at, to work toward),
+inspired by the Heinzelmännchen of Cologne, house spirits who did the
+townsfolk's work while they slept.
 
 ### The library
 

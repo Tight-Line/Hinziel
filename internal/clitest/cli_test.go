@@ -21,6 +21,7 @@ import (
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/env/envtest"
 	"github.com/Tight-Line/hinziel/forge/forgetest"
+	"github.com/Tight-Line/hinziel/internal/envcheck"
 	"github.com/Tight-Line/hinziel/internal/gittest"
 	"github.com/Tight-Line/hinziel/tracker"
 	"github.com/Tight-Line/hinziel/tracker/trackertest"
@@ -128,6 +129,21 @@ func TestCLIRejectsUnknownGate(t *testing.T) {
 	_, err := runCLI(t, cliFactory(t, nil), "run", "D-1", "--gate", "deploy_everything")
 	if err == nil || !strings.Contains(err.Error(), "unknown step") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// The agent's environment holds none of the factory's variables, so its
+// commands must not need them.
+func TestCLIAgentCommandsDontNeedTheFactorysEnvironment(t *testing.T) {
+	envcheck.Reset()
+	defer envcheck.Reset()
+	hinziel.Env("HINZIEL_TEST_FACTORY_SECRET") // unset, as in the agent's environment
+	t.Setenv("HINZIEL_SOCKET", "")
+	for _, cmd := range []string{"deploy", "retrieve"} {
+		_, err := runCLI(t, cliFactory(t, nil), cmd)
+		if err == nil || !strings.Contains(err.Error(), "only works inside a run") {
+			t.Errorf("%s: got %v, want it to reach the socket, not stop on missing variables", cmd, err)
+		}
 	}
 }
 
