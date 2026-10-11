@@ -74,6 +74,13 @@ func (c *Client) Do(ctx context.Context, method, path string, query url.Values, 
 	return nil
 }
 
+// RawBody is a request body sent as it is rather than as JSON, such as a
+// multipart upload.
+type RawBody struct {
+	ContentType string
+	Data        []byte
+}
+
 // Raw sends a request and returns a 2xx response for the caller to read and
 // close. Other statuses become a *StatusError.
 func (c *Client) Raw(ctx context.Context, method, path string, query url.Values, body any) (*http.Response, error) {
@@ -86,7 +93,10 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 		u += sep + query.Encode()
 	}
 	var rd io.Reader
-	if body != nil {
+	contentType := "application/json"
+	if raw, ok := body.(RawBody); ok {
+		rd, contentType = bytes.NewReader(raw.Data), raw.ContentType
+	} else if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
@@ -99,7 +109,7 @@ func (c *Client) Raw(ctx context.Context, method, path string, query url.Values,
 	}
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	if c.Auth != nil {
 		c.Auth(req)

@@ -87,8 +87,16 @@ and what BlankTracker showed.
 - **Ask:** who can do it, and how quickly. It becomes a human action per
   environment.
 - **BlankTracker:** two Google redirect URIs per preview. The person added
-  them while the agent worked; `approve` now confirms an action at any
-  time, so doing it early never holds the run up.
+  them while the agent worked, and asked for a way to never do it again.
+  The answer was an OAuth relay (`deploy/cfoauthrelay` with
+  `dockercompose.TLS.ReturnCookie`): one callback host registered once,
+  forwarding to the preview that started the login.
+- **Prefer removing the action to announcing it.** For OAuth login, check
+  whether the app's flow is stateless or keeps its state somewhere that
+  survives one more redirect; if so, use the relay. Only fall back to a
+  human action per environment when nothing can automate it, and then
+  `approve` confirms it at any time, so doing it early never holds the
+  run up.
 
 ## The agent's checks need tooling the preview lacks
 

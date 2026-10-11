@@ -136,7 +136,10 @@ Verify with the calls given; all are read-only.
   `.env` key names) and in which project; production may use another
   project entirely. Offer a dedicated "previews" client; reusing the dev
   client is fine if the person prefers it.
-- Redirect URIs can't be added by API: they are a human action per
+- Redirect URIs can't be added by API. Avoid a human action per preview
+  with the OAuth relay (`deploy/cfoauthrelay`): register its callback
+  URLs once (`https://<relay host>/<callback path>` for each callback the
+  app has) and set the app's redirect host to the relay on every
   preview. Google says changes take from five minutes to a few hours.
 - A consent screen in Testing mode only lets listed test users log in.
 

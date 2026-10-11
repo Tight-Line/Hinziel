@@ -84,6 +84,19 @@ type TLS struct {
 	// default network.
 	Network string
 	Port    int // published port; 0 = 443
+	// ReturnCookie makes the proxy name the environment in a cookie when a
+	// login starts, for a shared OAuth callback (deploy/cfoauthrelay).
+	ReturnCookie *ReturnCookie
+}
+
+// ReturnCookie is set on responses to the paths that start a login: a
+// cookie on the parent Domain naming the environment, for ten minutes, so
+// the OAuth relay on another host of that domain knows where to send the
+// browser back.
+type ReturnCookie struct {
+	Name   string   // "" = "hinziel_return", as deploy/cfoauthrelay expects
+	Domain string   // the parent domain, e.g. ".example.com"
+	Paths  []string // exact paths that start a login, e.g. "/auth/google"
 }
 
 // Exec is a command run with `docker compose exec` in a running service.
@@ -139,7 +152,7 @@ func (d *Deployer) Deploy(ctx context.Context, e *env.Environment, src *deploy.S
 		files = append(files, f)
 	}
 	if d.opts.TLS != nil {
-		f, err := d.writeTLS(ctx, h, genDir)
+		f, err := d.writeTLS(ctx, h, genDir, e.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +229,7 @@ func (d *Deployer) project(e *env.Environment, repo string) string {
 	return strings.Trim(projectUnsafe.ReplaceAllString(strings.ToLower(e.Name+"-"+repo), "-"), "-")
 }
 
-func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) (string, error) {
+func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir, envName string) (string, error) {
 	t := d.opts.TLS
 	cert, err := os.ReadFile(t.CertFile)
 	if err != nil {
@@ -227,7 +240,7 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) 
 		return "", fmt.Errorf("TLS key: %w", err)
 	}
 	dir := genDir + "/tls"
-	for name, data := range map[string][]byte{"cert.pem": cert, "key.pem": key, "nginx.conf": []byte(tlsConf(t.Upstream))} {
+	for name, data := range map[string][]byte{"cert.pem": cert, "key.pem": key, "nginx.conf": []byte(tlsConf(t, envName))} {
 		if err := h.WriteFile(ctx, dir+"/"+name, data, 0o600); err != nil {
 			return "", err
 		}
@@ -236,25 +249,39 @@ func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) 
 	return f, h.WriteFile(ctx, f, []byte(tlsCompose(t, dir)), 0o644)
 }
 
-// tlsConf proxies HTTPS to upstream. The upstream is resolved per request
+// tlsConf proxies HTTPS to t.Upstream. The upstream is resolved per request
 // through Docker's DNS, so the proxy starts even before the upstream does.
-func tlsConf(upstream string) string {
-	return `server {
+// With a ReturnCookie, the paths that start a login also set the cookie.
+func tlsConf(t *TLS, envName string) string {
+	const proxy = `        proxy_pass $upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 600s;
+`
+	var b strings.Builder
+	b.WriteString(`server {
     listen 443 ssl;
     ssl_certificate /etc/nginx/hinziel/cert.pem;
     ssl_certificate_key /etc/nginx/hinziel/key.pem;
     client_max_body_size 0;
     resolver 127.0.0.11 valid=10s;
-    set $upstream http://` + upstream + `;
+    set $upstream http://` + t.Upstream + `;
     location / {
-        proxy_pass $upstream;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_read_timeout 600s;
-    }
-}
-`
+` + proxy + `    }
+`)
+	if c := t.ReturnCookie; c != nil {
+		name := c.Name
+		if name == "" {
+			name = "hinziel_return"
+		}
+		cookie := fmt.Sprintf("%s=%s; Domain=%s; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax", name, envName, c.Domain)
+		for _, p := range c.Paths {
+			fmt.Fprintf(&b, "    location = %s {\n        add_header Set-Cookie %q always;\n%s    }\n", p, cookie, proxy)
+		}
+	}
+	b.WriteString("}\n")
+	return b.String()
 }
 
 func tlsCompose(t *TLS, dir string) string {
@@ -295,6 +322,16 @@ func (d *Deployer) Check(context.Context) error {
 	if t := d.opts.TLS; t != nil {
 		if t.Upstream == "" {
 			errs = append(errs, errors.New("TLS needs an Upstream"))
+		}
+		if c := t.ReturnCookie; c != nil {
+			if !strings.HasPrefix(c.Domain, ".") || len(c.Paths) == 0 {
+				errs = append(errs, errors.New("TLS.ReturnCookie needs a parent Domain starting with a dot and at least one path"))
+			}
+			for _, p := range c.Paths {
+				if !strings.HasPrefix(p, "/") || strings.ContainsAny(p, " ;{}\"") {
+					errs = append(errs, fmt.Errorf("TLS.ReturnCookie: %q is not a plain path", p))
+				}
+			}
 		}
 		for _, f := range []string{t.CertFile, t.KeyFile} {
 			if _, err := os.Stat(f); err != nil {

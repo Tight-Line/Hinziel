@@ -1564,6 +1564,21 @@ someone runs `approve`.
 - **Waiting is per step.** Blocking at provisioning would leave the agent
   idle for something it doesn't need.
 
+**Then the human action went away.** On the first real runs the action
+worked, and it still meant a person in Google Cloud Console for every
+preview. BlankTracker's login is stateless (Socialite's `stateless()`) and
+its redirect URI comes from one setting, so the factory now gives every
+preview the same callback host: `deploy/cfoauthrelay` keeps a small
+Cloudflare Worker on `hz-auth.blanktracker.com`, whose two callback URLs
+were registered once. When a login starts on a preview, Hinziel's TLS
+proxy (`dockercompose.TLS.ReturnCookie`) sets a ten-minute cookie on
+`.blanktracker.com` naming the preview, and the relay sends Google's
+callback there, path and query unchanged. The app needed no changes. Many
+apps log in with Google this way, so the relay is a component, not a
+BlankTracker workaround; an action per environment is the fallback for
+providers and flows it can't serve (state kept in a session cookie on the
+app's own host, say).
+
 ### 12.3 Installing Hinziel on an app that wasn't built for it
 
 **The setup.** BlankTracker as it really is, not as Scenario A first imagined

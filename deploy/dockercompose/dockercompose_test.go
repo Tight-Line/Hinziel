@@ -156,3 +156,40 @@ func TestCheckNamesMissingTools(t *testing.T) {
 		t.Errorf("want missing ssh, got %v", err)
 	}
 }
+
+func TestTLSReturnCookie(t *testing.T) {
+	tls := &TLS{Upstream: "nginx:80", ReturnCookie: &ReturnCookie{Domain: ".example.com", Paths: []string{"/auth/google", "/api/auth/google"}}}
+	conf := tlsConf(tls, "hz-t-1")
+	for _, want := range []string{
+		"location = /auth/google {",
+		"location = /api/auth/google {",
+		`add_header Set-Cookie "hinziel_return=hz-t-1; Domain=.example.com; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax" always;`,
+		"location / {",
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("config lacks %q:\n%s", want, conf)
+		}
+	}
+	if strings.Count(conf, "proxy_pass $upstream;") != 3 {
+		t.Errorf("every location must proxy:\n%s", conf)
+	}
+	if strings.Contains(tlsConf(&TLS{Upstream: "nginx:80"}, "hz-t-1"), "Set-Cookie") {
+		t.Error("no cookie without ReturnCookie")
+	}
+	if os.Getenv("HZ_DUMP_NGINX_CONF") != "" {
+		os.WriteFile(os.Getenv("HZ_DUMP_NGINX_CONF"), []byte(conf), 0o644)
+	}
+
+	certDir := t.TempDir()
+	os.WriteFile(filepath.Join(certDir, "c"), []byte("x"), 0o600)
+	for _, bad := range []*ReturnCookie{
+		{Domain: "example.com", Paths: []string{"/auth/google"}},
+		{Domain: ".example.com"},
+		{Domain: ".example.com", Paths: []string{"/a; return 200"}},
+	} {
+		d := New(Options{TLS: &TLS{CertFile: filepath.Join(certDir, "c"), KeyFile: filepath.Join(certDir, "c"), Upstream: "nginx:80", ReturnCookie: bad}})
+		if err := d.Check(context.Background()); err == nil || !strings.Contains(err.Error(), "ReturnCookie") {
+			t.Errorf("%+v: got %v", bad, err)
+		}
+	}
+}
