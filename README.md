@@ -104,9 +104,11 @@ no tickets or agents involved.
   failed, and re-running a step does not duplicate branches, MRs or droplets.
 - Optional approval gates for teams that don't want full autonomy.
 
-**Working assumption: the agent has everything it needs.** Every agent works
-inside a provisioned environment and has whatever access it needs: tools,
-credentials, the running app or org. A factory keeps its own credentials
+**Working assumption: the agent has everything it needs.** Every agent runs
+on the factory's host and works against a provisioned environment: it
+deploys to it, reaches it over SSH or its tools, and tests it through its
+URLs. It has whatever access it needs: tools, credentials, the running app
+or org. A factory keeps its own credentials
 from the agent (design rule 7), but doesn't sandbox it or limit what its work
 can reach. Limiting that makes every scenario much harder, so it's out of
 scope until we choose to revisit it.
@@ -1279,7 +1281,15 @@ command at a time. It:
 - **executes runs in the background**, one at a time for now; a worker
   pool with a global limit on concurrent runs comes with M2. A run that
   waits (on CI, say) is checked again in the background, so it doesn't hold
-  up the queue. Runs started from the CLI still execute in the foreground;
+  up the queue. Runs started from the CLI still execute in the foreground,
+  outside the queue, so they can run alongside the daemon's.
+
+  The queue is in memory only (64 runs). A run is stored as `queued` when
+  it's submitted, but its place in the queue isn't: after the daemon
+  restarts, queued runs stay `queued` until someone `resume`s them, and
+  the run that was executing is interrupted, also to be resumed by hand.
+  `trigger/trellocomments` replies "started run …" even when the run waits
+  behind another;
 - later, **does the factory's other ongoing work**, such as confirming human
   actions from a trigger and tearing down environments by policy (open
   question 1).
@@ -1396,7 +1406,18 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 5. **Where the agent process runs.** Directly on the factory's host (v1,
    simplest), or in a container per run for isolation between concurrent
    runs? This is an option of the agent component and does not change the
-   interface.
+   interface. BlankTracker showed why it matters. Its instructions ask for
+   `./toolkit check`, which only runs in the repository's local dev stack,
+   so the agent started that stack on the runner and left it running after
+   the run. Its published ports (Postgres, Redis, nginx, …) were open to
+   the internet, because Docker's port publishing bypasses ufw; only a
+   cloud firewall in front of the host closes them. Two such runs at once
+   would also collide: the same fixed host ports, and the same Compose
+   project name (`app`, from `runs/<id>/repos/app`), so one run's commands
+   could act on the other's containers. A container per run fixes all
+   three. Running the agent in the environment instead fits only
+   environments that are a single machine, and moves the agent's
+   credentials onto a host that runs unreviewed code.
 6. **Giving testers access without leaking logins.** A Salesforce "open org"
    URL (`sf org open --url-only`) contains a live session, so it must not be
    posted to chat. Options: create a tester user with a generated password and
