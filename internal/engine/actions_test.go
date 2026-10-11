@@ -90,6 +90,9 @@ func TestActionIsAnnouncedEarlyAndHoldsBackItsStep(t *testing.T) {
 	if last := comments[len(comments)-1]; !strings.Contains(last.Body, "- [x] Allow Google login") {
 		t.Errorf("publish must list the confirmed action: %q", last.Body)
 	}
+	if body := f.api.Input(cr.ID).Description.Body; !strings.Contains(body, "- [x] Allow Google login") {
+		t.Errorf("publish must update the MR description with the confirmed action: %q", body)
+	}
 	if n := len(eventsOf(f, notify.EventRunActionRequired)); n != 1 {
 		t.Errorf("announced %d times, want once", n)
 	}

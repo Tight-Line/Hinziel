@@ -409,24 +409,15 @@ func (x *execution) openChangeRequests(ctx context.Context) error {
 	if x.r.ChangeRequests == nil {
 		x.r.ChangeRequests = map[string]*forge.ChangeRequest{}
 	}
-	inputs := map[string]forge.ChangeRequestInput{}
 	for _, cfg := range x.p.Repos {
 		if _, changed := x.r.Commits[cfg.Name]; !changed {
 			continue
 		}
-		in := forge.ChangeRequestInput{
-			SourceBranch: x.r.Branch,
-			TargetBranch: cfg.TargetBranch,
-			Title:        x.r.Ticket.Key + ": " + x.r.Ticket.Title,
-			Description:  changeRequestMessage(x.r),
-			Draft:        x.p.Settings.DraftChangeRequests,
-		}
-		cr, err := cfg.Forge.OpenChangeRequest(ctx, in)
+		cr, err := cfg.Forge.OpenChangeRequest(ctx, x.changeRequestInput(cfg, false))
 		if err != nil {
 			return fmt.Errorf("repo %s: %w", cfg.Name, err)
 		}
 		x.r.ChangeRequests[cfg.Name] = cr
-		inputs[cfg.Name] = in
 		if err := x.save(ctx); err != nil {
 			return err
 		}
@@ -441,21 +432,35 @@ func (x *execution) openChangeRequests(ctx context.Context) error {
 		if !ok {
 			continue
 		}
-		related := relatedMessage(x.r, cfg.Name)
 		if u, ok := cfg.Forge.(forge.ChangeRequestUpdater); ok {
-			in := inputs[cfg.Name]
-			in.Description.Body += "\n\n" + related.Body
-			in.Description.Links = append(in.Description.Links, related.Links...)
-			if err := u.UpdateChangeRequest(ctx, cr, in); err != nil {
+			if err := u.UpdateChangeRequest(ctx, cr, x.changeRequestInput(cfg, true)); err != nil {
 				return fmt.Errorf("repo %s: %w", cfg.Name, err)
 			}
 			continue
 		}
-		if err := cfg.Forge.CommentChangeRequest(ctx, cr, related); err != nil {
+		if err := cfg.Forge.CommentChangeRequest(ctx, cr, relatedMessage(x.r, cfg.Name)); err != nil {
 			return fmt.Errorf("repo %s: %w", cfg.Name, err)
 		}
 	}
 	return nil
+}
+
+// changeRequestInput describes the change request of one repo as the run
+// stands now; with related, it links the run's other change requests.
+func (x *execution) changeRequestInput(cfg Repo, related bool) forge.ChangeRequestInput {
+	in := forge.ChangeRequestInput{
+		SourceBranch: x.r.Branch,
+		TargetBranch: cfg.TargetBranch,
+		Title:        x.r.Ticket.Key + ": " + x.r.Ticket.Title,
+		Description:  changeRequestMessage(x.r),
+		Draft:        x.p.Settings.DraftChangeRequests,
+	}
+	if related {
+		rel := relatedMessage(x.r, cfg.Name)
+		in.Description.Body += "\n\n" + rel.Body
+		in.Description.Links = append(in.Description.Links, rel.Links...)
+	}
+	return in
 }
 
 func (x *execution) publish(ctx context.Context) error {
@@ -464,6 +469,14 @@ func (x *execution) publish(ctx context.Context) error {
 		cr, ok := x.r.ChangeRequests[cfg.Name]
 		if !ok {
 			continue
+		}
+		// The description was written when the change request was opened;
+		// human actions confirmed since then would still show as pending.
+		if u, ok := cfg.Forge.(forge.ChangeRequestUpdater); ok {
+			in := x.changeRequestInput(cfg, len(x.r.ChangeRequests) > 1)
+			if err := u.UpdateChangeRequest(ctx, cr, in); err != nil {
+				return fmt.Errorf("repo %s: %w", cfg.Name, err)
+			}
 		}
 		if err := cfg.Forge.CommentChangeRequest(ctx, cr, msg); err != nil {
 			return fmt.Errorf("repo %s: %w", cfg.Name, err)
