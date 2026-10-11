@@ -1060,6 +1060,15 @@ and works in two phases.
    [environment model](#learning-how-the-app-is-deployed). Read the rest
    from the repos (`CLAUDE.md`, contributing guides) and ask about what's
    left: where tickets live, which domains, who should hear about what.
+   Ask too **what the team's own agents can reach today**, and which of it
+   the factory's agent should get: a read-only replica of production
+   data, internal APIs, MCP servers, the skills in the repo and the access
+   they assume. A developer's agent finds these through the developer's own
+   SSH config and credentials; the factory's agent, on its own host, gets
+   only what the factory gives it, so each one is wired in on purpose or
+   left out on purpose. (BlankTracker's agent answered a ticket's question
+   about real data from the production replica the team keeps for agents,
+   through a repo skill that reaches it over the developer's SSH access.)
 2. **Choose components.** Use ready-made ones where they fit; name any that
    must be written.
 3. **List everything needed from people**, in one message. For each item:
