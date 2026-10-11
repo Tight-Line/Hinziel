@@ -293,3 +293,13 @@ func TestRunCheckWithSelectorOnlyNotesMissingEnv(t *testing.T) {
 		t.Errorf("unexpected output:\n%s", out.String())
 	}
 }
+
+func TestValidateRejectsBadAgentEnv(t *testing.T) {
+	for _, name := range []string{"", "A=B", "HINZIEL_SOCKET"} {
+		f := validFactory()
+		f.AgentEnv = map[string]string{name: "x"}
+		if err := validate(f); err == nil || !strings.Contains(err.Error(), "AgentEnv") {
+			t.Errorf("AgentEnv %q: got %v", name, err)
+		}
+	}
+}

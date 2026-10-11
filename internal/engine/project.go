@@ -61,6 +61,8 @@ type Settings struct {
 	Gates               []string
 	DisabledSteps       []string
 	DraftChangeRequests bool
+	// AgentEnv is what the agent's process gets on top of baseAgentEnv.
+	AgentEnv map[string]string
 }
 
 // Step names, in pipeline order.

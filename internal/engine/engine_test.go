@@ -584,3 +584,32 @@ func TestConfigErrorFailsTheAgentsDeploy(t *testing.T) {
 		t.Fatal("expected the run to fail")
 	}
 }
+
+// The agent gets a minimal base, what the factory declares and Hinziel's
+// own variables; nothing else from the factory's environment.
+func TestAgentGetsOnlyDeclaredEnvironment(t *testing.T) {
+	t.Setenv("HINZIEL_TEST_FACTORY_SECRET", "do-not-leak")
+	t.Setenv("LC_TIME", "C")
+	f := newFixture(t)
+	f.project.Settings.AgentEnv = map[string]string{"REPLICA_URL": "postgres://ro@replica/app"}
+	f.agentChangesAPI()
+	if _, err := f.start(); err != nil {
+		t.Fatal(err)
+	}
+	task := f.agent.Tasks()[0]
+	for name, want := range map[string]string{
+		"PATH":        os.Getenv("PATH"),
+		"LC_TIME":     "C",
+		"REPLICA_URL": "postgres://ro@replica/app",
+		"HINZIEL_BIN": "/usr/local/bin/shop-factory",
+	} {
+		if got := envVar(&task, name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+	for _, kv := range task.Env {
+		if strings.Contains(kv, "do-not-leak") {
+			t.Errorf("the factory's own variable reached the agent: %s", kv)
+		}
+	}
+}

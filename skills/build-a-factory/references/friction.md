@@ -111,6 +111,11 @@ and what BlankTracker showed.
   `manager-reports` skill over the developer's SSH access. The team keeps
   that replica for agents on purpose. On a hosted factory none of it would
   be there unless the factory sets it up.
+- **Since then:** the agent no longer inherits the factory's environment.
+  It gets a minimal base, its own credentials and the factory's
+  `AgentEnv`. Decide with the team what goes in `AgentEnv` (a read-only
+  database URL, say), and keep the factory's own secrets in a file the
+  agent's user can't read (on a server: root-owned, loaded by systemd).
 
 ## Plan, permission and policy limits
 

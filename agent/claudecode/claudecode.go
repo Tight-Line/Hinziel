@@ -22,8 +22,11 @@
 //     once with a Claude subscription; or ANTHROPIC_API_KEY, from
 //     https://console.anthropic.com → API keys. On a desktop where you're
 //     already logged in to Claude Code, neither is needed.
-//   - Whatever the agent itself needs for the project, such as SSH access to
-//     environments, comes through the factory's environment.
+//   - Whatever the agent itself needs for the project comes through the
+//     factory's AgentEnv: the agent gets nothing else from the factory's
+//     environment. Claude Code's own credentials (the variables above, and
+//     ANTHROPIC_BASE_URL and CLAUDE_CONFIG_DIR) are passed on by this
+//     component.
 package claudecode
 
 import (
@@ -126,7 +129,7 @@ func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome
 
 	cmd := exec.CommandContext(ctx, cmdline[0], args...)
 	cmd.Dir = dir
-	cmd.Env = append(append([]string{}, task.Env...), "HINZIEL_OUTCOME="+outcomePath)
+	cmd.Env = append(append(append([]string{}, task.Env...), credentials()...), "HINZIEL_OUTCOME="+outcomePath)
 	cmd.Stdin = strings.NewReader(task.Prompt)
 	stderr := &tailWriter{max: 4096}
 	cmd.Stderr = stderr
@@ -309,3 +312,17 @@ func (t *tailWriter) Write(p []byte) (int, error) {
 }
 
 func (t *tailWriter) String() string { return string(t.buf) }
+
+// credentialVars are Claude Code's own settings, passed on from the
+// factory's environment: the engine gives the agent only a minimal base.
+var credentialVars = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"}
+
+func credentials() []string {
+	var out []string
+	for _, name := range credentialVars {
+		if v := os.Getenv(name); v != "" {
+			out = append(out, name+"="+v)
+		}
+	}
+	return out
+}

@@ -686,7 +686,12 @@ These rules keep the interfaces from fighting each other:
    such (`core.NeedSettings`), not as whatever the API says about it.
    That keeps a factory a single readable expression.
 7. **The engine owns the workflow; the agent owns the work.** The agent has
-   full access (see the working assumption in §1). It commits and pushes, but
+   full access to its work (see the working assumption in §1), but not to
+   the factory's credentials: its process gets a minimal environment (PATH,
+   HOME, locale), the agent component's own credentials and what the
+   factory declares in `AgentEnv`, nothing else. On Linux the factory also
+   makes itself non-dumpable, so the agent can't read the factory's
+   environment from `/proc`. The agent commits and pushes, but
    **only to its own run branch**, and it deploys only through the `deploy`
    command. The engine creates the branch, makes the final commit and push
    (`finalize_branch`), opens the MRs and owns the final deploy. That keeps
@@ -1441,8 +1446,9 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     regulated organisations that won't grant an agent full access (12.7).
     Options, cheapest first: start runs only from trusted people (the
     trigger already decides that), but treat ticket text as untrusted
-    anyway; pass the agent only the variables it needs (the engine passes
-    its whole environment today); run the agent in its own container per
+    anyway; pass the agent only the variables it needs (done: `AgentEnv`
+    and a minimal base, though files the factory's user can read stay
+    readable to the agent); run the agent in its own container per
     run, with only the environment's access (D2) and a push token for the
     run's repositories. The last is the real answer, and an option of the
     agent component (question 5), not an interface change.

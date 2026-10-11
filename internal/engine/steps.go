@@ -319,7 +319,7 @@ func (x *execution) implement(ctx context.Context) error {
 		Ticket:      x.r.Ticket,
 		Environment: x.r.Environment,
 		Log:         x.log,
-		Env: append(os.Environ(),
+		Env: agentEnv(x.p.Settings.AgentEnv,
 			"HINZIEL_BIN="+x.e.opts.Bin,
 			"HINZIEL_RUN_ID="+string(x.r.ID),
 			"HINZIEL_SOCKET="+srv.path,

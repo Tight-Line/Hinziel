@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 
 	"github.com/Tight-Line/hinziel/agent"
 	"github.com/Tight-Line/hinziel/deploy"
@@ -48,7 +49,13 @@ type Factory struct {
 	// that Hinziel can't, such as registering its URLs with a third party.
 	// They're announced right after provisioning (run.action_required) and,
 	// with Before set, hold the run back before that step until approved.
-	EnvironmentActions  func(e *env.Environment) []env.Action
+	EnvironmentActions func(e *env.Environment) []env.Action
+	// AgentEnv are environment variables the agent gets, such as a read-only
+	// database URL for looking up real data. Nothing else from the factory's
+	// environment reaches the agent, its credentials least of all: only a
+	// minimal base (PATH, HOME, locale, …) and the agent component's own
+	// credentials. Read the values with Env while building the Factory.
+	AgentEnv            map[string]string
 	Gates               []Step // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step
 	DraftChangeRequests bool
@@ -194,6 +201,11 @@ func (f *Factory) validate() error {
 	}
 
 	triggers := map[string]bool{}
+	for name := range f.AgentEnv {
+		if name == "" || strings.ContainsAny(name, "= \t\n") || strings.HasPrefix(name, "HINZIEL_") {
+			bad("AgentEnv: %q is not a variable name the agent can get (HINZIEL_* are Hinziel's own)", name)
+		}
+	}
 	for i, t := range f.Triggers {
 		switch {
 		case !nameRE.MatchString(t.Name):

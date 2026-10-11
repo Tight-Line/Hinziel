@@ -21,6 +21,7 @@ func (f *Factory) project() *engine.Project {
 			Gates:               stepNames(f.Gates),
 			DisabledSteps:       stepNames(f.DisabledSteps),
 			DraftChangeRequests: f.DraftChangeRequests,
+			AgentEnv:            f.AgentEnv,
 		},
 	}
 	for _, r := range f.Repos {
