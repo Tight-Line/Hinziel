@@ -1040,8 +1040,11 @@ picks up the repo's own `AGENTS.md` / `CLAUDE.md` as usual.
 ## 6. Building a factory with an agent
 
 Teams shouldn't have to read this document. Upstream Hinziel ships a
-**build-a-factory guide and a Claude skill**: point an agent at a team's
-repositories and tools, and it builds, tests and hands over their factory.
+**build-a-factory guide and a Claude skill**
+([`skills/build-a-factory`](./skills/build-a-factory/SKILL.md), a first
+draft): point an agent at a team's repositories and tools, and it builds,
+tests and hands over their factory. This section is the outline; the skill
+holds the method in full.
 The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§5).
 
 Two parts carry most of the friction. **Reproducing the team's environment**
