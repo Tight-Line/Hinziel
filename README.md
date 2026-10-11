@@ -46,9 +46,19 @@ own code implementing the same interface. The compiler checks the wiring.
 
 The coding agent (Claude Code, OpenHands, …) is a component like any other.
 Hinzele's value is the pipeline, the run state, the interfaces, and a growing
-**library of ready-made components**. Its killer feature is a
-**build-a-factory skill** (§6): an agent that interviews a team, writes their
-factory, and tests it end to end, so a team never has to learn Hinzele itself.
+**library of ready-made components**.
+
+**Its killer feature is a new environment whenever you need one.** Most teams
+run a handful of environments (production, staging, perhaps a shared dev),
+and standing up another one is a project they rarely take on. The hard part
+is knowing how the app actually gets deployed, and that knowledge is tacit,
+scattered and often partly wrong. Hinzele's **build-a-factory skill** (§6)
+goes into a team's repositories and running environments, works out how the
+app is really deployed, and reproduces it, so that every ticket gets an
+environment of its own. It then writes the rest of the factory and tests it
+end to end, so a team never has to learn Hinzele itself. A team that only
+wants the environments can stop there: `env up` gives them a fresh one on
+demand, with no tickets or agents involved.
 
 ---
 
@@ -1002,9 +1012,12 @@ Teams shouldn't have to read this document. Upstream Hinzele ships a
 repositories and tools, and it builds, tests and hands over their factory.
 The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§5).
 
-Collecting credentials is the part with the most friction, and a missing one
-stalls everything after it. So the skill settles all of them **before it
-writes any code**, and works in two phases.
+Two parts carry most of the friction. **Reproducing the team's environment**
+is the hardest part and the most valuable one, and it has its own section
+below ([Learning how the app is deployed](#learning-how-the-app-is-deployed)).
+**Collecting credentials** is the most tedious part, and a missing one stalls
+everything after it. The skill settles both **before it writes any code**,
+and works in two phases.
 
 ### Phase 1: plan and requirements (no code yet)
 
@@ -1012,11 +1025,11 @@ writes any code**, and works in two phases.
    several? A monorepo gets the factory in a directory of it; anything else
    gets a dedicated factory repository (§5). With several, ask which repos
    make up the system and start from the one that knows how they run
-   together (an infra, deploy or platform repo), if there is one. Then read
-   the team's repos (compose files, CI config,
-   `package.json`, deploy scripts, `.env.example`, `CLAUDE.md`) and ask about
-   the rest: where tickets live, how and where things are deployed, which
-   domains, who should hear about what.
+   together (an infra, deploy or platform repo), if there is one. Then work
+   out how the app is deployed and write down the
+   [environment model](#learning-how-the-app-is-deployed). Read the rest
+   from the repos (`CLAUDE.md`, contributing guides) and ask about what's
+   left: where tickets live, which domains, who should hear about what.
 2. **Choose components.** Use ready-made ones where they fit; name any that
    must be written.
 3. **List everything needed from people**, in one message. For each item:
@@ -1035,8 +1048,8 @@ writes any code**, and works in two phases.
      surprised by them later.
 4. **Ask for confirmation**, in this shape:
 
-   > Here's my plan: (components, where previews run, what triggers runs,
-   > who gets notified). Here's what I need from you and how to get each
+   > Here's my plan: (components, the environment model and how a preview
+   > differs from your staging, what triggers runs, who gets notified). Here's what I need from you and how to get each
    > one: (the list). I'll write `~/.config/hinzele/<factory>.env` with a
    > commented placeholder for every value, so you only fill it in. Shall I
    > proceed to build?
@@ -1053,13 +1066,79 @@ writes any code**, and works in two phases.
    credential and missing tool at once, so the person can fill the file in
    any order, and the skill tells them what's still missing.
 7. **Bring up an environment** for the target branches alone with `env up`,
-   and iterate until it provisions, deploys and answers on its endpoint URLs.
+   and iterate until it provisions, deploys and passes the
+   [parity check](#learning-how-the-app-is-deployed).
 8. **Prove the whole flow.** Ask for a small test feature, run it as a real
    ticket, and verify the result together: branch, MRs, a working environment
    with the change, notifications. Fix and repeat until it works.
-9. **Hand over** the factory, with a short README of what was built, every
-   credential it uses and how to rotate it, and any components worth
-   contributing upstream.
+9. **Hand over** the factory, with a short README of what was built, the
+   environment model, every credential it uses and how to rotate it, and any
+   components worth contributing upstream.
+
+### Learning how the app is deployed
+
+Writing the tracker, forge and agent parts of a factory is mostly
+mechanical. Reproducing an environment is not: the knowledge of how the app
+actually gets deployed is tacit, scattered and often partly wrong. BlankTracker
+is the easy case. Its deploy scripts are in the repository and its owner
+could explain the rest. Most teams have none of that written down, and this
+is where the skill earns its keep.
+
+**Dig through the evidence, layer by layer.** Each layer is less reliable
+than the one before it, and the skill reads all of them:
+
+1. **Declared infrastructure**: Terraform, Helm charts, compose files,
+   Kubernetes manifests, `wrangler` and similar configs.
+2. **Procedures**: CI pipelines and deploy scripts. They show what really
+   runs, in what order, with which variables, and what runs after a deploy
+   (migrations, cache warm-ups, seeding).
+3. **The running environments**, inspected **read-only**: DNS records,
+   machines and their sizes, running containers and their environment,
+   cron jobs, a namespace dump, the cloud console's resources. This is where
+   the steps someone once did by hand turn up.
+4. **People.** What the evidence doesn't settle becomes a question for the
+   user, with a recommended answer. The skill never fills a gap with a
+   silent default.
+
+**What differs between environments is the template.** Comparing staging
+with production shows what varies per environment (hostnames, databases,
+keys, sizes, feature flags) and what is fixed. The varying parts become the
+preview's parameters. A team with a single environment gives no such
+comparison, and the skill must say so and ask more questions, not guess.
+
+**Write the environment model before reproducing it.** It is an inventory of
+every service, what it depends on, where each piece of its configuration
+comes from, its external integrations, where its data comes from, and every
+step done by hand. The skill reasons from it, the user confirms it in Phase 1,
+and it stays in the factory repository. For many teams it is the first
+written description of their own deployment, and worth having even without
+the factory.
+
+The model also records what a preview needs that staging doesn't have.
+These are the friction points we already know of:
+
+- **hostnames baked into the app**: CORS, cookie domains, OAuth redirect URIs;
+- **where preview data comes from**: seeds, fixtures, a sanitised dump;
+- **side effects a preview must not cause**: paid APIs, emails to real
+  people, cron jobs, webhooks into shared systems;
+- **resources shared between environments**: one database, queue or bucket
+  that a preview must not write to;
+- **setup only a person can do**, which becomes a
+  [human action](#human-actions);
+- **secrets in the wrong places**: real keys in `.env.example` or in CI
+  variables shared with production.
+
+**Check parity, not just liveness.** An environment that answers on its URLs
+isn't necessarily faithful to the original. The skill checks a preview
+against the environment it copies: the same endpoints respond, a user can
+log in, the team's smoke or end-to-end tests pass, and every background job
+and integration either works or is switched off on purpose, as the model
+says.
+
+**Touch nothing the factory didn't create.** Inspecting live environments
+needs broad read access next to production. The skill only reads existing
+environments. The components it chooses follow the same rule when they
+write, as `dns/cloudflare` does with its `hz-*` names.
 
 What makes this work is that a factory is small, typed Go code with
 conformance suites to check it against, and that every component documents
