@@ -888,8 +888,10 @@ func main() {
 			}),
 		}},
 		Agent: claudecode.New(claudecode.Options{Model: "claude-opus-5-5", MaxTurns: 200}),
-		Instructions: "Run `./toolkit check` before you finish. Google login doesn't work for you on the " +
-			"environment: log in with a Sanctum token created with `artisan tinker` over SSH.",
+		Instructions: "Run `./toolkit check` before you finish. It runs in the repository's dev stack on " +
+			"this host, not on the environment, and the stack is stopped after you finish. Google login " +
+			"works on the environment, but not for you: you have no Google account there, so log in with " +
+			"a Sanctum token created with `php artisan tinker` in the app container over SSH.",
 		EnvName: func(t *tracker.Ticket) string { return "hz-" + strings.ToLower(t.Key) }, // Trello shortLink
 
 		Environment: digitalocean.New(digitalocean.Options{
