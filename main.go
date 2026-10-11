@@ -55,7 +55,7 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 		return nil
 	case "deploy", "retrieve":
 		return agentCommand(ctx, out, cmd)
-	case "daemon", "env":
+	case "env":
 		return fmt.Errorf("%s: not implemented yet (milestone M2)", cmd)
 	}
 
@@ -76,6 +76,8 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 		return c.withRun(ctx, args, c.eng.Approve)
 	case "cancel":
 		return c.withRun(ctx, args, c.eng.Cancel)
+	case "daemon":
+		return c.daemon(ctx, args)
 	}
 	return fmt.Errorf("unknown command %q (try 'help')", cmd)
 }
@@ -154,7 +156,8 @@ Commands:
   check [--factory F] [component]...
                                  test credentials and the tools this host needs;
                                  components as listed by check, e.g. tracker, repo, "deployer api"
-  daemon                         run triggers and execute runs continuously (not yet)
+  daemon [--listen ADDR]         run the factories' triggers and execute the runs they start,
+                                 one at a time, until Ctrl-C
   env up | list | destroy        manage environments (not yet)
 
 Used by the agent inside a run (found via $HINZIEL_SOCKET):

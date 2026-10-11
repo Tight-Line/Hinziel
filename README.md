@@ -143,7 +143,7 @@ harder, so it's out of scope until we choose to revisit it.
 | Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
 | Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
 | Human steps | add the environment's OAuth redirect URIs in Google Cloud Console | — | — | — |
-| Trigger | CLI + Trello Power-Up button | CLI | CLI (Jira trigger later) | Jira webhook |
+| Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook |
 | Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
 
 Any design decision that makes one column awkward is wrong.
@@ -572,8 +572,8 @@ DNS and change requests are idempotent by name. What's new:
    comment listing what this iteration changed.
 6. **Starting one.** From the CLI, `run <ticket>` on a ticket whose last
    run succeeded is an iteration, if there is new feedback. With the daemon,
-   a tracker webhook (`trigger/trellowebhook`, Trello's webhooks on the
-   board's comments) starts one as soon as someone comments. A comment that
+   the comment trigger (`trigger/trellocomments`, which already starts first
+   runs) starts one as soon as someone comments. A comment that
    arrives while a run is in progress is picked up when it ends.
 
 This is also the answer to open question 4: a new run continues the
@@ -788,9 +788,9 @@ there fails the step that read it.
 
 ### Scenario A: BlankTracker
 
-Every component below exists except `trigger/trellopowerup` (M2).
+Every component below exists.
 [`examples/blanktracker`](./examples/blanktracker/main.go) compiles this
-factory, minus the trigger, against the real packages.
+factory against the real packages.
 
 ```go
 package main
@@ -813,7 +813,7 @@ import (
 	"github.com/Tight-Line/hinziel/notify/ticket"
 	"github.com/Tight-Line/hinziel/tracker"
 	"github.com/Tight-Line/hinziel/tracker/trello"
-	"github.com/Tight-Line/hinziel/trigger/trellopowerup"
+	"github.com/Tight-Line/hinziel/trigger/trellocomments"
 )
 
 const (
@@ -941,9 +941,11 @@ func main() {
 			})},
 		},
 
-		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellopowerup.New(trellopowerup.Options{ // M2
-			APIKey: hinziel.Env("TRELLO_POWERUP_API_KEY"),
-			Boards: []string{"FbGOL7Wb"}, // only cards on these boards can start a run
+		// "@hinzielsoftwarefactory implement" in a comment on a card starts a run.
+		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
+			APIKey: hinziel.Env("TRELLO_API_KEY"),
+			Token:  hinziel.Env("TRELLO_TOKEN"),
+			Board:  "FbGOL7Wb",
 		})}},
 		Notifiers: []hinziel.Notifier{
 			{On: notify.Problems, Notifier: ticket.New(board)}, // failures, questions and actions, on the card
@@ -1207,7 +1209,7 @@ learns from.
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
                                        # components: hinziel, tracker, agent, repo, environment, dns, deployer,
                                        # trigger, notifier, or one by name ("deployer api")
-<factory> daemon                       # run triggers and execute runs continuously (M2)
+<factory> daemon [--listen ADDR]       # run triggers and execute the runs they start, one at a time
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list                     # (M6)
@@ -1266,17 +1268,19 @@ try the CLI without any accounts.
 
 ### The daemon
 
-*Planned for M2.* `daemon` is the factory running continuously, as opposed
-to one CLI command at a time. It:
+`daemon` is the factory running continuously, as opposed to one CLI
+command at a time. It:
 
 - **runs the triggers.** Some receive HTTP: webhooks from GitLab, GitHub,
   Jira or Slack, or the Trello Power-Up's button. Each one's handlers are
-  mounted under `/triggers/<factory>/<trigger>/`. Others are pollers, such as
-  "look for Jira tickets labelled `hinziel` every five minutes", which need
-  no inbound traffic at all;
-- **executes runs in the background**, with a worker pool and a global limit
-  on concurrent runs. Runs started from the CLI still execute in the
-  foreground;
+  mounted under `/triggers/<factory>/<trigger>/`, served on `--listen`.
+  Others are pollers, such as `trigger/trellocomments` (a comment
+  `@<member> implement` on a card), which need no inbound traffic at all,
+  so the daemon can run on a laptop;
+- **executes runs in the background**, one at a time for now; a worker
+  pool with a global limit on concurrent runs comes with M2. A run that
+  waits (on CI, say) is checked again in the background, so it doesn't hold
+  up the queue. Runs started from the CLI still execute in the foreground;
 - later, **does the factory's other ongoing work**, such as confirming human
   actions from a button and tearing down environments by policy (open
   question 1).
@@ -1365,9 +1369,9 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) + `trigger/trellopowerup` (button, badges, confirming actions) as the first HTTP trigger; `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
+| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists) + `trigger/trellopowerup` (button, badges, confirming actions) as the first HTTP trigger; `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
-| M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, `trigger/trellowebhook` |
+| M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M6 | Gates/approve, `env list/destroy`, hardening |
 | M7 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |

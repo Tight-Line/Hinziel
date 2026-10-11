@@ -20,6 +20,7 @@ import (
 	"github.com/Tight-Line/hinziel/notify/ticket"
 	"github.com/Tight-Line/hinziel/tracker"
 	"github.com/Tight-Line/hinziel/tracker/trello"
+	"github.com/Tight-Line/hinziel/trigger/trellocomments"
 )
 
 func main() {
@@ -104,6 +105,9 @@ func main() {
 				},
 			})},
 		},
+		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
+			APIKey: hinziel.Env("TRELLO_API_KEY"), Token: hinziel.Env("TRELLO_TOKEN"), Board: "FbGOL7Wb",
+		})}},
 		Notifiers: []hinziel.Notifier{
 			{On: notify.Problems, Notifier: ticket.New(board)},
 			{On: []notify.EventType{notify.EventRunActionRequired}, Notifier: slack.New(hinziel.Env("SLACK_OPS_WEBHOOK"))},
