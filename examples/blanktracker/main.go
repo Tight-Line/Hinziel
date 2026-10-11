@@ -28,6 +28,7 @@ func main() {
 		zone          = "blanktracker.com"
 		previewWorker = "blanktracker-frontend-preview"
 		workers       = "blanktracker" // the account's workers.dev subdomain
+		oauthRelay    = "https://auth-relay." + zone
 	)
 	previewURL := func(suffix string) func(*env.Environment) string {
 		return func(e *env.Environment) string { return "https://" + e.Name + suffix + "." + zone }
@@ -62,15 +63,6 @@ func main() {
 			{Name: "nova", URL: previewURL("-nova"), DNS: hinziel.HostAddress(0)},
 			{Name: "web", URL: func(e *env.Environment) string { return cfworkers.PreviewURL(e.Name, previewWorker, workers) }},
 		},
-		EnvironmentActions: func(e *env.Environment) []env.Action {
-			return []env.Action{{
-				ID:    "google-oauth",
-				Title: "Allow Google login on " + e.Name,
-				Body: "Add these authorized redirect URIs to the **BlankTracker previews** OAuth client:\n\n" +
-					"- " + e.Endpoints["api"] + "/auth/google/callback\n- " + e.Endpoints["api"] + "/api/auth/google/callback\n",
-				Before: string(hinziel.StepPublish),
-			}}
-		},
 		Deployers: []hinziel.Deployer{
 			{Name: "api", Repo: "app", Deployer: dockercompose.New(dockercompose.Options{
 				Files:    []string{"vibe.docker-compose.yaml"},
@@ -80,12 +72,13 @@ func main() {
 					return map[string]string{
 						"APP_URL":              e.Endpoints["api"],
 						"FRONTEND_URL":         e.Endpoints["web"],
-						"GOOGLE_REDIRECT_HOST": e.Endpoints["api"],
+						"GOOGLE_REDIRECT_HOST": oauthRelay,
 					}
 				},
 				TLS: &dockercompose.TLS{
 					CertFile: hinziel.Env("ORIGIN_CERT_FILE"), KeyFile: hinziel.Env("ORIGIN_KEY_FILE"),
 					Upstream: "nginx:80", Network: "blanktracker",
+					ReturnCookie: &dockercompose.ReturnCookie{Domain: "." + zone, Paths: []string{"/auth/google", "/api/auth/google"}},
 				},
 				PostDeploy: []dockercompose.Exec{{Service: "app", Command: "php artisan migrate --force"}},
 				URL:        func(e *env.Environment) string { return e.Endpoints["api"] },
@@ -110,7 +103,6 @@ func main() {
 		})}},
 		Notifiers: []hinziel.Notifier{
 			{On: notify.Problems, Notifier: ticket.New(board)},
-			{On: []notify.EventType{notify.EventRunActionRequired}, Notifier: slack.New(hinziel.Env("SLACK_OPS_WEBHOOK"))},
 			{On: notify.Finished, Notifier: slack.New(hinziel.Env("SLACK_DEV_WEBHOOK"))},
 		},
 	})

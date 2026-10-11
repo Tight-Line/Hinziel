@@ -2,7 +2,7 @@
 
 *Specification — draft v0.3*
 
-Hinziel is a toolkit for building **software factories**: agents made for one
+Hinziel is a toolkit for building **software factories**: programs made for one
 team's tickets, repositories and deployment. Hand a factory a ticket and it
 comes back as merge requests, deployed to a preview environment for you to
 try. Hinziel comes in two parts:
@@ -70,8 +70,7 @@ is knowing how the app actually gets deployed, and that knowledge is tacit,
 scattered and often partly wrong. The **build-a-factory skill** (§6) goes
 into a team's repositories and running environments, works out how the app
 is really deployed, and reproduces it, so that every ticket gets an
-environment of its own. A factory can only aim at a ticket once it knows the
-ground in between.
+environment of its own.
 
 The skill then writes the rest of the factory and tests it end to end, so a
 team never has to learn the library itself. A team that only wants the
@@ -89,9 +88,9 @@ no tickets or agents involved.
 - Pluggable at every edge: trigger, tracker, forge, agent, environment, DNS,
   deploy, notify. Teams can write their own component for any of them without
   forking Hinziel.
-- **The factory adapts to the app, not the other way round.** Hinziel builds
+- **The factory adapts to the app, not the other way round.** A factory builds
   and deploys an app the way the team already does: their compose files,
-  their build scripts, their hosting. Installing Hinziel on a project may need
+  their build scripts, their hosting. Building a factory for a project may need
   a few small changes to the app, never a restructuring. Anything specific to
   previews (an override file, a `.env` template) lives in the factory.
 - Type-safe configuration: a factory is Go code, so wiring mistakes are
@@ -107,9 +106,10 @@ no tickets or agents involved.
 
 **Working assumption: the agent has everything it needs.** Every agent works
 inside a provisioned environment and has whatever access it needs: tools,
-credentials, the running app or org. Hinziel does not sandbox the agent or
-restrict its credentials. Limiting the agent's access makes every scenario much
-harder, so it's out of scope until we choose to revisit it.
+credentials, the running app or org. A factory keeps its own credentials
+from the agent (design rule 7), but doesn't sandbox it or limit what its work
+can reach. Limiting that makes every scenario much harder, so it's out of
+scope until we choose to revisit it.
 
 **Non-goals (v1)**
 
@@ -120,7 +120,7 @@ harder, so it's out of scope until we choose to revisit it.
 - Automatic environment teardown policy (§11). Teardown is supported in the
   interfaces and through a manual CLI command.
 - Multi-tenant/public SaaS deployment.
-- Production rollout. Hinziel's work ends at reviewed MRs and a working
+- Production rollout. A factory's work ends at reviewed MRs and a working
   preview. Merging, canaries, feature flags and production deploys stay the
   team's own pipeline (Scenario D).
 
@@ -136,7 +136,7 @@ harder, so it's out of scope until we choose to revisit it.
 | Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` |
 | Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
 | Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
-| Human steps | add the environment's OAuth redirect URIs in Google Cloud Console | — | — | — |
+| Human steps | — (Google login goes through a shared OAuth relay) | — | — | — |
 | Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook |
 | Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
 
@@ -160,7 +160,7 @@ on a droplet. A preview environment looks like this:
   (`env.Environment.Endpoints`). A Workers preview alias URL is predictable,
   so the SPA's URL is too. The two deployers don't depend on each other's
   output, and their order doesn't matter.
-- **The SPA is built by Hinziel, with the team's own script.** The deployer
+- **The SPA is built by the factory, with the team's own script.** The deployer
   runs `cloudflare-build.sh` with the variables Cloudflare's CI would set
   (`API_URL`, `NOVA_URL`, `WORKERS_CI_COMMIT_SHA`) and uploads with
   `--name blanktracker-frontend-preview`, so `wrangler.jsonc` is used as it is.
@@ -179,7 +179,7 @@ on a droplet. A preview environment looks like this:
 - **TLS to the droplet.** The zone is in Full (strict) mode with proxied
   records, so the droplet needs a certificate Cloudflare trusts. One
   Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
-  Hinziel host, and `deploy/dockercompose` adds a TLS proxy in front of the
+  factory's host, and `deploy/dockercompose` adds a TLS proxy in front of the
   stack's own nginx. Every droplet gets the same key, and each runs
   unreviewed code, so one leak exposes them all. That's acceptable for the
   first runs only: certificates per environment are planned for M2 (see
@@ -190,13 +190,14 @@ on a droplet. A preview environment looks like this:
   override file drops the `cron` service, because the nightly schedule calls
   paid APIs. Postgres runs in the stack, seeded from the dump the repository
   already uses for vibe.
-- **Google login needs a human.** Login is Google OAuth, through a dedicated
-  "previews" OAuth client. Google has no API for adding redirect URIs, so each
-  new environment produces a [human action](#human-actions) asking someone to
-  add its two callback URLs. The agent doesn't need Google login: it creates a
+- **Google login goes through a relay.** Login is Google OAuth, through a
+  dedicated "previews" OAuth client. Google has no API for adding redirect
+  URIs, so every preview calls back to one OAuth relay whose URLs were
+  registered once, and the relay sends the browser on to the preview the login
+  started on (§12.2). The agent doesn't need Google login: it creates a
   Sanctum token with `artisan tinker` over SSH.
-- **The app's code needs no changes.** Installing Hinziel only adds the
-  factory's directory to the repository. See §12.3.
+- **The app's code needs no changes.** The only addition to the
+  repository is the factory's directory. See §12.3.
 
 ### Scenario C in more detail
 
@@ -204,7 +205,7 @@ The client's work is about 70% code (Apex, Lightning Web Components) and 30%
 clicks in Salesforce Setup (Flows, objects, fields, layouts, permissions).
 Almost every click produces **metadata**. Metadata can be written as XML,
 deployed, and pulled back out of a scratch org with `sf project retrieve start`,
-because scratch orgs track every change made in them. So Hinziel puts the
+because scratch orgs track every change made in them. So the factory puts the
 clicks through git and PR review too, not only the code.
 
 The agent has three ways to handle a change, in order of preference:
@@ -219,7 +220,7 @@ The agent has three ways to handle a change, in order of preference:
    option 1, so it's the fallback.
 3. **Changes the Metadata API can't deploy** become a manual checklist for a
    human (`agent.Outcome.ManualSteps`), shown in the PR and the notifications.
-   Hinziel never clicks in production or in shared sandboxes.
+   The factory never clicks in production or in shared sandboxes.
 
 ---
 
@@ -266,7 +267,7 @@ ingress, so no per-environment DNS is needed.
   service's tag.
 - **No canaries in previews.** A preview has one user and no traffic. The
   production rollout (canaries, analysis, flags, migrations in production)
-  stays the team's pipeline, after a human merges. Hinziel's job ends at
+  stays the team's pipeline, after a human merges. The factory's job ends at
   reviewed MRs and a working preview (non-goal in §1).
 
 **How a run goes, and what it asks of the core.**
@@ -351,7 +352,7 @@ factory option and not an interface change; a branch-name generator on
   Step names are typed constants (`hinziel.StepDeploy`).
 - **Gate.** An optional pause before a step. The run waits in
   `awaiting_approval` until someone runs `approve`.
-- **Action.** Something a human must do for an environment that Hinziel
+- **Action.** Something a human must do for an environment that the factory
   can't, such as registering its URLs with a third party. It may hold back a
   later step until someone confirms it's done ([Human actions](#human-actions)).
 
@@ -405,13 +406,13 @@ opened.
 ### Agent loop
 
 The agent tests its work in the environment many times during `implement`,
-so these deploys are not pipeline steps. Hinziel gives the agent two commands
-of the factory binary. The engine passes the binary's path in `HINZIEL_BIN`,
+so these deploys are not pipeline steps. The factory gives the agent two
+commands of its own binary. The engine passes the binary's path in `HINZIEL_BIN`,
 the run in `HINZIEL_RUN_ID` and the engine's socket in `HINZIEL_SOCKET`:
 
 - **`$HINZIEL_BIN deploy`** runs every deployer on its repo's pushed HEAD and
   blocks until done, printing the results and the deploy logs. It refuses if
-  any repo has uncommitted changes or an unpushed HEAD: **Hinziel only ever
+  any repo has uncommitted changes or an unpushed HEAD: **A factory only ever
   deploys pushed commits.** For each deployer that implements `Retriever`, it
   first retrieves from the environment and refuses if that produced
   uncommitted changes ("the environment has changes not in git; commit and
@@ -433,9 +434,10 @@ Notifications are **events**, not a step. The engine emits `run.started`,
 
 ### Human actions
 
-Some environments can't be finished by software. BlankTracker's previews need
+Some environments can't be finished by software. An app's previews may need
 their OAuth redirect URIs added in Google Cloud Console, which has no API for
-it. A Salesforce sandbox lease might need an admin's approval. Hinziel
+it (BlankTracker's did, until it got an OAuth relay: §12.2). A Salesforce
+sandbox lease might need an admin's approval. The library
 supports this as **actions**: requests for a human, raised while the
 environment is provisioned.
 
@@ -472,7 +474,7 @@ EnvironmentActions func(e *env.Environment) []env.Action // Factory field
    them (remove the redirect URIs).
 
 Pick `Before` by who needs the result. The agent never needs Google login on
-a BlankTracker preview, so that action holds back only `publish`, which tells
+a BlankTracker preview, so that action held back only `publish`, which tells
 testers the environment is ready. An environment the agent can't use without
 the human holds back `implement`.
 
@@ -530,9 +532,9 @@ returns an ordinary error when it stops expecting the wait to end.
 *Planned for M4.* A run ends with MRs and a preview, but that's rarely the
 end of a ticket. Someone tries the preview and comments on the ticket:
 "make the button green", "this breaks when the list is empty", "why does
-it sort by date?". Hinziel picks the comment up and continues the same
+it sort by date?". The factory picks the comment up and continues the same
 work: the same branch, environment and MRs. It changes what was asked,
-deploys, and replies on the ticket. People iterate with Hinziel the way
+deploys, and replies on the ticket. People iterate with the factory the way
 they would with a colleague, in the tracker they already use.
 
 **An iteration is a new run for the same ticket** that continues where the
@@ -542,10 +544,10 @@ are (so the preview keeps the last iteration's state), and provisioning,
 DNS and change requests are idempotent by name. What's new:
 
 1. **Feedback.** At `fetch_ticket`, the comments added since the previous
-   run published are the feedback, minus those Hinziel wrote itself.
+   run published are the feedback, minus those the factory wrote itself.
    Trackers mark those (`tracker.Comment.Mine`, from comparing the author
-   with the tracker's own credentials, plus a stable `ID`), so Hinziel can
-   never answer itself in a loop. A factory can require a mention (e.g.
+   with the tracker's own credentials, plus a stable `ID`), so the factory
+   can never answer itself in a loop. A factory can require a mention (e.g.
    `@hinziel`) for a comment to count, and caps iterations per ticket.
 2. **Who may steer it.** A comment becomes part of the agent's prompt, so
    only people who may start runs count: members of the board, for Trello
@@ -559,7 +561,7 @@ DNS and change requests are idempotent by name. What's new:
 4. **Answers without code.** Not every comment asks for a change. The agent
    can reply instead (`Outcome.Reply`). An iteration with a reply and no
    commits succeeds, where a first run with no changes asks for input.
-5. **Replies on the ticket.** When an iteration starts, Hinziel comments
+5. **Replies on the ticket.** When an iteration starts, the factory comments
    that it's on it. When it ends, it replies with what changed (or the
    answer), the preview link and the commits. The MR description is
    updated with the new summary (`ChangeRequestUpdater`), and the MR gets a
@@ -674,7 +676,7 @@ These rules keep the interfaces from fighting each other:
    are fine in the factory's own wiring (`Endpoint.URL`).
 6. **Constructors don't fail.** `New(Options)` returns the component; bad
    options and credentials surface in `Check` (`core.Checker`) or on first use.
-   `Check` also names every command the component runs on the Hinziel host
+   `Check` also names every command the component runs on the factory's host
    that isn't installed (`core.NeedTools`), so one `check` on a fresh host
    lists everything it's missing. A credential that is empty is reported as
    such (`core.NeedSettings`), not as whatever the API says about it.
@@ -716,7 +718,7 @@ These rules keep the interfaces from fighting each other:
 - **The repo's own agent instructions.** Most `CLAUDE.md` / `AGENTS.md` files
   are written for a person working with an agent by hand: "push to `vibe` to
   deploy", "ask before every git operation". Hinziel can't expect teams to
-  change them. The agent component therefore gives Hinziel's workflow the
+  change them. The agent component therefore gives the factory's workflow the
   highest priority it can (for Claude Code: the system prompt, not the user
   prompt) and says that it replaces any branching, deploying or
   confirmation rules in the project's instructions. Everything else in them,
@@ -747,7 +749,7 @@ These rules keep the interfaces from fighting each other:
   columns, or not at all. That mapping is the tracker component's option,
   matched leniently (case and spacing don't matter, IDs survive renames)
   and checked by `check`, which names the board's own lists or statuses
-  when one doesn't match. Hinziel never creates lists, labels or statuses.
+  when one doesn't match. A factory never creates lists, labels or statuses.
 - **Notify.** `notify/ticket` turns events into comments on the run's ticket,
   through the factory's tracker. This way "tell the tester on the Trello card"
   uses the same routing as "tell the dev channel on Slack".
@@ -819,6 +821,10 @@ const (
 	zone          = "blanktracker.com"
 	previewWorker = "blanktracker-frontend-preview" // a Worker used only for previews
 	workers       = "blanktracker"                  // the account's workers.dev subdomain
+	// Every preview's Google login calls back to the app's OAuth relay, which
+	// sends the browser on to the preview that started it. Its callback URLs
+	// are registered once in the OAuth client.
+	oauthRelay = "https://auth-relay." + zone
 )
 
 // Settings for every preview: no third-party API keys, paid integrations
@@ -872,7 +878,7 @@ func main() {
 			Size:       "s-2vcpu-4gb", // the first build compiles every PHP extension
 			Image:      "docker-20-04", // the Docker 1-Click; its slug predates its Ubuntu
 			SSHKeys:    []string{"ab:cd:…"},          // fingerprints of keys in the DO account
-			SSHKeyPath: hinziel.Env("HINZIEL_SSH_KEY"), // the matching private key on the Hinziel host
+			SSHKeyPath: hinziel.Env("HINZIEL_SSH_KEY"), // the matching private key on the factory's host
 		}),
 		DNS: cloudflare.New(cloudflare.Options{
 			Token:        hinziel.Env("CLOUDFLARE_DNS_TOKEN"),
@@ -887,17 +893,6 @@ func main() {
 				return cfworkers.PreviewURL(e.Name, previewWorker, workers)
 			}},
 		},
-		EnvironmentActions: func(e *env.Environment) []env.Action {
-			return []env.Action{{
-				ID:    "google-oauth",
-				Title: "Allow Google login on " + e.Name,
-				Body: "In Google Cloud Console, open the **BlankTracker previews** OAuth client and add " +
-					"these authorized redirect URIs:\n\n" +
-					"- " + e.Endpoints["api"] + "/auth/google/callback\n" +
-					"- " + e.Endpoints["api"] + "/api/auth/google/callback\n",
-				Before: string(hinziel.StepPublish), // only testers need it, the agent doesn't
-			}}
-		},
 		Deployers: []hinziel.Deployer{
 			{Name: "api", Repo: "app", Deployer: dockercompose.New(dockercompose.Options{
 				Files:    []string{"vibe.docker-compose.yaml"}, // the team's own, unchanged
@@ -907,7 +902,7 @@ func main() {
 					return map[string]string{
 						"APP_URL":              e.Endpoints["api"],
 						"FRONTEND_URL":         e.Endpoints["web"],
-						"GOOGLE_REDIRECT_HOST": e.Endpoints["api"],
+						"GOOGLE_REDIRECT_HOST": oauthRelay,
 						"GOOGLE_CLIENT_ID":     googleID,
 						"GOOGLE_CLIENT_SECRET": googleSecret,
 					}
@@ -917,6 +912,12 @@ func main() {
 					KeyFile:  hinziel.Env("ORIGIN_KEY_FILE"),
 					Upstream: "nginx:80",
 					Network:  "blanktracker", // the network vibe.docker-compose.yaml puts nginx on
+					// Names the preview a login started on, for the relay, on the
+					// paths where Nova's and the SPA's Google logins start.
+					ReturnCookie: &dockercompose.ReturnCookie{
+						Domain: "." + zone,
+						Paths:  []string{"/auth/google", "/api/auth/google"},
+					},
 				},
 				PostDeploy: []dockercompose.Exec{
 					{Service: "app", Command: "php artisan migrate --force"},
@@ -948,7 +949,6 @@ func main() {
 		})}},
 		Notifiers: []hinziel.Notifier{
 			{On: notify.Problems, Notifier: ticket.New(board)}, // failures, questions and actions, on the card
-			{On: []notify.EventType{notify.EventRunActionRequired}, Notifier: slack.New(hinziel.Env("SLACK_OPS_WEBHOOK"))},
 			{On: notify.Finished, Notifier: slack.New(hinziel.Env("SLACK_DEV_WEBHOOK"))},
 		},
 	})
@@ -958,10 +958,6 @@ func previewURL(suffix string) func(*env.Environment) string {
 	return func(e *env.Environment) string { return "https://" + e.Name + suffix + "." + zone }
 }
 ```
-
-`notify.Problems` includes `run.action_required`, so the card gets the Google
-action too. The Slack ops channel is where someone with Google Cloud Console
-access sees it.
 
 The two embedded files live next to `main.go` in the factory's repository:
 
@@ -1008,7 +1004,7 @@ hinziel.Main(hinziel.Factory{
 
 ```go
 org := scratchorg.New(scratchorg.Options{
-	DevHub:       "client-devhub", // sf alias, authorised on the Hinziel host via JWT
+	DevHub:       "client-devhub", // sf alias, authorised on the factory's host via JWT
 	Definition:   "config/project-scratch-def.json",
 	DurationDays: 7,
 	PostDeploy:   []string{"sf org assign permset --name Client_Admin", "sf data import tree --plan data/plan.json"},
@@ -1253,9 +1249,9 @@ try the CLI without any accounts.
   a new run continues the existing branch if it is still on the forge, and
   reuses the environment and MRs (thanks to the idempotent keys). From M4,
   that new run is an [iteration](#iteration) on the ticket's feedback.
-- **Agent access:** set through the agent component's options and carries
-  whatever the agent needs, including push access to the forges. Hinziel does
-  not restrict it (§1).
+- **Agent access:** the agent component's own credentials, including push
+  access to the forges, plus whatever the factory declares in `AgentEnv`
+  (design rule 7). Within its work the agent isn't restricted (§1).
 - **Logging:** one timestamped line per event (`2026-10-09T09:12:31Z
   [deploy_base] done`), written to the run log and to the CLI's output. The
   agent's transcript and the output of its `deploy`/`retrieve` commands go to
@@ -1287,7 +1283,7 @@ command at a time. It:
   actions from a button and tearing down environments by policy (open
   question 1).
 
-It's one process, so Hinziel needs no queue or other external service
+It's one process, so a factory needs no queue or other external service
 between receiving a request and executing the run.
 
 ### Hosting a factory
@@ -1314,7 +1310,7 @@ its env file, over SSH (`core/remote`):
 6. run `check` on the host and report.
 
 Running it again updates in place, so it's also the upgrade command. It
-works on any machine you point it at; Hinziel doesn't create its own host.
+works on any machine you point it at; the factory doesn't create its own host.
 What it can't do: Claude Code's login (run `claude setup-token` once and put
 the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`), and registering the
 public URL wherever the trigger's sender needs it (a webhook in GitLab's
@@ -1388,7 +1384,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
    interfaces support all of them (`Provisioner.Destroy`, `env.Lister`,
    `dns.Provider.Delete`). v1 ships only `env destroy`.
 2. **Merge order across repos.** When one ticket changes several repos, some
-   MRs may need to merge before others (API before SPA). For now Hinziel only
+   MRs may need to merge before others (API before SPA). For now a factory only
    links the MRs to each other and states the dependency in their
    descriptions. Should it enforce an order?
 3. **Scenario B process model.** How does the Go binary keep running on the
@@ -1396,7 +1392,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
    Who allocates ports (proposed: the provisioner, stored in `Environment.State`)?
 4. **Re-trigger semantics** (resolved by [Iteration](#iteration)). A new run
    for a ticket continues the existing branch, environment and MRs.
-5. **Where the agent process runs.** Directly on the Hinziel host (v1,
+5. **Where the agent process runs.** Directly on the factory's host (v1,
    simplest), or in a container per run for isolation between concurrent
    runs? This is an option of the agent component and does not change the
    interface.
@@ -1448,7 +1444,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     agent component (question 5), not an interface change.
 12. **Forks.** Teams whose bots can't push to the upstream repository work
     from forks (12.6). `forge.GitRemote` would get an upstream to fetch base
-    branches from, separate from the remote Hinziel pushes to, and forge
+    branches from, separate from the remote the factory pushes to, and forge
     components a `Fork` option that opens the change request from the fork
     to the upstream.
 13. **Waiting on others** (resolved: `core.WaitError` and the `waiting`
@@ -1463,10 +1459,10 @@ droplet. Instead, `deploy/dockercompose`'s TLS option will be able to get a
 certificate for each environment from Cloudflare's Origin CA API:
 
 - **Issue.** On the first deploy to an environment, generate a key on the
-  Hinziel host, send a CSR for exactly that environment's hostnames (taken
+  factory's host, send a CSR for exactly that environment's hostnames (taken
   from `e.Endpoints`) and install the issued certificate. A leaked key then
   exposes one preview, for as long as it exists.
-- **Reuse.** Keep the key and certificate in the Hinziel state directory, per
+- **Reuse.** Keep the key and certificate in the factory's state directory, per
   environment, so later deploys reuse them. If they're lost, issue a new
   certificate and revoke the old one, found by its hostnames, so no state is
   needed to clean up.
@@ -1491,10 +1487,10 @@ changing them.
 
 **The setup.** BlankTracker, the guinea-pig project (scenario A: Laravel API +
 SPA, GitLab, Trello, DigitalOcean, Cloudflare). People on the Trello board
-start Hinziel from the card itself and see its progress there, without
+start a run from the card itself and see its progress there, without
 touching the CLI.
 
-**What Hinziel delivers.** A **"🧙 Hinziel: build this"** button on every
+**What the factory delivers.** A **"🧙 Hinziel: build this"** button on every
 card, and badges on the card showing run status, the MR links and the
 environment links.
 
@@ -1528,7 +1524,7 @@ checks every redirect URI against a list on the OAuth client, accepts no
 wildcards, and offers no API to edit that list. Each preview has new
 hostnames, so until someone adds them, nobody can log in to it.
 
-**What Hinziel delivers.** As soon as the environment exists, a message on the
+**What the factory delivers.** As soon as the environment exists, a message on the
 Trello card and in a Slack channel says exactly which two URIs to add to the
 "BlankTracker previews" OAuth client. The run carries on. It waits only before
 `publish`, the step that tells testers the environment is ready, until
@@ -1576,7 +1572,7 @@ cookie in the preview's proxy, and `deploy/cfoauthrelay` keeps the relay
 Worker running. An action per environment is the fallback for flows a relay
 can't serve (state kept in a session cookie on the app's own host, say).
 
-### 12.3 Installing Hinziel on an app that wasn't built for it
+### 12.3 A factory for an app that wasn't built for it
 
 **The setup.** BlankTracker as it really is, not as Scenario A first imagined
 it: API and SPA in one repository root, the SPA on Cloudflare Workers (not
@@ -1584,7 +1580,7 @@ Pages), three hostnames per environment, no preview domain, a `CLAUDE.md`
 written for non-developers who drive Claude by hand, and a nightly schedule
 that spends money on third-party APIs.
 
-**What Hinziel delivers.** Previews with no changes to the app's code. The
+**What the factory delivers.** Previews with no changes to the app's code. The
 only addition to the repository is the factory, in `hinziel/`.
 
 **How it maps.**
@@ -1596,14 +1592,14 @@ only addition to the repository is the factory, in `hinziel/`.
 | `cloudflare-build.sh`, which reads `API_URL` and `NOVA_URL` | run by `deploy/cfworkers` with the variables Cloudflare's CI would set |
 | `wrangler.jsonc` naming production Workers | used as it is; `--name` points the upload at a previews-only Worker |
 | Production zone `blanktracker.com`, no `SESSION_DOMAIN` | preview hostnames `hz-*` in that zone, guarded by `AllowedNames` |
-| `CLAUDE.md`: "push to `vibe`", "ask before every git operation" | overridden by Hinziel's workflow in the agent's system prompt |
+| `CLAUDE.md`: "push to `vibe`", "ask before every git operation" | overridden by the factory's workflow in the agent's system prompt |
 
 **Design points this case confirms.**
 
 - **The factory adapts to the app** (§1, design rule 10). Every gap was
   closed with a component option or a file in the factory, not a change to
   the app.
-- **An app's own agent instructions will contradict Hinziel.** They were
+- **An app's own agent instructions will contradict the factory's.** They were
   written for a person at a keyboard. Handling that belongs in the agent
   component, for every team, not in each repository.
 - **Preview hosting may sit next to production.** Guards against touching
@@ -1615,16 +1611,16 @@ only addition to the repository is the factory, in `hinziel/`.
 They implement a ticket by clicking in a shared dev org, then repeat the same
 clicks by hand, from memory, in production. Git is not part of their process.
 
-**What Hinziel delivers.** For each ticket: the change made in an isolated
+**What the factory delivers.** For each ticket: the change made in an isolated
 org, an exact record of what changed, and a step-by-step `instructions.md` a
-human follows to repeat the change in production. Hinziel never clicks in
+human follows to repeat the change in production. The factory never clicks in
 production.
 
 **How it maps.**
 
 | Piece | Implementation |
 |---|---|
-| Tracker, forge | whatever they use (a repo is created for Hinziel's output if they have none) |
+| Tracker, forge | whatever they use (a repo is created for the factory's output if they have none) |
 | Environment | a fresh scratch org, or a dedicated dev sandbox, **per ticket**. Not the team's shared dev org |
 | Agent | Claude Code clicking in that org through a headless browser |
 | `Retriever` | a component in the team's own factory code that (1) runs `sf project retrieve start` to get the exact metadata the clicks produced, then (2) has an LLM turn that diff into click-by-click instructions, written to `instructions.md` |
@@ -1684,7 +1680,7 @@ most features touch the backend and one or both apps.
 **What fits.** Repos on separate teams are just repos; a ticket that only
 changes `android` gets one MR. A mobile build is a deployment whose "URL" is
 an install link, and its endpoint a store link. Build signing stays in CI,
-where the keys already live, so Hinziel never holds them.
+where the keys already live, so the factory never holds them.
 
 **What doesn't, yet.** The mobile deployers are CI-gated, so they need CI
 status (Scenario D, D4), and wait with `core.WaitError` while CI builds. The agent can't run an iOS
@@ -1723,7 +1719,7 @@ case, and needs lazy branches (D1) so the SDKs it doesn't touch see nothing.
 
 - **Forks.** The engine clones `Forge.Remote` and branches from its target
   branch, and the forge opens the change request in the same repository.
-  With forks, Hinziel pushes to `hinziel-bot/sdk-go` but must branch from,
+  With forks, the factory pushes to `hinziel-bot/sdk-go` but must branch from,
   and open the PR against, `acme/sdk-go`. `forge.GitRemote` needs an
   upstream to fetch the base from, besides the remote it pushes to, and the
   forge component a `Fork` option. A small interface change (open question
@@ -1761,18 +1757,16 @@ customer data outside production.
 **What fits.** Every part is a component or an option. Human actions and
 gates express "ops must confirm" and "a second person approves". Deployers
 may use any system (ServiceNow) as long as they are idempotent: "is there
-already a change for this commit?" is the natural key. Hinziel never deploys
+already a change for this commit?" is the natural key. The factory never deploys
 anything itself here, and the interfaces don't require it to.
 
 **What doesn't.**
 
-- **Waiting days, not minutes.** A booking or an executed change can take a
-  day. Today a step either finishes, fails, retries three times with
-  backoff, or times out. A step that is simply *waiting on someone else*
-  needs its own outcome: the step returns "not yet, look again in an hour",
-  the run waits in a `waiting` status without holding a process, and the
-  daemon re-runs the step later. The same fixes CI waits (D4, D5) and the
-  mobile builds of 12.5 (open question 13).
+- **Waiting days, not minutes** (resolved). A booking or an executed change
+  can take a day. Such a step returns `core.WaitError` ("not yet, look
+  again in an hour"), and the run waits in `waiting` without holding a
+  process until it's checked again. The same covers CI waits (D4, D5) and
+  the mobile builds of 12.5 (open question 13).
 - **Restricted agents.** The bank won't give an agent full access: no
   production-like data, no credentials beyond the booked environment, every
   command logged. Same root as 12.6 (open question 11).
@@ -1784,7 +1778,7 @@ anything itself here, and the interfaces don't require it to.
 The pipeline (ticket, branch, environment, implement, MRs, deploy, publish)
 and the component boundaries held for every structure so far: monorepo,
 multi-repo, microservices, mobile, libraries with no environment, and
-organisations where Hinziel may not deploy. New shapes needed new
+organisations where a factory may not deploy. New shapes needed new
 *components*, not new *kinds* of component. Three things recur and belong in
 the core:
 
