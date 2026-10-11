@@ -63,8 +63,8 @@ Verify with the calls given; all are read-only.
   **Share** button as a Member. Board only, not the workspace.
 - API key: https://trello.com/power-ups/admin → **New**. The form asks
   whether the app uses Power-Up capabilities, and that can't be changed
-  later. For the API key alone, choose "doesn't use Power-up capabilities";
-  a Power-Up button later gets its own app. The workspace dropdown only
+  later. For the API key alone, choose "doesn't use Power-up capabilities".
+  The workspace dropdown only
   lists workspaces the person administers, and an unlisted Power-Up only
   works on boards in its own workspace.
 - The key is public by Trello's design. The token is not: authorize it **as

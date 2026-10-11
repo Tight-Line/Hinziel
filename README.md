@@ -462,8 +462,7 @@ EnvironmentActions func(e *env.Environment) []env.Action // Factory field
    the run executes, so a human who is done before the run gets there never
    holds it up. The executing process can't be interrupted to change the
    run, so the confirmation is stored next to it and applied before the next
-   step. Later, a button in Trello or Slack can do the same through the
-   trigger's `Dispatcher`.
+   step. Later, a trigger can do the same through its `Dispatcher`.
 3. When the run reaches an action's `Before` step and nobody has confirmed the
    action, the run waits in `awaiting_approval`, exactly like a gate, and
    `approve` confirms it and continues.
@@ -1083,7 +1082,7 @@ and works in two phases.
    - what the **app** needs to run in an environment: its `.env.example`,
      secrets its deploy scripts expect, OAuth clients;
    - **one-time setup** that isn't a secret: a Cloudflare zone for the
-     daemon's URL, a webhook or Power-Up to register, a Slack channel, a test
+     daemon's URL, a webhook to register, a Slack channel, a test
      ticket and a sandbox repository for the integration tests;
    - **human actions** each environment will need (§3), so nobody is
      surprised by them later.
@@ -1272,7 +1271,7 @@ try the CLI without any accounts.
 command at a time. It:
 
 - **runs the triggers.** Some receive HTTP: webhooks from GitLab, GitHub,
-  Jira or Slack, or the Trello Power-Up's button. Each one's handlers are
+  Jira or Slack. Each one's handlers are
   mounted under `/triggers/<factory>/<trigger>/`, served on `--listen`.
   Others are pollers, such as `trigger/trellocomments` (a comment
   `@<member> implement` on a card), which need no inbound traffic at all,
@@ -1282,7 +1281,7 @@ command at a time. It:
   waits (on CI, say) is checked again in the background, so it doesn't hold
   up the queue. Runs started from the CLI still execute in the foreground;
 - later, **does the factory's other ongoing work**, such as confirming human
-  actions from a button and tearing down environments by policy (open
+  actions from a trigger and tearing down environments by policy (open
   question 1).
 
 It's one process, so a factory needs no queue or other external service
@@ -1316,7 +1315,7 @@ works on any machine you point it at; the factory doesn't create its own host.
 What it can't do: Claude Code's login (run `claude setup-token` once and put
 the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`), and registering the
 public URL wherever the trigger's sender needs it (a webhook in GitLab's
-project settings, the connector URL in Trello's Power-Up admin, …).
+project settings, …).
 
 **Routing.** HTTP triggers need a fixed public HTTPS URL: senders are
 configured with it once, and most refuse plain HTTP (Trello, Slack and
@@ -1369,7 +1368,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 🔨 | Components and human actions ✅, each passing its conformance suite against a fake of its API. Still open: a real end-to-end run, from BlankTracker's repository, once credentials are in place. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists) + `trigger/trellopowerup` (button, badges, confirming actions) as the first HTTP trigger; `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
+| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1516,15 +1515,8 @@ needs a human.
 - **A trigger belongs to one factory.** The engine doesn't need to know about
   Trello boards.
 - **A poller needs no inbound traffic.** The comment trigger needs no
-  public URL, no HTTPS and no Power-Up, so the daemon runs anywhere, a
+  public URL and no HTTPS, so the daemon runs anywhere, a
   laptop included. Comments made while the daemon is stopped are missed.
-
-**The road not taken.** The first design was a Power-Up: a "🧙 Hinziel:
-build this" button on every card and badges with the run's status
-(`trigger/trellopowerup`, using `Dispatcher.Submit` and `Dispatcher.Latest`).
-It needs the daemon on a public HTTPS URL and a Power-Up registered in
-Trello's admin; the comment trigger needs neither. Comments are also where
-[iteration](#iteration) feedback arrives (M4).
 
 ### 12.2 A preview that needs a human: Google login
 

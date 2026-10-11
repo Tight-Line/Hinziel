@@ -108,8 +108,8 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
 6. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it
-   needs no public URL and runs anywhere, a laptop included. Buttons and
-   webhooks need a public HTTPS address and an always-on host. Who should
+   needs no public URL and runs anywhere, a laptop included. Webhooks
+   need a public HTTPS address and an always-on host. Who should
    hear about what? Problems and human actions can go on the ticket alone.
 7. **List what's needed from people**: every credential, one-time setup and
    human action, each with what it is, why, the least access, and where it

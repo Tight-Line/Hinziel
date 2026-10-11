@@ -1,5 +1,5 @@
-// Package trigger defines how runs get started (Trello Power-Up, webhooks,
-// pollers, …). The CLI is not a trigger; it calls the engine directly.
+// Package trigger defines how runs get started (webhooks,
+// pollers such as Trello comments, …). The CLI is not a trigger; it calls the engine directly.
 // Implementations live in subpackages.
 package trigger
 
@@ -25,6 +25,6 @@ type Trigger interface {
 type Dispatcher interface {
 	Submit(ctx context.Context, req run.Request) (run.ID, error)
 	Get(ctx context.Context, id run.ID) (*run.Snapshot, error)
-	// Latest returns the most recent run for a ticket, or nil. Used for status badges.
+	// Latest returns the most recent run for a ticket, or nil.
 	Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error)
 }
