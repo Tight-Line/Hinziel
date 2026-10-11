@@ -195,3 +195,51 @@ func TestInvalidActionFailsProvisioning(t *testing.T) {
 		})
 	}
 }
+
+// An action done while the run executes is confirmed through the store, and
+// the run doesn't stop for it.
+func TestActionConfirmedWhileExecutingDoesNotStopTheRun(t *testing.T) {
+	f := newFixture(t)
+	f.project.Settings.EnvironmentActions = googleAction
+	var confirmErr error
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		runs, err := f.eng.Store().List(ctx, run.Filter{})
+		if err != nil || len(runs) != 1 {
+			t.Fatalf("runs %v, err %v", runs, err)
+		}
+		confirmErr = f.eng.Approve(ctx, runs[0].ID) // the run is executing: its lock is held
+		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
+		return nil, nil
+	}
+
+	r, err := f.start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if confirmErr != nil {
+		t.Fatalf("confirming during the run: %v", confirmErr)
+	}
+	if r.Status != run.StatusSucceeded || !r.Actions[0].Done {
+		t.Fatalf("status %s, actions %+v; want succeeded without stopping", r.Status, r.Actions)
+	}
+	if n := len(eventsOf(f, notify.EventRunAwaitingApproval)); n != 0 {
+		t.Errorf("awaiting_approval emitted %d times, want none", n)
+	}
+}
+
+func TestApproveWhileExecutingWithNothingToConfirmIsRefused(t *testing.T) {
+	f := newFixture(t)
+	var confirmErr error
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		runs, _ := f.eng.Store().List(ctx, run.Filter{})
+		confirmErr = f.eng.Approve(ctx, runs[0].ID)
+		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
+		return nil, nil
+	}
+	if _, err := f.start(); err != nil {
+		t.Fatal(err)
+	}
+	if confirmErr == nil || !strings.Contains(confirmErr.Error(), "no human actions to confirm") {
+		t.Fatalf("got %v", confirmErr)
+	}
+}

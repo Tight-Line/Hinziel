@@ -126,7 +126,7 @@ func actionMessage(r *run.Run, a env.Action) core.Message {
 	b.WriteString(strings.TrimSpace(a.Body))
 	b.WriteString("\n\n")
 	if a.Before != "" {
-		fmt.Fprintf(&b, "_Run `%s` will wait before `%s` until this is done. Then confirm it with `approve %s`._\n", r.ID, a.Before, r.ID)
+		fmt.Fprintf(&b, "_Run `%s` will wait before `%s` until this is done. Confirm it with `approve %s` as soon as it is; the run won't stop for it._\n", r.ID, a.Before, r.ID)
 	} else {
 		fmt.Fprintf(&b, "_Run `%s` doesn't wait for this, but the environment isn't fully usable until it's done._\n", r.ID)
 	}
@@ -146,4 +146,19 @@ func writeActions(b *strings.Builder, r *run.Run) {
 		}
 		fmt.Fprintf(b, "- [%s] %s\n", mark, a.Title)
 	}
+}
+
+// applyConfirmations marks the actions confirmed while this process executes
+// the run (Engine.Approve on an executing run) as done.
+func (x *execution) applyConfirmations() error {
+	ids, err := x.e.store.ConfirmedActions(x.r.ID)
+	if err != nil {
+		return err
+	}
+	for i := range x.r.Actions {
+		if slices.Contains(ids, x.r.Actions[i].ID) {
+			x.r.Actions[i].Done = true
+		}
+	}
+	return nil
 }

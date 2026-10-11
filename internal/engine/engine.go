@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,23 +176,82 @@ func (e *Engine) Resume(ctx context.Context, id run.ID) error {
 }
 
 // Approve passes the gate a run is waiting at and executes the rest of it.
+// On a run that isn't waiting for approval, it confirms the human actions
+// instead, so the run won't stop for them; that works while it executes too.
 func (e *Engine) Approve(ctx context.Context, id run.ID) error {
-	if err := e.prepare(ctx, id, func(r *run.Run) error {
-		if r.Status != run.StatusAwaitingApproval {
+	confirmedOnly := false
+	err := e.prepare(ctx, id, func(r *run.Run) error {
+		if r.Status == run.StatusAwaitingApproval {
+			r.Approved = append(r.Approved, r.CurrentStep)
+			// Approving confirms every human action: whoever approves has seen them
+			// all in the notifications and in `status`.
+			for i := range r.Actions {
+				r.Actions[i].Done = true
+			}
+			r.Status = run.StatusRunning
+			return nil
+		}
+		// Not stopped for approval: confirm the actions, so the run doesn't
+		// stop for them later, and leave the run as it is.
+		if len(undoneActions(r)) == 0 || r.Status == run.StatusSucceeded || r.Status == run.StatusCancelled {
 			return fmt.Errorf("run %s is %s, not awaiting approval", r.ID, r.Status)
 		}
-		r.Approved = append(r.Approved, r.CurrentStep)
-		// Approving confirms every human action: whoever approves has seen them
-		// all in the notifications and in `status`.
 		for i := range r.Actions {
 			r.Actions[i].Done = true
 		}
-		r.Status = run.StatusRunning
+		confirmedOnly = true
 		return nil
-	}); err != nil {
+	})
+	if errors.As(err, new(executingError)) {
+		return e.confirmWhileExecuting(ctx, id)
+	}
+	if err != nil {
 		return err
 	}
+	if confirmedOnly {
+		fmt.Fprintln(e.opts.Out, "confirmed the human actions; the run won't stop for them")
+		return nil
+	}
 	return e.Execute(ctx, id)
+}
+
+// confirmWhileExecuting confirms the human actions of a run that another
+// process is executing, through the store: that process applies the
+// confirmation before its next step, so doing an action early never makes
+// the run stop for it.
+func (e *Engine) confirmWhileExecuting(ctx context.Context, id run.ID) error {
+	r, err := e.store.Load(ctx, id)
+	if err != nil {
+		return err
+	}
+	ids := undoneActions(r)
+	if len(ids) == 0 {
+		return fmt.Errorf("run %s is executing in another process and has no human actions to confirm; "+
+			"approve it once it waits for approval", id)
+	}
+	if err := e.store.ConfirmActions(id, ids); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.opts.Out, "confirmed %s; the run won't stop for them\n", strings.Join(ids, ", "))
+	return nil
+}
+
+// undoneActions returns the IDs of the run's unconfirmed human actions.
+func undoneActions(r *run.Run) []string {
+	var ids []string
+	for _, a := range r.Actions {
+		if !a.Done {
+			ids = append(ids, a.ID)
+		}
+	}
+	return ids
+}
+
+// executingError means another process holds the run's lock.
+type executingError struct{ id run.ID }
+
+func (e executingError) Error() string {
+	return fmt.Sprintf("run %s is executing in another process; stop it there first", e.id)
 }
 
 // Cancel marks an unfinished run as cancelled. A run executing in another
@@ -210,7 +270,7 @@ func (e *Engine) Cancel(ctx context.Context, id run.ID) error {
 func (e *Engine) prepare(ctx context.Context, id run.ID, change func(*run.Run) error) error {
 	unlock, err := e.store.Lock(id)
 	if errors.Is(err, store.ErrLocked) {
-		return fmt.Errorf("run %s is executing in another process; stop it there first", id)
+		return executingError{id}
 	}
 	if err != nil {
 		return err
@@ -300,6 +360,9 @@ func (x *execution) pipeline(ctx context.Context) error {
 				return err
 			}
 			continue
+		}
+		if err := x.applyConfirmations(); err != nil {
+			return err
 		}
 		if x.gated(name) || len(pendingActions(x.r, name)) > 0 {
 			x.r.Status = run.StatusAwaitingApproval

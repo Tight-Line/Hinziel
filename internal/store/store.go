@@ -9,10 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -147,6 +150,35 @@ func matches(r *run.Run, f run.Filter) bool {
 		return false
 	}
 	return true
+}
+
+// ConfirmActions records that a human did these actions of the run. The
+// process executing the run holds its lock, so a confirmation made meanwhile
+// can't change run.json; it goes here, and the engine applies it before the
+// next step (ConfirmedActions).
+func (s *FS) ConfirmActions(id run.ID, actionIDs []string) error {
+	f, err := os.OpenFile(s.confirmedPath(id), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(f, strings.Join(actionIDs, "\n")+"\n")
+	return errors.Join(err, f.Close())
+}
+
+// ConfirmedActions returns the IDs of actions confirmed with ConfirmActions.
+func (s *FS) ConfirmedActions(id run.ID) ([]string, error) {
+	b, err := os.ReadFile(s.confirmedPath(id))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(b)), nil
+}
+
+func (s *FS) confirmedPath(id run.ID) string {
+	return filepath.Join(s.Dir(id), "actions-confirmed")
 }
 
 // Lock takes an exclusive lock on the run for this process. It returns

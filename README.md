@@ -462,13 +462,18 @@ EnvironmentActions func(e *env.Environment) []env.Action // Factory field
 1. At the end of `provision_environment`, the engine collects the actions
    and emits `run.action_required` once for each one it hasn't announced
    before. The run carries on, so the human works while the agent does.
-2. When the run reaches an action's `Before` step and nobody has confirmed the
-   action, the run waits in `awaiting_approval`, exactly like a gate.
-   `approve <run-id>` confirms every pending action. Later, a button in Trello
-   or Slack can do the same through the trigger's `Dispatcher`.
-3. Confirmations are kept per environment name. A new run that reuses the
+2. `approve <run-id>` confirms every pending action, at any time: also while
+   the run executes, so a human who is done before the run gets there never
+   holds it up. The executing process can't be interrupted to change the
+   run, so the confirmation is stored next to it and applied before the next
+   step. Later, a button in Trello or Slack can do the same through the
+   trigger's `Dispatcher`.
+3. When the run reaches an action's `Before` step and nobody has confirmed the
+   action, the run waits in `awaiting_approval`, exactly like a gate, and
+   `approve` confirms it and continues.
+4. Confirmations are kept per environment name. A new run that reuses the
    environment doesn't ask again.
-4. The actions, and whether they're done, are listed in the MR description and
+5. The actions, and whether they're done, are listed in the MR description and
    in `publish`'s report. `env destroy` prints them as a reminder to undo
    them (remove the redirect URIs).
 
@@ -1188,7 +1193,7 @@ learns from.
 <factory> status [run-id]              # list runs or show one
 <factory> logs [-f] <run-id>
 <factory> resume <run-id>              # continue a failed, needs_input or interrupted run
-<factory> approve <run-id>             # pass the current gate, confirm pending actions, continue
+<factory> approve <run-id>             # confirm pending actions (any time, also mid-run); at a gate, pass it and continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
                                        # components: hinziel, tracker, agent, repo, environment, dns, deployer,
