@@ -677,7 +677,8 @@ These rules keep the interfaces from fighting each other:
    options and credentials surface in `Check` (`core.Checker`) or on first use.
    `Check` also names every command the component runs on the Hinziel host
    that isn't installed (`core.NeedTools`), so one `check` on a fresh host
-   lists everything it's missing.
+   lists everything it's missing. A credential that is empty is reported as
+   such (`core.NeedSettings`), not as whatever the API says about it.
    That keeps a factory a single readable expression.
 7. **The engine owns the workflow; the agent owns the work.** The agent has
    full access (see the working assumption in §1). It commits and pushes, but
@@ -1086,9 +1087,15 @@ and works in two phases.
 5. **Write the factory**, and any missing components, against the
    interfaces. Run each one's conformance suite (`trackertest.Run(t,
    myTracker)`, …) until it passes.
-6. **Check** with `check` as the values arrive. It reports every bad
-   credential and missing tool at once, so the person can fill the file in
-   any order, and the skill tells them what's still missing.
+6. **Collect the credentials one at a time**, checking each as it arrives.
+   For each component: say exactly where to click and what to choose, wait
+   until the person says the value is in the file, then verify it with
+   `check <component>` (`check tracker`, `check "deployer api"`) before
+   moving on. A check limited to some components only notes the variables
+   still empty elsewhere, so the file fills up one component at a time.
+   Values that aren't secret and can be looked up once a credential works
+   (account IDs, subdomains) the skill fills in itself. A final `check`
+   with no arguments runs everything.
 7. **Bring up an environment** for the target branches alone with `env up`,
    and iterate until it provisions, deploys and passes the
    [parity check](#learning-how-the-app-is-deployed).
@@ -1183,7 +1190,9 @@ learns from.
 <factory> resume <run-id>              # continue a failed, needs_input or interrupted run
 <factory> approve <run-id>             # pass the current gate, confirm pending actions, continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
-<factory> check                        # test credentials and the tools this host needs (git, ssh, node, claude, …)
+<factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
+                                       # components: hinziel, tracker, agent, repo, environment, dns, deployer,
+                                       # trigger, notifier, or one by name ("deployer api")
 <factory> daemon                       # run triggers and execute runs continuously (M2)
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)

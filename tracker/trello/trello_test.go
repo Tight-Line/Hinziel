@@ -288,3 +288,10 @@ func TestIntegration(t *testing.T) {
 	}
 	trackertest.Run(t, tr, os.Getenv("TRELLO_TEST_CARD"))
 }
+
+func TestCheckReportsEmptyCredentialsFirst(t *testing.T) {
+	err := New(Options{Board: "b", Token: "t"}).Check(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "not set: APIKey ") {
+		t.Fatalf("got %v", err)
+	}
+}

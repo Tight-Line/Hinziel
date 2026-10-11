@@ -214,6 +214,9 @@ func (p *Provider) Delete(ctx context.Context, name string) error {
 
 // Check verifies that the token can read the zone and its DNS records.
 func (p *Provider) Check(ctx context.Context) error {
+	if err := core.NeedSettings(map[string]string{"Token": p.opts.Token}); err != nil {
+		return err
+	}
 	if p.opts.AllowedNames != "" {
 		if _, err := path.Match(p.opts.AllowedNames, ""); err != nil {
 			return fmt.Errorf("AllowedNames %q: %w", p.opts.AllowedNames, err)

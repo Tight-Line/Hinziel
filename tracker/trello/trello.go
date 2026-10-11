@@ -293,6 +293,9 @@ var downloadClient = &http.Client{Timeout: 5 * time.Minute}
 
 // Check verifies the credentials, the board, and that every stage's list and label exists.
 func (t *Tracker) Check(ctx context.Context) error {
+	if err := core.NeedSettings(map[string]string{"APIKey": t.opts.APIKey, "Token": t.opts.Token}); err != nil {
+		return err
+	}
 	var me struct {
 		Username string `json:"username"`
 	}

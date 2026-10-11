@@ -331,6 +331,9 @@ func (p *Provisioner) Check(ctx context.Context) error {
 		ssh = p.ssh[0]
 	}
 	toolErr := core.NeedTools(ssh)
+	if err := core.NeedSettings(map[string]string{"Token": p.opts.Token}); err != nil {
+		return errors.Join(toolErr, err)
+	}
 	if err := p.api.Do(ctx, http.MethodGet, "/account", nil, nil, nil); err != nil {
 		return errors.Join(toolErr, err)
 	}

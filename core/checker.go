@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -28,4 +29,21 @@ func NeedTools(commands ...string) error {
 		return nil
 	}
 	return fmt.Errorf("not installed on this host (or not on PATH): %s", strings.Join(missing, ", "))
+}
+
+// NeedSettings reports, in one error, which of the settings (option name to
+// value) are empty. Components call it first in Check, so a component whose
+// credentials aren't filled in yet says so, instead of failing on the API.
+func NeedSettings(settings map[string]string) error {
+	var empty []string
+	for name, v := range settings {
+		if v == "" {
+			empty = append(empty, name)
+		}
+	}
+	if len(empty) == 0 {
+		return nil
+	}
+	slices.Sort(empty)
+	return fmt.Errorf("not set: %s (is its environment variable empty?)", strings.Join(empty, ", "))
 }

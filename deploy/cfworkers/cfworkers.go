@@ -275,6 +275,9 @@ func (d *Deployer) Check(ctx context.Context) error {
 	if d.opts.Worker == "" {
 		errs = append(errs, errors.New("Worker is required"))
 	}
+	if err := core.NeedSettings(map[string]string{"AccountID": d.opts.AccountID, "Token": d.opts.Token}); err != nil {
+		return errors.Join(append(errs, err)...)
+	}
 	if _, err := d.accountSubdomain(ctx); err != nil {
 		errs = append(errs, err)
 	}

@@ -191,6 +191,9 @@ func (f *Forge) UpdateChangeRequest(ctx context.Context, cr *forge.ChangeRequest
 
 // Check verifies that the token can see the project.
 func (f *Forge) Check(ctx context.Context) error {
+	if err := core.NeedSettings(map[string]string{"Token": f.opts.Token}); err != nil {
+		return err
+	}
 	_, err := f.getProject(ctx)
 	return err
 }

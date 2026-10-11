@@ -209,3 +209,87 @@ func TestRunCheckReportsMissingGit(t *testing.T) {
 		t.Fatalf("err %v, output:\n%s", err, out.String())
 	}
 }
+
+type checkedDeployer struct {
+	fakeDeployer
+	err error
+}
+
+func (d checkedDeployer) Check(context.Context) error { return d.err }
+
+// checkFactory has a failing tracker and two deployers, one of them failing.
+func checkFactory() hinziel.Factory {
+	f := validFactory()
+	f.Tracker = fakeTracker{checkErr: errors.New("bad token")}
+	f.Deployers = []hinziel.Deployer{
+		{Name: "api", Repo: "app", Deployer: checkedDeployer{}},
+		{Name: "web", Repo: "app", Deployer: checkedDeployer{err: errors.New("no wrangler")}},
+	}
+	return f
+}
+
+func TestRunCheckSelectsComponents(t *testing.T) {
+	for _, tc := range []struct {
+		args       []string
+		want, skip []string
+		fails      bool
+	}{
+		{
+			args: []string{"check", "deployer api"},
+			want: []string{"ok    blanktracker: deployer api"},
+			skip: []string{": tracker", "deployer web", "hinziel: git"},
+		},
+		{
+			args:  []string{"check", "deployer"},
+			want:  []string{"ok    blanktracker: deployer api", "FAIL  blanktracker: deployer web: no wrangler"},
+			skip:  []string{": tracker"},
+			fails: true,
+		},
+		{
+			args:  []string{"check", "--factory", "blanktracker", "tracker", "hinziel"},
+			want:  []string{"FAIL  blanktracker: tracker: bad token", "ok    hinziel: git"},
+			skip:  []string{"deployer"},
+			fails: true,
+		},
+	} {
+		var out bytes.Buffer
+		err := hinziel.Run(context.Background(), tc.args, &out, checkFactory())
+		if (err != nil) != tc.fails {
+			t.Errorf("%v: err %v", tc.args, err)
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(out.String(), w) {
+				t.Errorf("%v: output lacks %q:\n%s", tc.args, w, out.String())
+			}
+		}
+		for _, s := range tc.skip {
+			if strings.Contains(out.String(), s) {
+				t.Errorf("%v: output mentions %q:\n%s", tc.args, s, out.String())
+			}
+		}
+	}
+}
+
+func TestRunCheckRejectsUnknownSelector(t *testing.T) {
+	err := hinziel.Run(context.Background(), []string{"check", "deployer nova"}, &bytes.Buffer{}, checkFactory())
+	if err == nil || !strings.Contains(err.Error(), `nothing to check called "deployer nova"; choose from: hinziel, tracker, deployer api, deployer web`) {
+		t.Fatalf("got %v", err)
+	}
+	err = hinziel.Run(context.Background(), []string{"check", "--factory", "other"}, &bytes.Buffer{}, checkFactory())
+	if err == nil || !strings.Contains(err.Error(), `unknown factory "other"`) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRunCheckWithSelectorOnlyNotesMissingEnv(t *testing.T) {
+	envcheck.Reset()
+	defer envcheck.Reset()
+	hinziel.Env("HINZIEL_TEST_MISSING")
+	var out bytes.Buffer
+	if err := hinziel.Run(context.Background(), []string{"check", "deployer api"}, &out, checkFactory()); err != nil {
+		t.Fatalf("a missing variable must not fail a selected check: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "note  hinziel: missing environment variables: HINZIEL_TEST_MISSING") {
+		t.Errorf("unexpected output:\n%s", out.String())
+	}
+}
