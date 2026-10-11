@@ -37,7 +37,10 @@ func main() {
 		APIKey: hinziel.Env("TRELLO_API_KEY"),
 		Token:  hinziel.Env("TRELLO_TOKEN"),
 		Board:  "FbGOL7Wb",
-		Stages: map[tracker.Stage]trello.Stage{tracker.StageInProgress: {List: "In progress"}},
+		Stages: map[tracker.Stage]trello.Stage{
+			tracker.StageInProgress: {List: "In progress"},
+			tracker.StageInReview:   {List: "Deployed to QA / staging"},
+		},
 	})
 
 	hinziel.Main(hinziel.Factory{

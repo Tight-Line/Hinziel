@@ -848,11 +848,13 @@ func main() {
 		Board:  "FbGOL7Wb",
 		APIKey: hinziel.Env("TRELLO_API_KEY"),
 		Token:  hinziel.Env("TRELLO_TOKEN"),
-		// The board has no list for review or blocked, and gets none: those
-		// stages show in comments and notifications only. Another board might
-		// map them to lists, labels or both (trello.Stage).
+		// A finished run goes to QA, where the team reviews it on the
+		// preview. The board has no list for blocked, and gets none: that
+		// stage shows in comments only. Another board might map stages to
+		// lists, labels or both (trello.Stage).
 		Stages: map[tracker.Stage]trello.Stage{
 			tracker.StageInProgress: {List: "In progress"},
+			tracker.StageInReview:   {List: "Deployed to QA / staging"},
 		},
 	})
 
@@ -1483,39 +1485,46 @@ Real and hypothetical setups used to test the design against real-world
 messiness. A case study passes if it fits the existing interfaces without
 changing them.
 
-### 12.1 Guinea pig: a "build this" button on Trello cards
+### 12.1 Guinea pig: starting runs from a Trello comment
 
 **The setup.** BlankTracker, the guinea-pig project (scenario A: Laravel API +
 SPA, GitLab, Trello, DigitalOcean, Cloudflare). People on the Trello board
 start a run from the card itself and see its progress there, without
 touching the CLI.
 
-**What the factory delivers.** A **"🧙 Hinziel: build this"** button on every
-card, and badges on the card showing run status, the MR links and the
-environment links.
+**What the factory delivers.** A comment on a card that mentions the
+factory's Trello member and says "implement" (`@hinzielsoftwarefactory
+implement`) starts a run. The factory replies on the card with the run it
+started, or why it couldn't start one, moves the card through the board's
+lists as the run goes, and comments there when it fails, has a question or
+needs a human.
 
 **How it maps.**
 
 | Piece | Implementation |
 |---|---|
-| Trigger | `trigger/trellopowerup`, listed in the factory's `Triggers`. `daemon` mounts it under `/triggers/blanktracker/trello/` |
-| Power-Up assets | a static connector (`index.html` + JS) served from `embed.FS`. In the Trello Power-Up admin, the iframe connector URL is set to `https://<public_url>/triggers/blanktracker/trello/`. Because the connector and the API share an origin, the button's request needs no CORS. BlankTracker's repository already has a generic version (`local-dev/trello-power-up/`); the trigger ships its own copy, so nothing is added to the app |
-| Button | the `card-buttons` capability calls `POST …/runs {cardId}`, which calls `Dispatcher.Submit` |
-| Badges | the `card-badges` / `card-detail-badges` capabilities poll `GET …/cards/{cardId}`, which calls `Dispatcher.Latest` |
+| Trigger | `trigger/trellocomments`, listed in the factory's `Triggers`. It polls the board's comments, every 30 seconds by default |
+| Who it answers to | the member the factory's Trello token belongs to, so each installation answers to its own name without configuration. Its own comments never count |
 | Which factory | the trigger belongs to one factory, and its `Dispatcher` is scoped to it, so no board-to-factory mapping is needed |
-| Auth | the Power-Up's code is public, so it holds no secret. `t.getRestApi().authorize({scope: 'read'})` gets the member's own Trello token, which is sent with the card ID. The server asks Trello for the card (401/404 are passed on, and the card's URL comes from Trello, never from the request), checks that the member belongs to the card's board, and that the board is in the trigger's `Boards` allowlist. The token is used for that check only, never logged or stored; the run records the member ID in `RequestedBy` |
+| Requester | the commenter's username, in the run's `RequestedBy` |
+| Progress | the tracker's stages (`In progress`, then `Deployed to QA / staging`) and `notify/ticket` comments |
 
 **Design points this case confirms.**
 
-- **Triggers are not limited to the CLI.** A trigger can ship its own UI,
-  serve it over HTTP and use only the `Dispatcher` to talk to the engine.
-- **`Dispatcher.Latest` exists for this case.** A trigger needs to show the
-  state of the most recent run for a ticket, not only start new ones.
+- **Triggers are not limited to the CLI.** A trigger only needs the
+  `Dispatcher` to talk to the engine.
 - **A trigger belongs to one factory.** The engine doesn't need to know about
   Trello boards.
+- **A poller needs no inbound traffic.** The comment trigger needs no
+  public URL, no HTTPS and no Power-Up, so the daemon runs anywhere, a
+  laptop included. Comments made while the daemon is stopped are missed.
 
-**Caveat.** Trello requires HTTPS for the connector. For local testing, put
-`daemon` behind a tunnel (see [Hosting a factory](#hosting-a-factory)).
+**The road not taken.** The first design was a Power-Up: a "🧙 Hinziel:
+build this" button on every card and badges with the run's status
+(`trigger/trellopowerup`, using `Dispatcher.Submit` and `Dispatcher.Latest`).
+It needs the daemon on a public HTTPS URL and a Power-Up registered in
+Trello's admin; the comment trigger needs neither. Comments are also where
+[iteration](#iteration) feedback arrives (M4).
 
 ### 12.2 A preview that needs a human: Google login
 
