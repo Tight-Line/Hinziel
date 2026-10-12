@@ -350,7 +350,6 @@ func (x *execution) implement(ctx context.Context) error {
 			x.logf(StepImplement, "%v", err)
 		}
 	}
-	x.cleanUp(ctx)
 	if err != nil {
 		return err
 	}

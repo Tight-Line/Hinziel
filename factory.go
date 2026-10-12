@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Tight-Line/hinziel/agent"
-	"github.com/Tight-Line/hinziel/cleanup"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/dns"
 	"github.com/Tight-Line/hinziel/env"
@@ -41,11 +40,6 @@ type Factory struct {
 
 	Triggers  []Trigger
 	Notifiers []Notifier
-	// Cleanup stops what the agent leaves running on the factory's host,
-	// such as the repository's dev stack, when implement ends and when a
-	// run is cancelled (cleanup/dockercompose, cleanup/command). The
-	// sandbox replaces it: removing the sandbox removes what's in it.
-	Cleanup []cleanup.Cleaner
 	// Sandbox says what's in the container the agent works in, one per run.
 	// The zero value is Hinziel's base image alone.
 	Sandbox Sandbox
@@ -275,12 +269,6 @@ func (f *Factory) validate() error {
 	}
 	if (f.Teardown.WhenDone || f.Teardown.After > 0) && f.Environment == nil {
 		bad("Teardown needs an Environment")
-	}
-
-	for i, c := range f.Cleanup {
-		if c == nil {
-			bad("Cleanup[%d]: Cleaner is required", i)
-		}
 	}
 
 	for _, s := range f.Gates {

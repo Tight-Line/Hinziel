@@ -262,8 +262,7 @@ func (e executingError) Error() string {
 
 // Cancel marks an unfinished run as cancelled. A run executing in another
 // process must be stopped there first. A run interrupted during implement
-// may have left what the agent started running, so the factory's cleaners
-// run too.
+// may have left its sandbox behind, which is removed.
 func (e *Engine) Cancel(ctx context.Context, id run.ID) error {
 	err := e.prepare(ctx, id, func(r *run.Run) error {
 		if r.Status == run.StatusSucceeded || r.Status == run.StatusCancelled {
@@ -285,14 +284,6 @@ func (e *Engine) Cancel(ctx context.Context, id run.ID) error {
 		if err := p.Sandbox.Remove(ctx, sandboxName(p.Name, string(id))); err != nil {
 			fmt.Fprintf(e.opts.Out, "run %s: %v\n", id, err)
 		}
-	}
-	if p := e.projects[r.Factory]; p != nil && len(p.Cleaners) > 0 {
-		x, err := e.newExecution(p, r)
-		if err != nil {
-			return err
-		}
-		defer x.close()
-		x.cleanUp(ctx)
 	}
 	return nil
 }

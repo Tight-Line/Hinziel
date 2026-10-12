@@ -304,8 +304,5 @@ func components(f *Factory) []component {
 	for i, n := range f.Notifiers {
 		cs = append(cs, component{fmt.Sprintf("notifier %d", i), n.Notifier})
 	}
-	for i, c := range f.Cleanup {
-		cs = append(cs, component{fmt.Sprintf("cleanup %d", i), c})
-	}
 	return cs
 }

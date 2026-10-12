@@ -21,7 +21,6 @@ func (f *Factory) project() *engine.Project {
 		Agent:       f.Agent,
 		Provisioner: f.Environment,
 		DNS:         f.DNS,
-		Cleaners:    f.Cleanup,
 		Sandbox:     sandboxRunner,
 		Settings: engine.Settings{
 			Instructions:        f.Instructions,

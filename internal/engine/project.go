@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Tight-Line/hinziel/agent"
-	"github.com/Tight-Line/hinziel/cleanup"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/dns"
 	"github.com/Tight-Line/hinziel/env"
@@ -29,8 +28,7 @@ type Project struct {
 	Endpoints   []Endpoint
 	Deployers   []Deployer
 	Notifiers   []Notifier
-	Cleaners    []cleanup.Cleaner // run when implement ends and on cancel
-	Sandbox     sandbox.Runner    // starts the agent's sandbox; nil = none (tests)
+	Sandbox     sandbox.Runner // starts the agent's sandbox; nil = none (tests)
 	Settings    Settings
 }
 

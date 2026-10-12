@@ -597,7 +597,6 @@ and the plain data types around it.
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
 | [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`, `Destroyer`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
-| [`cleanup`](./cleanup/cleanup.go) | `Cleaner`; `Workspace`, `Checkout` | — |
 | [`notify`](./notify/notify.go) | `Notifier`; `Event`, `EventType`, the `Finished` / `Problems` event sets | core, run |
 | [`trigger`](./trigger/trigger.go) | `Trigger`, `Dispatcher` | run, tracker |
 | [`hinziel`](./factory.go) (root) | `Factory`, `Repo`, `Endpoint`, `DNSTarget` (+ `HostAddress`, `CNAME`), `Deployer`, `Notifier`, `Trigger`, `Teardown`, `Step`, `Main`, `Run`, `Env` | all of the above |
@@ -638,7 +637,6 @@ third-party module) follow the same interfaces and are used the same way.
 |---|---|
 | [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§9) |
 | [`agent/agenttest`](./agent/agenttest) | public: a scriptable fake agent. No conformance suite; agents are tested end to end |
-| [`cleanup/cleanuptest`](./cleanup/cleanuptest) | public: a recording fake cleaner. No conformance suite |
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
 | [`internal/sandbox`](./internal/sandbox) | the agent's sandbox: the image (Hinziel's base plus `Factory.Sandbox`), a container per run in the host's Docker, `docker exec` for the agent's commands |
@@ -729,20 +727,10 @@ These rules keep the interfaces from fighting each other:
   confirmation rules in the project's instructions. Everything else in them,
   such as coding conventions and how to run the tests, still applies.
 - **What the agent leaves running.** The agent starts things on the
-  factory's host to test its work: a dev stack, a database, a server. An
-  agent component stops its own processes when the agent exits
-  (`agent/claudecode` kills its process group). What outlives them, such as
-  containers a Docker daemon runs, is for the factory's `Cleanup`: cleaners
-  the engine calls with the run's checkouts when `implement` ends, whether
-  it succeeded or not, and when a run is cancelled. Hinziel doesn't guess
-  how a project runs locally; the factory says, with `cleanup/dockercompose`
-  (the Compose projects started from the run's checkouts), `cleanup/command`
-  (the team's own command, e.g. `./toolkit down`) or a cleaner of its own.
-  A cleaner's error is logged and never fails the run. The
-  [sandbox](#the-agents-sandbox) (M2) replaces cleaners: removing it
-  removes everything in it. A cleaner runs with
-  the agent's environment, not the factory's, because the checkout holds
-  code the agent wrote.
+  agent's [sandbox](#the-agents-sandbox) to test its work: a dev stack, a
+  database, a server. The sandbox is removed when `implement` ends, whether
+  it succeeded or not, and when a run is cancelled, and everything the agent
+  started goes with it, containers of the sandbox's own Docker included.
 - **Several repos.** Each repo has its own forge, so one factory can span
   GitLab and GitHub. The agent sees all checkouts (`Task.Repos`). Each
   deployer is bound to one repo and gets that repo's `Source`.
@@ -824,8 +812,6 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent/claudecode"
-	"github.com/Tight-Line/hinziel/cleanup"
-	cleancompose "github.com/Tight-Line/hinziel/cleanup/dockercompose"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/cfworkers"
 	"github.com/Tight-Line/hinziel/deploy/dockercompose"
@@ -971,9 +957,9 @@ func main() {
 			})},
 		},
 
-		// The agent runs the repository's dev stack to test (`./toolkit check`);
-		// it is stopped when implement ends, so it doesn't outlive the run.
-		Cleanup: []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
+		// The agent runs the repository's dev stack to test (`./toolkit check`),
+		// so its sandbox has a Docker daemon of its own.
+		Sandbox: hinziel.Sandbox{Docker: true},
 
 		// The daemon destroys a card's preview once the card is done.
 		Teardown: hinziel.Teardown{WhenDone: true},
@@ -1510,9 +1496,9 @@ sandbox (`Task.Sandbox`, which wraps an `exec.Cmd` to run inside);
 `check` builds the sandbox's image and verifies the runtime. The image is
 cached by its contents, so a run doesn't rebuild it.
 
-Removing the sandbox removes whatever the agent left running, so
-[`Cleanup`](#behaviour-the-types-alone-dont-show) has no job left. It goes
-away once the sandbox has replaced it in BlankTracker's factory.
+Removing the sandbox removes whatever the agent left running, so a factory
+has nothing to clean up after the agent. (Before the sandbox, factories
+stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 
 ## 9. Testing strategy
 
@@ -1543,7 +1529,7 @@ away once the sandbox has replaced it in BlankTracker's factory.
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); `env up`; [per-environment certificates](#per-environment-certificates); the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing; the [agent's sandbox](#the-agents-sandbox) (a container per run, with Docker inside when the factory asks; replaces `Cleanup`) and parallel runs (`daemon --runs N`) |
+| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1574,8 +1560,7 @@ away once the sandbox has replaced it in BlankTracker's factory.
    BlankTracker showed why it matters. Its instructions ask for
    `./toolkit check`, which only runs in the repository's local dev stack,
    so the agent started that stack on the runner and left it running after
-   the run (since then, the factory stops it with `cleanup/dockercompose`
-   when `implement` ends; see §4). Its published ports (Postgres, Redis, nginx, …) were open to
+   the run. Its published ports (Postgres, Redis, nginx, …) were open to
    the internet, because Docker's port publishing bypasses ufw; only a
    cloud firewall in front of the host closes them. Two such runs at once
    would also collide: the same fixed host ports, and the same Compose
