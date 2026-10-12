@@ -16,8 +16,10 @@ for a few rounds of fix and resume.
 - **Say what the run will create**: a host (with its hourly and monthly
   price), DNS records, a preview deployment, a branch and an MR, and
   comments on the ticket, which the team will see. Get a yes.
-- **What the agent needs on this machine**: the local dev stack, if the
-  team's checks need it; Claude Code logged in.
+- **What the agent needs**: `check` passes its `sandbox` line (the runtime
+  is there and the sandbox's image builds) and its `agent` line (a Claude
+  token in the env file: the agent runs in its sandbox, where nobody is
+  logged in).
 
 ## Starting and watching
 
@@ -25,10 +27,14 @@ Start the run in the background (`<factory> run <ticket>`, output to a
 log) and follow the steps: `fetch_ticket`, `prepare_workspace`,
 `provision_environment`, `deploy_base`, `implement`, `finalize_branch`,
 `open_change_request`, `deploy`, `publish`. Tell the person as each step
-finishes. During `implement`, the run's log (in
-`~/.local/state/hinziel/runs/<id>/log.txt`) has the agent's own
-narration; summarise it when asked, and point out anything the person
-should know, such as data sources the agent reached.
+finishes. During `implement`, the run's log has the agent's own narration
+(`runs/<id>/log.txt` in the state directory: `~/.local/state/hinziel` on a
+laptop, `/var/lib/hinziel/<factory>/state` on a host from `host
+install`); summarise it when asked, and point out anything the person
+should know, such as data sources the agent reached. The agent's sandbox
+is the container `hinziel-<factory>-<run id>` while it works. Its first
+check may take long while it builds the dev images; that's expected, not
+a hang.
 
 Human actions are announced right after provisioning. Pass them on as soon
 as they appear, with exact values, so the person can do them while the
@@ -67,12 +73,13 @@ When the run succeeds, check with the person:
 
 ## Afterwards
 
-- **Cleanup.** Until `env destroy` exists, a preview keeps running and
-  costing money until it's removed by hand: the host, the DNS records, the
-  preview deployment, and the human actions to undo (redirect URIs). Say
-  so, with the cost, and offer to remove them once the MR is reviewed.
+- **Teardown.** A preview keeps running and costing money until it's torn
+  down: by `env destroy <ticket>`, by a "teardown" comment, or by the
+  daemon once the ticket is done (`Factory.Teardown`). Say which applies,
+  with the cost, and list the human actions to undo by hand (redirect
+  URIs); the teardown's notification lists them too.
 - **Record** what the run taught you in `SETUP.md` and `ENVIRONMENT.md`.
 - **Triggers.** Once a run from the CLI works, set up how the team will
-  start runs (`<factory> daemon` with a comment trigger, for example) and
-  try it with a second ticket. A ticket whose run already finished needs
+  start runs (`<factory> daemon` with a comment trigger, for example, on
+  the host from `host install`) and try it with a second ticket. A ticket whose run already finished needs
   iteration support to run again; use a new one.

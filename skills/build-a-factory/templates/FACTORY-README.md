@@ -19,7 +19,21 @@ go build -o <factory> .
 ./<factory> daemon                # <how runs start: e.g. "@<member> implement" comments>
 ./<factory> status                # runs so far
 ./<factory> approve <run-id>      # confirm human actions, pass a gate
+./<factory> env list              # previews that exist
+./<factory> env destroy <ticket>  # tear one down
 ```
+
+## Where it runs
+
+<host, size and cost>, installed and updated with `<script>` (Hinziel's
+`host install`): the factory runs there as the container
+`hinziel-<factory>`, up to <N> runs at once.
+
+- Logs: `ssh <host> docker logs -f hinziel-<factory>`
+- Runs and their logs: `/var/lib/hinziel/<factory>/state/runs/`
+- Configuration: `/etc/hinziel/<factory>/env` (root only)
+
+The agent works in a sandbox per run: <its contents: Docker, extra tools>.
 
 ## What a run creates
 
@@ -28,7 +42,8 @@ go build -o <factory> .
 - <preview deployments>
 - a branch `hinziel/<ticket>-…`, a merge request, comments on the ticket
 
-<How to remove a preview until `env destroy` exists.>
+<When previews are torn down: on `env destroy`, a "teardown" comment, or
+once the ticket is done.>
 
 ## Human actions
 

@@ -104,27 +104,41 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    credentials. The factory's agent gets only what the factory gives it,
    so decide each one on purpose: wire it in, or leave it out.
 5. **Choose components** from the README's package map. Name any that must
-   be written, and say why none of the existing ones fits. Include what
-   stops the agent's local work: the agent runs on the factory's host, and
-   whatever the repository's instructions have it bring up to test (a
-   Compose dev stack, a database, a server) outlives the run unless the
-   factory's `Cleanup` stops it. Find how a developer stops it today
-   (`./toolkit down`, `make stop`) and pick `cleanup/dockercompose` or
-   `cleanup/command`. Docker publishes ports past ufw, so on an always-on
-   host a leftover stack is open to the internet; put a cloud firewall in
-   front of that host either way.
-6. **Triggers and notifications.** How will people start a run? The CLI
+   be written, and say why none of the existing ones fits.
+6. **What goes in the agent's sandbox.** The agent always works in a
+   container of its own per run, removed when it's done, with everything it
+   started (README, "The agent's sandbox"). Hinziel's base image has git,
+   ssh, Node 22 and Claude Code. Find what the team's "before you finish"
+   checks need beyond that: a dev stack in Docker Compose means
+   `Sandbox{Docker: true}`; other tools (PHP, Python, a database client)
+   go in `Sandbox.Dockerfile` lines. Run the checks once yourself in a
+   fresh checkout, timed: the first run in a sandbox builds the dev images
+   from nothing, and BlankTracker's took 15 minutes. If it's long, say it
+   in the factory's `Instructions` (run the check in the background: a
+   single command of the agent is stopped after 10 minutes), and suggest
+   the team publish its dev images to a registry so a sandbox pulls them
+   instead of building them. That's the team's change to make, not the
+   factory's.
+7. **Where the factory runs.** A sandbox with Docker inside needs Sysbox,
+   so Linux, never `--privileged`: Docker Desktop on a Mac can't run it.
+   For a team, recommend an always-on Linux host, prepared and updated by
+   `host install` (README, "Hosting a factory"); it installs Docker and
+   Sysbox itself. A laptop is fine for trying the factory when the sandbox
+   needs no Docker. Ask how many runs may execute at once (`--runs`): each
+   runs its own sandbox and dev stack, so size the host for that many.
+8. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it
    needs no public URL and runs anywhere, a laptop included. Webhooks
    need a public HTTPS address and an always-on host. Who should
    hear about what? Problems and human actions can go on the ticket alone.
-7. **List what's needed from people**: every credential, one-time setup and
+9. **List what's needed from people**: every credential, one-time setup and
    human action, each with what it is, why, the least access, and where it
    goes. Sources: each component's Credentials section, the app's
    `.env.example` and deploy scripts, and the environment model's human
    actions.
-8. **Confirm the plan** in one message: components, the environment model
+10. **Confirm the plan** in one message: components, the sandbox and where
+   the factory runs, the environment model
    and how a preview differs from staging, how runs start, who's notified,
    what you'll need from them, what runs will cost (a droplet per ticket,
    say), and what you'll create where. Then ask: shall I build?
@@ -152,7 +166,15 @@ review them as files.
    Watch it, report each step to the person as it finishes, and fix what
    fails. Expect the first run to find problems; each is either the
    factory's or Hinziel's.
-6. **Hand over**: write the factory README from
+6. **Install it on its host** with `<factory> host install --env-file
+   <file> --binary <linux build> <host>` (after the first run, or for it,
+   if the sandbox needs Docker and this machine can't run Sysbox). Say
+   first what it installs (Docker, Sysbox, a `hinziel` user, a container)
+   and that installing Sysbox restarts Docker. Put the command in a small
+   script in the factory repository (BlankTracker: `hinziel/runner/deploy.sh`)
+   so an update is one command. Before updating a host with a running
+   daemon, make sure no run is executing; `host install` refuses otherwise.
+7. **Hand over**: write the factory README from
    `templates/FACTORY-README.md`, finish `SETUP.md`, and tell the person
    what's still running and costing money.
 

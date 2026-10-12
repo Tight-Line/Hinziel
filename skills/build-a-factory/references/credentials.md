@@ -151,5 +151,7 @@ Verify with the calls given; all are read-only.
 
 ### The agent (agent/claudecode)
 
-- On a machine where the person is logged in to Claude Code, nothing is
-  needed. On a server: `claude setup-token`.
+- Always a token in the env file: `CLAUDE_CODE_OAUTH_TOKEN` from `claude
+  setup-token` (a subscription), or `ANTHROPIC_API_KEY`. The agent runs in
+  its sandbox, where the person's own login isn't, so a logged-in laptop
+  isn't enough. `check agent` says when neither is set.

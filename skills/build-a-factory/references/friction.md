@@ -109,11 +109,19 @@ and what BlankTracker showed.
 
 - **Look for:** what the team's "before you finish" command needs: a local
   dev stack, Docker, Node in a container, a database.
-- **Ask:** where the agent should run those checks.
-- **BlankTracker:** `./toolkit check` needs the local dev stack. The agent
-  ran `./toolkit init` in its own checkout, which gave it a stack on its
-  own ports next to the developer's. On a server or in a container, that
-  needs Docker there too: unsolved for hosted factories.
+- **Ask:** how long the checks take from a fresh checkout, and whether the
+  team publishes its dev images anywhere.
+- **BlankTracker:** `./toolkit check` needs the local dev stack. On the
+  developer's laptop, the agent ran `./toolkit init` in its own checkout
+  and got a stack next to the developer's. On the hosted runner, the stack
+  it left behind once published Postgres, Redis and nginx to the internet,
+  because Docker's ports bypass ufw. The sandbox fixed both:
+  `Sandbox{Docker: true}` gives each run a Docker daemon of its own
+  (Sysbox), and the stack dies with the sandbox. What's left is time: the
+  first check in an empty sandbox built the dev image for 15 minutes,
+  longer than one command of the agent may take, so the factory's
+  instructions tell it to run the check in the background. The lasting fix
+  is the team's: publish the dev image to a registry so a sandbox pulls it.
 
 ## The agent inherits the host's access
 
@@ -137,9 +145,11 @@ and what BlankTracker showed.
   the factory's host.
 - **Since then:** the agent no longer inherits the factory's environment.
   It gets a minimal base, its own credentials and the factory's
-  `AgentEnv`. Decide with the team what goes in `AgentEnv` (a read-only
-  database URL, say), and keep the factory's own secrets in a file the
-  agent's user can't read (on a server: root-owned, loaded by systemd).
+  `AgentEnv`, in a sandbox that holds only its run's checkouts. Decide with
+  the team what goes in `AgentEnv` (a read-only database URL, say). The
+  factory's own secrets stay outside the sandbox: on a host, `host install`
+  puts them in `/etc/hinziel/<factory>`, readable by root and the factory
+  alone.
 
 ## Plan, permission and policy limits
 
@@ -162,6 +172,19 @@ and what BlankTracker showed.
   uses a `go.work` instead until Hinziel is published). An SSH agent with
   twelve keys made servers refuse with "Too many authentication failures"
   unless `IdentitiesOnly=yes`.
+
+## Where the factory can run
+
+- **Look for:** the OS of the machines on offer, whether Docker is there,
+  and whether anything else runs on a host you'd install on.
+- **Ask:** whether a dedicated always-on host is acceptable, and its cost.
+- **BlankTracker:** the runner started as a systemd service from a deploy
+  script, then moved to `host install`: the factory runs in a container,
+  and the agent's sandboxes with Docker inside need Sysbox, so Linux. A
+  Mac can't run those sandboxes at all; a factory whose checks need Docker
+  is tried on a Linux host from the start. Installing Sysbox restarts
+  Docker, which stops whatever else that Docker runs: don't share the host
+  with anything that matters.
 
 ## Pitfalls in writing the factory itself
 

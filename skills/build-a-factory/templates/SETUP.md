@@ -11,6 +11,8 @@ recorded with the reason and who made them.
 | | Factory lives in <dedicated repo / `hinziel/` in the monorepo> | | |
 | | Previews copy <environment> | | |
 | | Runs start from <CLI / comment trigger / …> | | |
+| | The agent's sandbox has <Docker / tools> | | |
+| | The factory runs on <host>, <N> runs at once | | |
 | | Commits: <who branches, commits and pushes> | | |
 
 ## Phase 1: plan
@@ -32,6 +34,7 @@ recorded with the reason and who made them.
 - [ ] Full `check` passes
 - [ ] Environment for the target branch up, parity checked
 - [ ] First run: ticket <id>, run <run id>, MR <link>
+- [ ] Installed on <host> with `host install`; check passes there
 - [ ] Handover README written
 
 ## Open items
