@@ -76,6 +76,32 @@ func TestDestroyTearsDownAndRecordsIt(t *testing.T) {
 	}
 }
 
+func TestDestroySaysWhenTheEnvironmentWasAlreadyGone(t *testing.T) {
+	f := newFixture(t)
+	f.agentChangesAPI()
+	r, err := f.start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.env.Destroy(f.ctx, r.Environment); err != nil { // by hand, outside Hinziel
+		t.Fatal(err)
+	}
+
+	if _, err := f.eng.Destroy(f.ctx, "", "T-1", "the ticket is done"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.dns.Records()) != 0 {
+		t.Errorf("what was left must still be removed: records %v", f.dns.Records())
+	}
+	if r = f.load(r.ID); r.EnvironmentDestroyed.IsZero() {
+		t.Error("the run must record that its environment is gone")
+	}
+	evs := f.notifier.Events()
+	if body := evs[len(evs)-1].Message.Body; !strings.Contains(body, "already gone") {
+		t.Errorf("the notification must say it was already gone: %q", body)
+	}
+}
+
 func TestDestroyByRunIDAndEnvironmentName(t *testing.T) {
 	for _, target := range []func(r *run.Run) string{
 		func(r *run.Run) string { return string(r.ID) },

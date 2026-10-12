@@ -130,11 +130,16 @@ func (e *Engine) Destroy(ctx context.Context, factory, target, reason string) (*
 		}
 	}
 
+	gone := e.gone(ctx, p, found)
 	if err := e.teardown(ctx, p, found.Environment); err != nil {
 		return nil, fmt.Errorf("tearing down environment %s: %w", name, err)
 	}
 	found.Destroyed = e.opts.Now()
-	fmt.Fprintf(e.opts.Out, "environment %s destroyed (%s)\n", name, reason)
+	what := "destroyed"
+	if gone {
+		what = "was already gone; removed what was left of it"
+	}
+	fmt.Fprintf(e.opts.Out, "environment %s %s (%s)\n", name, what, reason)
 	if found.Orphan {
 		return found, nil
 	}
@@ -160,11 +165,26 @@ func (e *Engine) Destroy(ctx context.Context, factory, target, reason string) (*
 		return found, err
 	}
 	defer x.close()
-	x.logf("", "environment %s destroyed: %s", name, reason)
-	msg := destroyedMessage(r, reason)
+	x.logf("", "environment %s %s: %s", name, what, reason)
+	msg := destroyedMessage(r, reason, gone)
 	x.emitEvent(ctx, &notify.Event{Type: notify.EventEnvironmentDestroyed, Run: r.Snapshot, Message: msg})
 	fmt.Fprint(e.opts.Out, undoActions(r))
 	return found, nil
+}
+
+// gone reports whether the provisioner no longer has the environment, for
+// one deleted by hand, say. Only a provisioner that lists its environments
+// (env.Lister) can tell; for the others, and when listing fails, it's false.
+func (e *Engine) gone(ctx context.Context, p *Project, en *Environment) bool {
+	l, ok := p.Provisioner.(env.Lister)
+	if !ok || en.Orphan {
+		return false
+	}
+	listed, err := l.List(ctx)
+	if err != nil {
+		return false
+	}
+	return !slices.ContainsFunc(listed, func(x env.Environment) bool { return x.Name == en.Environment.Name })
 }
 
 // find resolves Destroy's target among the environments that exist.
@@ -346,10 +366,14 @@ func (e *Engine) due(ctx context.Context, p *Project, en *Environment) (string, 
 
 // destroyedMessage is the text of environment.destroyed. It lists the
 // environment's human actions, which may need undoing by hand.
-func destroyedMessage(r *run.Run, reason string) core.Message {
+func destroyedMessage(r *run.Run, reason string, gone bool) core.Message {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Environment `%s` was torn down: %s. A new run for this ticket creates a new one.",
-		r.Environment.Name, reason)
+	what := "was torn down"
+	if gone {
+		what = "was already gone, and what was left of it is removed"
+	}
+	fmt.Fprintf(&b, "Environment `%s` %s: %s. A new run for this ticket creates a new one.",
+		r.Environment.Name, what, reason)
 	if undo := undoActions(r); undo != "" {
 		b.WriteString("\n\n" + undo)
 	}
