@@ -162,8 +162,9 @@ Commands:
   check [--factory F] [component]...
                                  test credentials and the tools this host needs;
                                  components as listed by check, e.g. tracker, repo, "deployer api"
-  daemon [--listen ADDR]         run the factories' triggers and execute the runs they start,
-                                 one at a time, and apply the factories' Teardown, until Ctrl-C
+  daemon [--listen ADDR] [--runs N]
+                                 run the factories' triggers and execute the runs they start,
+                                 N at a time (default 1), and apply the factories' Teardown, until Ctrl-C
   env list [--all]               list environments, and orphans the provisioners still have
   env destroy [--factory F] <run-id | env-name | ticket>
                                  tear down an environment (not while a run may still use it)

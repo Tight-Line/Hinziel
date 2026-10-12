@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/Tight-Line/hinziel/run"
@@ -18,19 +19,23 @@ import (
 var sweepEvery = 10 * time.Minute
 
 // daemon starts every factory's triggers and executes the runs they submit,
-// one at a time, until ctx is done. Triggers that receive HTTP get their
+// up to --runs at once, until ctx is done. Triggers that receive HTTP get their
 // handlers under /triggers/<factory>/<trigger>/ on --listen; pollers need
 // no listener. If a factory has a Teardown, it also destroys the
 // environments it says are no longer needed, at start and every sweepEvery.
 func (c *cli) daemon(ctx context.Context, args []string) error {
 	fs := c.flags("daemon")
 	listen := fs.String("listen", "", "address to serve HTTP triggers on, e.g. 127.0.0.1:8080; empty = none")
+	runs := fs.Int("runs", 1, "how many runs execute at once; each holds a sandbox and an environment")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(pos) > 0 {
-		return errors.New("usage: daemon [--listen ADDR]")
+		return errors.New("usage: daemon [--listen ADDR] [--runs N]")
+	}
+	if *runs < 1 {
+		return errors.New("--runs must be at least 1")
 	}
 
 	queue := make(chan run.ID, 64)
@@ -66,13 +71,29 @@ func (c *cli) daemon(ctx context.Context, args []string) error {
 		defer srv.Close()
 		fmt.Fprintf(c.out, "serving HTTP triggers on %s\n", ln.Addr())
 	}
-	fmt.Fprintln(c.out, "waiting for runs (Ctrl-C stops; a run in progress is interrupted and can be resumed)")
+	fmt.Fprintf(c.out, "waiting for runs, up to %d at once (Ctrl-C stops; runs in progress are interrupted and can be resumed)\n", *runs)
 
-	// One run at a time: runs share the host, and an agent can be heavy.
+	// Each worker executes one run at a time. Runs don't get in each other's
+	// way: each has its own checkouts, sandbox and environment, and the
+	// engine never lets two runs for the same ticket be unfinished.
+	var wg sync.WaitGroup
+	for range *runs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.work(ctx, queue)
+		}()
+	}
+	wg.Wait()
+	return nil
+}
+
+// work executes queued runs one after another until ctx is done.
+func (c *cli) work(ctx context.Context, queue <-chan run.ID) {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case id := <-queue:
 			if err := c.eng.Execute(ctx, id); err != nil {
 				fmt.Fprintf(c.out, "run %s: %v\n", id, err)
