@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Wrap passes variables by name, so their values stay out of the command
@@ -84,7 +86,9 @@ func TestIntegration(t *testing.T) {
 
 	script := `id -u; pwd; cat README.md; echo "$GREETING"; echo "home=$HOME"; cat /etc/factory-line; touch made-inside; test -e ` + secret + ` && echo LEAK || echo isolated`
 	if contents.Docker {
-		script += `; docker run --rm -p 8080:80 hello-world >/dev/null && echo docker-ok`
+		// A port published inside answers inside, and not on the host.
+		script += `; docker run --detach --publish 18080:80 busybox httpd -f -p 80 >/dev/null 2>&1` +
+			` && sleep 1 && echo "inside=$(curl -s -o /dev/null -w '%{http_code}' localhost:18080)"`
 	}
 	cmd := exec.Command("sh", "-c", script)
 	cmd.Dir = work
@@ -100,7 +104,11 @@ func TestIntegration(t *testing.T) {
 	got := strings.Fields(out.String())
 	want := []string{fmt.Sprint(os.Getuid()), work, "hello", "hi", "home=/home/agent", "factory", "isolated"}
 	if contents.Docker {
-		want = append(want, "docker-ok")
+		want = append(want, "inside=404")
+		if c, err := net.DialTimeout("tcp", "127.0.0.1:18080", time.Second); err == nil {
+			c.Close()
+			t.Error("a port published in the sandbox's Docker answers on the host")
+		}
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %q\nwant %q", got, want)
