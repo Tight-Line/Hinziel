@@ -43,6 +43,9 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if len(args) > 0 && args[0] == "check" {
 		return check(ctx, out, factories, args[1:])
 	}
+	if len(args) > 0 && args[0] == "host" {
+		return host(ctx, out, factories, args[1:])
+	}
 	// The agent runs these inside a run, with only the environment the
 	// factory gives it: they talk to the run's engine over its socket and
 	// need none of the factory's own variables.
@@ -165,6 +168,9 @@ Commands:
   daemon [--listen ADDR] [--runs N]
                                  run the factories' triggers and execute the runs they start,
                                  N at a time (default 1), and apply the factories' Teardown, until Ctrl-C
+  host install --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
+                                 install or update the factory on a server: Docker, Sysbox, the
+                                 config and the binary, and daemon in a container
   env list [--all]               list environments, and orphans the provisioners still have
   env destroy [--factory F] <run-id | env-name | ticket>
                                  tear down an environment (not while a run may still use it)

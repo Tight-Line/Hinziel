@@ -15,12 +15,18 @@ var missing struct {
 	started bool     // Main has checked the variables read so far
 	names   []string // missing, read before started
 	late    []string // missing, read after started
+	read    []string // every name read, set or not
 }
 
 // Get returns the value of the environment variable name, recording it if
 // it's missing or empty.
 func Get(name string) string {
 	v := os.Getenv(name)
+	missing.Lock()
+	if !slices.Contains(missing.read, name) {
+		missing.read = append(missing.read, name)
+	}
+	missing.Unlock()
 	if v == "" {
 		missing.Lock()
 		list := &missing.names
@@ -40,6 +46,13 @@ func Missing() []string {
 	missing.Lock()
 	defer missing.Unlock()
 	return slices.Clone(missing.names)
+}
+
+// Read returns every variable read so far, set or not.
+func Read() []string {
+	missing.Lock()
+	defer missing.Unlock()
+	return slices.Clone(missing.read)
 }
 
 // Checked marks the variables read so far as checked by Main: any read
@@ -67,6 +80,6 @@ func LateError() error {
 // Reset forgets everything recorded, for tests.
 func Reset() {
 	missing.Lock()
-	missing.started, missing.names, missing.late = false, nil, nil
+	missing.started, missing.names, missing.late, missing.read = false, nil, nil, nil
 	missing.Unlock()
 }

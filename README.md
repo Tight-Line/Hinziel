@@ -1248,7 +1248,8 @@ learns from.
                                        # trigger, notifier, or one by name ("deployer api")
 <factory> daemon [--listen ADDR] [--runs N]   # run triggers and execute the runs they start, N at a time (default 1);
                                        # tear down environments by the factories' Teardown
-<factory> host install <user@host>     # install or update the factory on a server (M2)
+<factory> host install --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
+                                       # install or update the factory on a server
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list [--all]             # environments the runs know (--all: destroyed ones too), and orphans
 <factory> env destroy [--factory F] <run-id | env-name | ticket>   # tear one down
@@ -1393,30 +1394,38 @@ sandboxes. That makes the factory root on its host, and it already holds every
 credential the factory has, so a host shared with other work must trust it.
 The agent never gets the socket.
 
-**`host install <user@host>`**, run from a machine that has the factory and
-its env file, over SSH (`core/remote`):
+**`host install --env-file F <[user@]host[:port]>`**, run from a machine
+that has the factory binary and its env file, over SSH as root or a user
+with passwordless sudo (`internal/hostinstall`):
 
 1. check for Docker and Sysbox, and install what's missing (Docker's
-   official script, Sysbox's package). Installing Sysbox restarts Docker,
-   which stops the containers already running on the host, so `host install`
-   asks first if there are any;
+   official script, Sysbox's package on Ubuntu and Debian). Installing
+   Sysbox restarts Docker, which stops the containers already running on the
+   host, so with containers running it needs `--force`;
 2. create a non-root `hinziel` user;
-3. copy the env file, the SSH key and any certificate files to
-   `/etc/hinziel/<factory>/`, mode 600;
-4. upload the factory binary and build both images on the host, the
-   factory's and the sandbox's, from Dockerfiles Hinziel embeds. Building on
-   the host needs no registry and no Docker on the machine you install from;
-5. start `daemon` in the factory's container with a restart policy, the
-   host's Docker socket, the config read-only and the state directory
-   (`/var/lib/hinziel/<factory>`, `HINZIEL_STATE_DIR`). Both directories are
-   mounted at the same paths inside as on the host, because the sandboxes
-   mount from them and the host's Docker resolves host paths;
-6. set up routing (below), if any trigger receives HTTP;
-7. run `check` in the container and report.
+3. copy the env file to `/etc/hinziel/<factory>/env` (root only) and every
+   file a variable names, such as the SSH key and certificates, to
+   `/etc/hinziel/<factory>/files/` (the factory's user only), pointing the
+   variables at the copies. Every variable the factory reads must have a value;
+4. upload the factory binary to `/var/lib/hinziel/<factory>/bin/`. It must
+   be a static Linux build (`CGO_ENABLED=0`; `--binary` gives another file
+   than the running one, such as a cross-compiled build from a Mac);
+5. build the factory's image on the host from a Dockerfile Hinziel embeds:
+   the tools of the factory's own steps, not the binary, which is mounted.
+   Building on the host needs no registry and no Docker on the machine you
+   install from. The first `check` builds the sandbox's image the same way;
+6. start `daemon --runs N` in the factory's container, `hinziel-<factory>`,
+   with a restart policy, as the `hinziel` user, with the host's Docker
+   socket, the config read-only and `/var/lib/hinziel/<factory>` (binary,
+   home, state). Both directories are mounted at the same paths inside as on
+   the host, because the sandboxes mount from them and the host's Docker
+   resolves host paths;
+7. set up routing (below), if any trigger receives HTTP (*not yet*);
+8. run `check` in the container and report.
 
 Running it again updates in place, so it's also the upgrade command. It
-waits for a run that is executing to finish, or with `--force` interrupts it
-(to be resumed). It works on any machine you point it at; the factory doesn't
+refuses while runs are executing, or with `--force` interrupts them (to be
+resumed). The daemon's log is the container's: `docker logs -f hinziel-<factory>`. It works on any machine you point it at; the factory doesn't
 create its own host. What it can't do: Claude Code's login (run
 `claude setup-token` once and put the token in the env file as
 `CLAUDE_CODE_OAUTH_TOKEN`), and registering the public URL wherever the
