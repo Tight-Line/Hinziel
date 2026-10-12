@@ -43,8 +43,12 @@ type Factory struct {
 	Notifiers []Notifier
 	// Cleanup stops what the agent leaves running on the factory's host,
 	// such as the repository's dev stack, when implement ends and when a
-	// run is cancelled (cleanup/dockercompose, cleanup/command).
+	// run is cancelled (cleanup/dockercompose, cleanup/command). The
+	// sandbox replaces it: removing the sandbox removes what's in it.
 	Cleanup []cleanup.Cleaner
+	// Sandbox says what's in the container the agent works in, one per run.
+	// The zero value is Hinziel's base image alone.
+	Sandbox Sandbox
 
 	// Optional behaviour. Zero values give the defaults.
 
@@ -69,6 +73,20 @@ type Factory struct {
 	Gates               []Step // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step
 	DraftChangeRequests bool
+}
+
+// Sandbox is what a factory puts in its agent's container, on top of
+// Hinziel's base image (Ubuntu with git, ssh, Node and Claude Code). The
+// host decides how the container runs: $HINZIEL_SANDBOX_RUNTIME, default
+// sysbox-runc. See the README, "The agent's sandbox".
+type Sandbox struct {
+	// Docker gives the sandbox a Docker daemon of its own, with Compose, for
+	// projects whose checks or dev stack run in containers. It needs the
+	// Sysbox runtime on the host.
+	Docker bool
+	// Dockerfile lines are appended to the image, run as root, e.g.
+	// "RUN apt-get update && apt-get install -y php-cli".
+	Dockerfile string
 }
 
 // Teardown says when the daemon destroys an environment that is no longer

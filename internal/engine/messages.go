@@ -58,7 +58,7 @@ func prompt(p *Project, r *run.Run, task *agent.Task) string {
 		var shells []string
 		for _, h := range e.Hosts {
 			if h.SSH != nil {
-				shells = append(shells, fmt.Sprintf("- %s: `%s`", h.Name, sshCommand(h)))
+				shells = append(shells, fmt.Sprintf("- %s: `%s`", h.Name, sshCommand(h, task.Sandbox != nil)))
 			}
 		}
 		if len(shells) > 0 {
@@ -243,8 +243,14 @@ func sortedKeys[V any](m map[string]V) []string {
 }
 
 // sshCommand is the command that opens a shell on h, with its pinned host key.
-func sshCommand(h env.Host) string {
-	cmd := "ssh " + strings.Join(remote.SharedConnection(), " ")
+// sshCommand is how the agent reaches h. In a sandbox, the factory's
+// runtime directory doesn't exist, so the shared connection lives in /tmp.
+func sshCommand(h env.Host, sandboxed bool) string {
+	shared := remote.SharedConnection()
+	if sandboxed {
+		shared = []string{"-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/hinziel-ssh-%C", "-o", "ControlPersist=60"}
+	}
+	cmd := "ssh " + strings.Join(shared, " ")
 	if h.SSH.KeyPath != "" {
 		// Without IdentitiesOnly, ssh offers the agent's keys first, and a
 		// server stops after a few: "Too many authentication failures".

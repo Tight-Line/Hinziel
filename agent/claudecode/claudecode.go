@@ -1,5 +1,5 @@
 // Package claudecode is an agent.Agent that runs Claude Code
-// (https://claude.com/claude-code) headless on the Hinziel host.
+// (https://claude.com/claude-code) headless in the run's sandbox.
 //
 // The engine's task becomes the prompt. Hinziel's own rules (work unattended,
 // branch, push and deploy only as the task says, report back in a file) go
@@ -11,22 +11,20 @@
 // question there becomes core.NeedsInputError. The session is rendered into
 // a readable transcript in the run log.
 //
-// Claude Code must be installed and logged in (or ANTHROPIC_API_KEY set) for
-// the user running the factory. It runs with permission prompts off
-// (bypassPermissions), as Hinziel's agents have full access by design.
+// Claude Code is in Hinziel's sandbox image. It needs a token, because a
+// login on the factory's host doesn't reach the sandbox. It runs with
+// permission prompts off (bypassPermissions), as Hinziel's agents have full
+// access by design.
 //
 // # Credentials
 //
-//   - Claude Code installed on the Hinziel host (https://claude.com/claude-code).
 //   - One of: CLAUDE_CODE_OAUTH_TOKEN, from running `claude setup-token`
 //     once with a Claude subscription; or ANTHROPIC_API_KEY, from
-//     https://console.anthropic.com → API keys. On a desktop where you're
-//     already logged in to Claude Code, neither is needed.
+//     https://console.anthropic.com → API keys.
 //   - Whatever the agent itself needs for the project comes through the
 //     factory's AgentEnv: the agent gets nothing else from the factory's
 //     environment. Claude Code's own credentials (the variables above, and
-//     ANTHROPIC_BASE_URL and CLAUDE_CONFIG_DIR) are passed on by this
-//     component.
+//     ANTHROPIC_BASE_URL) are passed on by this component.
 package claudecode
 
 import (
@@ -95,7 +93,8 @@ type outcomeFile struct {
 
 // Implement runs Claude Code on the task.
 func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
-	tmp, err := os.MkdirTemp("", "hinziel-claudecode-")
+	// The outcome file must be where the agent's sandbox can write it.
+	tmp, err := os.MkdirTemp(task.TempDir, "claudecode-")
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +131,11 @@ func (a *Agent) Implement(ctx context.Context, task *agent.Task) (*agent.Outcome
 	inOwnGroup(cmd)
 	cmd.Env = append(append(append([]string{}, task.Env...), credentials()...), "HINZIEL_OUTCOME="+outcomePath)
 	cmd.Stdin = strings.NewReader(task.Prompt)
+	if task.Sandbox != nil {
+		if err := task.Sandbox.Wrap(ctx, cmd); err != nil {
+			return nil, err
+		}
+	}
 	stderr := &tailWriter{max: 4096}
 	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
@@ -207,15 +211,11 @@ func (a *Agent) systemPrompt() string {
 	return systemPrompt
 }
 
-// Check verifies that Claude Code is installed.
+// Check verifies that Claude Code has a token. Claude Code itself is in the
+// sandbox's image, which the factory's sandbox check builds.
 func (a *Agent) Check(ctx context.Context) error {
-	cmdline := a.command()
-	if err := core.NeedTools(cmdline[0]); err != nil {
-		return fmt.Errorf("%w (install Claude Code: https://claude.com/claude-code)", err)
-	}
-	out, err := exec.CommandContext(ctx, cmdline[0], append(cmdline[1:], "--version")...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("claude --version: %w: %s", err, strings.TrimSpace(string(out)))
+	if os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") == "" && os.Getenv("ANTHROPIC_API_KEY") == "" {
+		return errors.New("neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set: run `claude setup-token` once and set CLAUDE_CODE_OAUTH_TOKEN, or create an API key at https://console.anthropic.com")
 	}
 	return nil
 }
@@ -317,7 +317,7 @@ func (t *tailWriter) String() string { return string(t.buf) }
 
 // credentialVars are Claude Code's own settings, passed on from the
 // factory's environment: the engine gives the agent only a minimal base.
-var credentialVars = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CONFIG_DIR"}
+var credentialVars = []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"}
 
 func credentials() []string {
 	var out []string

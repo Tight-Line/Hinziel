@@ -16,6 +16,7 @@ import (
 // fakeClaude behaves according to $FAKE_SCENARIO and records how it was run.
 const fakeClaude = `#!/bin/sh
 echo "$PWD" > "$FAKE_LOG.pwd"
+echo "$HINZIEL_OUTCOME" > "$FAKE_LOG.outcome"
 printf '%s\n' "$@" > "$FAKE_LOG.args"
 cat > "$FAKE_LOG.stdin"
 say() { printf '%s\n' "$1"; }
@@ -152,20 +153,45 @@ func TestFailures(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
-	if New(Options{Command: []string{"/nonexistent/claude"}}).Check(context.Background()) == nil {
-		t.Error("a missing claude must fail the check")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	if err := New(Options{}).Check(context.Background()); err == nil || !strings.Contains(err.Error(), "claude setup-token") {
+		t.Errorf("without a token, want a hint at claude setup-token, got %v", err)
 	}
-	if New(Options{Command: []string{"true"}}).Check(context.Background()) != nil {
-		t.Error("a working command must pass")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "token")
+	if err := New(Options{}).Check(context.Background()); err != nil {
+		t.Errorf("with a token: %v", err)
 	}
 }
 
-// On a host with nothing installed, Check names the tools it needs.
-func TestCheckNamesMissingTools(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	err := New(Options{}).Check(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "not installed on this host (or not on PATH): claude") {
-		t.Errorf("want missing claude, got %v", err)
+// recordingSandbox runs commands on the host, recording what it was given.
+type recordingSandbox struct{ args []string }
+
+func (s *recordingSandbox) Wrap(ctx context.Context, cmd *exec.Cmd) error {
+	s.args = append([]string{}, cmd.Args...)
+	return nil
+}
+
+// With a sandbox, claude runs through it, and its outcome file is in the
+// task's TempDir, which the sandbox shares.
+func TestImplementInSandbox(t *testing.T) {
+	a, task, log := setup(t, "ok", 1)
+	sb := &recordingSandbox{}
+	task.Sandbox = sb
+	task.TempDir = t.TempDir()
+	if _, err := a.Implement(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	if len(sb.args) == 0 || filepath.Base(sb.args[0]) != "claude" {
+		t.Fatalf("claude wasn't run through the sandbox: %q", sb.args)
+	}
+	outcome, _ := os.ReadFile(log + ".outcome")
+	if !strings.HasPrefix(string(outcome), task.TempDir+"/") {
+		t.Errorf("outcome file %q is outside the task's TempDir %s", outcome, task.TempDir)
+	}
+	entries, _ := os.ReadDir(task.TempDir)
+	if len(entries) != 0 {
+		t.Errorf("the outcome directory must be removed afterwards, found %v", entries)
 	}
 }
 

@@ -279,6 +279,13 @@ func (e *Engine) Cancel(ctx context.Context, id run.ID) error {
 	if err != nil {
 		return err
 	}
+	// An executing run stops its own sandbox; one is only left behind by a
+	// process that died mid-run.
+	if p := e.projects[r.Factory]; p != nil && p.Sandbox != nil {
+		if err := p.Sandbox.Remove(ctx, sandboxName(p.Name, string(id))); err != nil {
+			fmt.Fprintf(e.opts.Out, "run %s: %v\n", id, err)
+		}
+	}
 	if p := e.projects[r.Factory]; p != nil && len(p.Cleaners) > 0 {
 		x, err := e.newExecution(p, r)
 		if err != nil {

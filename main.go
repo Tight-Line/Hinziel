@@ -16,6 +16,7 @@ import (
 	"github.com/Tight-Line/hinziel/core"
 	"github.com/Tight-Line/hinziel/internal/engine"
 	"github.com/Tight-Line/hinziel/internal/envcheck"
+	"github.com/Tight-Line/hinziel/internal/sandbox"
 	"github.com/Tight-Line/hinziel/internal/store"
 )
 
@@ -265,13 +266,19 @@ func checkSelectors(factories []Factory, selectors []string) error {
 	return nil
 }
 
+// sandboxCheck checks that the host can run the factory's sandbox, and
+// builds its image.
+type sandboxCheck struct{ contents sandbox.Contents }
+
+func (c sandboxCheck) Check(ctx context.Context) error { return sandboxRunner.Check(ctx, c.contents) }
+
 type component struct {
 	label string
 	value any
 }
 
 func components(f *Factory) []component {
-	cs := []component{{"tracker", f.Tracker}, {"agent", f.Agent}}
+	cs := []component{{"tracker", f.Tracker}, {"agent", f.Agent}, {"sandbox", sandboxCheck{f.sandboxContents()}}}
 	for _, r := range f.Repos {
 		cs = append(cs, component{"repo " + r.Name, r.Forge})
 	}

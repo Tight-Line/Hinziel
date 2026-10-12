@@ -12,6 +12,7 @@ import (
 	"github.com/Tight-Line/hinziel/dns"
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/forge"
+	"github.com/Tight-Line/hinziel/internal/sandbox"
 	"github.com/Tight-Line/hinziel/notify"
 	"github.com/Tight-Line/hinziel/tracker"
 )
@@ -29,6 +30,7 @@ type Project struct {
 	Deployers   []Deployer
 	Notifiers   []Notifier
 	Cleaners    []cleanup.Cleaner // run when implement ends and on cancel
+	Sandbox     sandbox.Runner    // starts the agent's sandbox; nil = none (tests)
 	Settings    Settings
 }
 
@@ -66,6 +68,7 @@ type Settings struct {
 	// AgentEnv is what the agent's process gets on top of baseAgentEnv.
 	AgentEnv map[string]string
 	Teardown Teardown
+	Sandbox  sandbox.Contents
 }
 
 // Step names, in pipeline order.

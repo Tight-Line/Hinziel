@@ -3,7 +3,15 @@ package hinziel
 import (
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/internal/engine"
+	"github.com/Tight-Line/hinziel/internal/sandbox"
 )
+
+// sandboxRunner starts the agents' sandboxes, in the host's Docker.
+var sandboxRunner = &sandbox.Docker{}
+
+func (f *Factory) sandboxContents() sandbox.Contents {
+	return sandbox.Contents{Docker: f.Sandbox.Docker, Dockerfile: f.Sandbox.Dockerfile}
+}
 
 // project converts a validated factory into the engine's form.
 func (f *Factory) project() *engine.Project {
@@ -14,6 +22,7 @@ func (f *Factory) project() *engine.Project {
 		Provisioner: f.Environment,
 		DNS:         f.DNS,
 		Cleaners:    f.Cleanup,
+		Sandbox:     sandboxRunner,
 		Settings: engine.Settings{
 			Instructions:        f.Instructions,
 			BranchName:          f.BranchName,
@@ -24,6 +33,7 @@ func (f *Factory) project() *engine.Project {
 			DraftChangeRequests: f.DraftChangeRequests,
 			AgentEnv:            f.AgentEnv,
 			Teardown:            engine.Teardown{WhenDone: f.Teardown.WhenDone, After: f.Teardown.After},
+			Sandbox:             f.sandboxContents(),
 		},
 	}
 	for _, r := range f.Repos {

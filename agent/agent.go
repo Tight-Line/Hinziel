@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"io"
+	"os/exec"
 	"time"
 
 	"github.com/Tight-Line/hinziel/env"
@@ -32,6 +33,23 @@ type Task struct {
 	Prompt      string    // built by the engine from the ticket and the factory's Instructions
 	Env         []string  // process environment: whatever access the agent needs, plus HINZIEL_BIN and HINZIEL_RUN_ID for `$HINZIEL_BIN deploy`/`retrieve`
 	Log         io.Writer // full agent transcript goes here (run log)
+	// Sandbox is the run's container, which the factory describes. An agent
+	// component MUST start every process of the agent through it; it is nil
+	// only in tests. Paths in the task are the same inside as outside.
+	Sandbox Sandbox
+	// TempDir is for the agent component's own files, such as the file the
+	// agent reports its outcome in. The agent's processes can reach it.
+	TempDir string
+}
+
+// Sandbox runs the agent's processes in the run's container.
+type Sandbox interface {
+	// Wrap turns cmd, prepared as if for the factory's host, into a command
+	// that runs inside, with the same directory, environment and standard
+	// streams. Call it before cmd.Start. cmd.Args[0] is looked up inside, so
+	// the program need not exist on the host. It starts the sandbox if it
+	// isn't running yet.
+	Wrap(ctx context.Context, cmd *exec.Cmd) error
 }
 
 type Checkout struct {

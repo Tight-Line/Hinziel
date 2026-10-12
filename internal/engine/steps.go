@@ -17,6 +17,7 @@ import (
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/forge"
 	"github.com/Tight-Line/hinziel/internal/names"
+	"github.com/Tight-Line/hinziel/internal/sandbox"
 	"github.com/Tight-Line/hinziel/internal/workspace"
 	"github.com/Tight-Line/hinziel/tracker"
 )
@@ -311,6 +312,9 @@ func (x *execution) remoteBranch(ctx context.Context, ws *workspace.Repo, repo s
 }
 
 func (x *execution) implement(ctx context.Context) error {
+	if err := os.MkdirAll(x.agentDir(), 0o700); err != nil {
+		return err
+	}
 	srv, err := x.serveSocket(ctx)
 	if err != nil {
 		return err
@@ -322,6 +326,7 @@ func (x *execution) implement(ctx context.Context) error {
 		Ticket:      x.r.Ticket,
 		Environment: x.r.Environment,
 		Log:         x.log,
+		TempDir:     x.agentDir(),
 		Env: agentEnv(x.p.Settings.AgentEnv,
 			"HINZIEL_BIN="+x.e.opts.Bin,
 			"HINZIEL_RUN_ID="+string(x.r.ID),
@@ -331,10 +336,20 @@ func (x *execution) implement(ctx context.Context) error {
 	for _, cfg := range x.p.Repos {
 		task.Repos = append(task.Repos, agent.Checkout{Name: cfg.Name, Path: filepath.Join(x.reposDir(), cfg.Name)})
 	}
+	var sb *sandbox.Lazy
+	if x.p.Sandbox != nil {
+		sb = sandbox.NewLazy(x.p.Sandbox, x.sandboxSpec(srv.path))
+		task.Sandbox = sb
+	}
 	task.Prompt = prompt(x.p, x.r, task)
 
 	out, err := x.p.Agent.Implement(ctx, task)
 	srv.close() // wait for in-flight deploys before touching run state
+	if sb != nil {
+		if err := sb.Stop(ctx); err != nil {
+			x.logf(StepImplement, "%v", err)
+		}
+	}
 	x.cleanUp(ctx)
 	if err != nil {
 		return err

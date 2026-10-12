@@ -641,6 +641,7 @@ third-party module) follow the same interfaces and are used the same way.
 | [`cleanup/cleanuptest`](./cleanup/cleanuptest) | public: a recording fake cleaner. No conformance suite |
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
+| [`internal/sandbox`](./internal/sandbox) | the agent's sandbox: the image (Hinziel's base plus `Factory.Sandbox`), a container per run in the host's Docker, `docker exec` for the agent's commands |
 | [`internal/workspace`](./internal/workspace) | git via the git CLI: clone, branch, commit, push, "is it pushed?", deploy worktrees |
 | [`core/remote`](./core/remote) | SSH exec, file writes and directory upload through the system `ssh`; `remotetest.LocalSSH` runs them locally in tests. Public, because components outside this repository need it too |
 | [`internal/apiclient`](./internal/apiclient) | the JSON-over-HTTP client the components here share; 429 and 5xx become `core.RetryableError` |

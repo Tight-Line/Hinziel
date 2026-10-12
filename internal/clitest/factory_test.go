@@ -273,7 +273,7 @@ func TestRunCheckSelectsComponents(t *testing.T) {
 
 func TestRunCheckRejectsUnknownSelector(t *testing.T) {
 	err := hinziel.Run(context.Background(), []string{"check", "deployer nova"}, &bytes.Buffer{}, checkFactory())
-	if err == nil || !strings.Contains(err.Error(), `nothing to check called "deployer nova"; choose from: hinziel, tracker, deployer api, deployer web`) {
+	if err == nil || !strings.Contains(err.Error(), `nothing to check called "deployer nova"; choose from: hinziel, tracker, sandbox, deployer api, deployer web`) {
 		t.Fatalf("got %v", err)
 	}
 	err = hinziel.Run(context.Background(), []string{"check", "--factory", "other"}, &bytes.Buffer{}, checkFactory())

@@ -31,10 +31,14 @@ type socketReply struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// serveSocket starts the socket for the duration of implement. The path is
-// kept short (Unix socket paths are limited to ~108 bytes).
+// serveSocket starts the socket for the duration of implement. It lives in
+// the agent's directory, which the sandbox mounts, unless that path is too
+// long for a Unix socket (~108 bytes).
 func (x *execution) serveSocket(ctx context.Context) (*socketServer, error) {
-	path := filepath.Join(os.TempDir(), "hinziel-"+string(x.r.ID)+".sock")
+	path := filepath.Join(x.agentDir(), "hinziel.sock")
+	if len(path) > 100 {
+		path = filepath.Join(os.TempDir(), "hinziel-"+string(x.r.ID)+".sock")
+	}
 	os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
