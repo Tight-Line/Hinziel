@@ -30,6 +30,13 @@ type AttachmentFetcher interface {
 	FetchAttachment(ctx context.Context, ticketID string, a Attachment) (io.ReadCloser, error)
 }
 
+// DoneChecker lets the daemon tear down a ticket's environment once the
+// ticket is done (hinziel.Teardown). A ticket is done when people have put it
+// in StageDone, or when it no longer exists or has been archived.
+type DoneChecker interface {
+	Done(ctx context.Context, id string) (bool, error)
+}
+
 // Stage is a lifecycle point that a tracker may reflect (column, status, label).
 // Each tracker maps stages to its own concepts via its config.
 type Stage string
@@ -38,6 +45,9 @@ const (
 	StageInProgress Stage = "in_progress"
 	StageInReview   Stage = "in_review"
 	StageBlocked    Stage = "blocked" // failed or needs input
+	// StageDone is reached by people, never by Hinziel: the work is finished
+	// (merged, released, verified). DoneChecker reports it.
+	StageDone Stage = "done"
 )
 
 type TicketRef struct {

@@ -42,6 +42,7 @@ func main() {
 		Stages: map[tracker.Stage]trello.Stage{
 			tracker.StageInProgress: {List: "In progress"},
 			tracker.StageInReview:   {List: "Deployed to QA / staging"},
+			tracker.StageDone:       {List: "Done / Verified on production"},
 		},
 	})
 
@@ -103,12 +104,13 @@ func main() {
 				},
 			})},
 		},
-		Cleanup: []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
+		Cleanup:  []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
+		Teardown: hinziel.Teardown{WhenDone: true},
 		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
 			APIKey: hinziel.Env("TRELLO_API_KEY"), Token: hinziel.Env("TRELLO_TOKEN"), Board: "FbGOL7Wb",
 		})}},
 		Notifiers: []hinziel.Notifier{
-			{On: notify.Problems, Notifier: ticket.New(board)},
+			{On: append(notify.Problems, notify.EventEnvironmentDestroyed), Notifier: ticket.New(board)},
 			{On: notify.Finished, Notifier: slack.New(hinziel.Env("SLACK_DEV_WEBHOOK"))},
 		},
 	})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/Tight-Line/hinziel/run"
@@ -13,10 +14,14 @@ import (
 	"github.com/Tight-Line/hinziel/trigger"
 )
 
+// sweepEvery is how often the daemon applies the factories' Teardown.
+var sweepEvery = 10 * time.Minute
+
 // daemon starts every factory's triggers and executes the runs they submit,
 // one at a time, until ctx is done. Triggers that receive HTTP get their
 // handlers under /triggers/<factory>/<trigger>/ on --listen; pollers need
-// no listener.
+// no listener. If a factory has a Teardown, it also destroys the
+// environments it says are no longer needed, at start and every sweepEvery.
 func (c *cli) daemon(ctx context.Context, args []string) error {
 	fs := c.flags("daemon")
 	listen := fs.String("listen", "", "address to serve HTTP triggers on, e.g. 127.0.0.1:8080; empty = none")
@@ -44,8 +49,12 @@ func (c *cli) daemon(ctx context.Context, args []string) error {
 			started++
 		}
 	}
-	if started == 0 {
-		return errors.New("no factory has triggers, so the daemon has nothing to do; start runs with `run`")
+	sweeps := slices.ContainsFunc(c.factories, func(f Factory) bool { return f.Teardown.WhenDone || f.Teardown.After > 0 })
+	if started == 0 && !sweeps {
+		return errors.New("no factory has triggers or a Teardown, so the daemon has nothing to do; start runs with `run`")
+	}
+	if sweeps {
+		go c.sweep(ctx)
 	}
 	if *listen != "" {
 		ln, err := net.Listen("tcp", *listen)
@@ -78,6 +87,21 @@ func (c *cli) daemon(ctx context.Context, args []string) error {
 					}
 				}()
 			}
+		}
+	}
+}
+
+// sweep destroys the environments the factories' Teardown says are no
+// longer needed, now and every sweepEvery, until ctx is done.
+func (c *cli) sweep(ctx context.Context) {
+	for {
+		if _, err := c.eng.Sweep(ctx); err != nil && ctx.Err() == nil {
+			fmt.Fprintf(c.out, "teardown: %v\n", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(sweepEvery):
 		}
 	}
 }
@@ -116,6 +140,14 @@ func (d *dispatcher) Get(ctx context.Context, id run.ID) (*run.Snapshot, error) 
 		return nil, fmt.Errorf("run %s belongs to another factory", id)
 	}
 	return &r.Snapshot, nil
+}
+
+func (d *dispatcher) Teardown(ctx context.Context, ticket tracker.TicketRef, requestedBy string) (string, error) {
+	en, err := d.cli.eng.Destroy(ctx, d.factory, ticket.ID, "asked for by "+requestedBy)
+	if err != nil {
+		return "", err
+	}
+	return en.Environment.Name, nil
 }
 
 func (d *dispatcher) Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error) {

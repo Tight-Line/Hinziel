@@ -232,6 +232,48 @@ func TestStages(t *testing.T) {
 	}
 }
 
+func TestDone(t *testing.T) {
+	ctx := context.Background()
+	done := func(tr *Tracker, id string) bool {
+		t.Helper()
+		ok, err := tr.Done(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+
+	byList, f := newTestTracker(t, Options{Stages: map[tracker.Stage]Stage{tracker.StageDone: {List: "l-dup1"}}})
+	if done(byList, "c1") {
+		t.Error("a card in another list is not done")
+	}
+	f.cards["c1"]["idList"] = "l-dup1"
+	if !done(byList, "AbCd1234") {
+		t.Error("a card in StageDone's list is done")
+	}
+
+	byLabel, f := newTestTracker(t, Options{Stages: map[tracker.Stage]Stage{tracker.StageDone: {Label: "Blocked"}}})
+	if done(byLabel, "c1") {
+		t.Error("a card without StageDone's label is not done")
+	}
+	f.cards["c1"]["idLabels"] = []string{"lb-blocked"}
+	if !done(byLabel, "c1") {
+		t.Error("a card with StageDone's label is done")
+	}
+
+	plain, f := newTestTracker(t, Options{})
+	if done(plain, "c1") {
+		t.Error("without StageDone, an open card is not done")
+	}
+	f.cards["c1"]["closed"] = true
+	if !done(plain, "c1") {
+		t.Error("an archived card is done")
+	}
+	if !done(plain, "gone1234") {
+		t.Error("a deleted card is done")
+	}
+}
+
 func TestLinks(t *testing.T) {
 	tr, f := newTestTracker(t, Options{})
 	ctx := context.Background()

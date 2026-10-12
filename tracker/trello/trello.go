@@ -5,8 +5,9 @@
 // checklists come with the ticket; checklists land in Ticket.Fields.
 //
 // It implements every optional capability: StageMover (moves the card to the
-// list named for the stage), Linker (adds URL attachments) and
-// AttachmentFetcher.
+// list named for the stage), Linker (adds URL attachments),
+// AttachmentFetcher and DoneChecker (the card is archived, deleted, or in
+// StageDone's list or with its label).
 //
 // # Credentials
 //
@@ -76,6 +77,7 @@ var (
 	_ tracker.StageMover        = (*Tracker)(nil)
 	_ tracker.Linker            = (*Tracker)(nil)
 	_ tracker.AttachmentFetcher = (*Tracker)(nil)
+	_ tracker.DoneChecker       = (*Tracker)(nil)
 	_ core.Checker              = (*Tracker)(nil)
 )
 

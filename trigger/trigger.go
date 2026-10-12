@@ -27,4 +27,9 @@ type Dispatcher interface {
 	Get(ctx context.Context, id run.ID) (*run.Snapshot, error)
 	// Latest returns the most recent run for a ticket, or nil.
 	Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error)
+	// Teardown destroys the ticket's environment and returns its name. It
+	// refuses while the ticket has an unfinished run (failed runs aside).
+	// Its success is announced like a run's progress, by an
+	// environment.destroyed notification.
+	Teardown(ctx context.Context, ticket tracker.TicketRef, requestedBy string) (string, error)
 }

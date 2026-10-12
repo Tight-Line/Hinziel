@@ -63,6 +63,36 @@ func (f *Fake) Deployed() []Deployed {
 	return slices.Clone(f.deployed)
 }
 
+// FakeDestroyer is a Fake that also implements deploy.Destroyer, recording
+// the environments it was asked to destroy.
+type FakeDestroyer struct {
+	Fake
+
+	dmu       sync.Mutex
+	destroyed []string
+
+	DestroyErrs []error // returned by the next Destroy calls, in order
+}
+
+var _ deploy.Destroyer = (*FakeDestroyer)(nil)
+
+func (f *FakeDestroyer) Destroy(_ context.Context, e *env.Environment) error {
+	f.dmu.Lock()
+	defer f.dmu.Unlock()
+	if err := testutil.PopErr(&f.DestroyErrs); err != nil {
+		return err
+	}
+	f.destroyed = append(f.destroyed, e.Name)
+	return nil
+}
+
+// Destroyed returns the names of the environments destroyed, in order.
+func (f *FakeDestroyer) Destroyed() []string {
+	f.dmu.Lock()
+	defer f.dmu.Unlock()
+	return slices.Clone(f.destroyed)
+}
+
 // FakeRetriever is a Fake that also implements deploy.Retriever. Files set
 // with SetPending stand for changes made directly in the environment (clicks);
 // the next Retrieve writes them into the working tree and forgets them.

@@ -5,7 +5,7 @@ import "testing"
 func TestFakeConforms(t *testing.T) {
 	f := &Fake{}
 	Run(t, f)
-	if len(f.Events()) != 7 {
+	if len(f.Events()) != 8 {
 		t.Fatalf("got %d events", len(f.Events()))
 	}
 }

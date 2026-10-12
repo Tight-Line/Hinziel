@@ -36,6 +36,7 @@ var (
 	_ tracker.Linker     = (*Fake)(nil)
 
 	_ tracker.AttachmentFetcher = (*Fake)(nil)
+	_ tracker.DoneChecker       = (*Fake)(nil)
 )
 
 // NewFake returns a tracker holding tickets, keyed by Ref.ID (set from Key if empty).
@@ -87,6 +88,14 @@ func (f *Fake) MoveTo(_ context.Context, id string, stage tracker.Stage) error {
 	defer f.mu.Unlock()
 	f.stages[id] = stage
 	return nil
+}
+
+// Done reports whether the ticket was moved to tracker.StageDone, or doesn't exist.
+func (f *Fake) Done(_ context.Context, id string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, exists := f.tickets[id]
+	return !exists || f.stages[id] == tracker.StageDone, nil
 }
 
 func (f *Fake) AddLink(_ context.Context, id string, link core.Link) error {

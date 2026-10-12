@@ -48,6 +48,9 @@ type Engine struct {
 	store    *store.FS
 	projects map[string]*Project
 	opts     Options
+
+	mu          sync.Mutex
+	tearingDown map[string]bool // factory/environment being destroyed by Destroy
 }
 
 // New returns an engine for projects, persisting runs in st.
@@ -67,7 +70,7 @@ func New(st *store.FS, projects []*Project, opts Options) *Engine {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	e := &Engine{store: st, projects: map[string]*Project{}, opts: opts}
+	e := &Engine{store: st, projects: map[string]*Project{}, opts: opts, tearingDown: map[string]bool{}}
 	for _, p := range projects {
 		e.projects[p.Name] = p
 	}
@@ -165,6 +168,9 @@ func (e *Engine) Resume(ctx context.Context, id run.ID) error {
 			if s := r.Steps[i].Status; s == stepFailed || s == stepRunning || s == stepWaiting {
 				r.Steps[i].Status = stepPending
 			}
+		}
+		if !r.EnvironmentDestroyed.IsZero() {
+			reprovision(r)
 		}
 		r.Status = run.StatusRunning
 		r.Error = ""
@@ -303,6 +309,23 @@ func (e *Engine) prepare(ctx context.Context, id run.ID, change func(*run.Run) e
 	}
 	r.UpdatedAt = e.opts.Now()
 	return e.store.Save(ctx, r)
+}
+
+// reprovision makes a run whose environment was torn down provision a new
+// one, then deploy to it what it had deployed: the base before implement,
+// its own commits after.
+func reprovision(r *run.Run) {
+	resetStep(r, StepProvisionEnvironment)
+	implemented := slices.ContainsFunc(r.Steps, func(s run.StepRecord) bool {
+		return s.Name == StepImplement && s.Status == stepDone
+	})
+	if implemented {
+		resetStep(r, StepDeploy)
+	} else {
+		resetStep(r, StepDeployBase)
+	}
+	r.Deployments = nil
+	r.EnvironmentDestroyed = time.Time{}
 }
 
 func resetStep(r *run.Run, name string) {

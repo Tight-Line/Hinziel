@@ -23,6 +23,7 @@ func (f *Factory) project() *engine.Project {
 			DisabledSteps:       stepNames(f.DisabledSteps),
 			DraftChangeRequests: f.DraftChangeRequests,
 			AgentEnv:            f.AgentEnv,
+			Teardown:            engine.Teardown{WhenDone: f.Teardown.WhenDone, After: f.Teardown.After},
 		},
 	}
 	for _, r := range f.Repos {

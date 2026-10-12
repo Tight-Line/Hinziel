@@ -65,6 +65,7 @@ type Settings struct {
 	DraftChangeRequests bool
 	// AgentEnv is what the agent's process gets on top of baseAgentEnv.
 	AgentEnv map[string]string
+	Teardown Teardown
 }
 
 // Step names, in pipeline order.

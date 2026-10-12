@@ -26,6 +26,9 @@ const (
 	EventRunAwaitingApproval EventType = "run.awaiting_approval"
 	EventRunActionRequired   EventType = "run.action_required" // one per human action; Event.Action says which
 	EventRunWaiting          EventType = "run.waiting"         // a step started waiting on something new
+	// EventEnvironmentDestroyed: a ticket's environment was torn down. Event.Run
+	// is the ticket's latest run, with EnvironmentDestroyed set.
+	EventEnvironmentDestroyed EventType = "environment.destroyed"
 )
 
 // Common event sets for routing notifiers.

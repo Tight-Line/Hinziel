@@ -119,8 +119,6 @@ scope until we choose to revisit it.
   later, once the library is rich enough (§11).
 - Reacting to review comments on MRs. Iterating on feedback in the ticket is
   planned for M4 ([Iteration](#iteration)); comments on the MR may follow.
-- Automatic environment teardown policy (§11). Teardown is supported in the
-  interfaces and through a manual CLI command.
 - Multi-tenant/public SaaS deployment.
 - Production rollout. A factory's work ends at reviewed MRs and a working
   preview. Merging, canaries, feature flags and production deploys stay the
@@ -283,7 +281,7 @@ ingress, so no per-environment DNS is needed.
 | `finalize_branch`, `open_change_request` | two MRs, linked | Yes. CODEOWNERS picks the reviewers. The `proto` MR must merge first (open question 2) |
 | `deploy` | final commits, after CI | Yes, with D4 and D5 |
 | `publish` | MR links, preview URL, CI state | **Partly.** "Ready for review" while CI is red is misleading (D4) |
-| teardown | delete the namespace, the images, the database | Needs `deploy.Destroyer` (planned) and a teardown policy (open question 1), which a cluster's cost makes urgent |
+| teardown | delete the namespace, the images, the database | Yes, with `deploy.Destroyer` for the images and a [`Teardown`](#teardown) policy; a cluster's cost makes an `After` backstop worth setting |
 
 **What it asks of the core**, proposed and not built:
 
@@ -590,17 +588,17 @@ and the plain data types around it.
 | Package | Defines | Imports (Hinziel) |
 |---|---|---|
 | [`core`](./core) | `Message`, `Link`, `NeedsInputError`, `RetryableError`, `WaitError`, `Checker`, `NeedTools` | — |
-| [`tracker`](./tracker/tracker.go) | `Tracker` + optional `StageMover`, `Linker`, `AttachmentFetcher`; `Ticket`, `TicketRef`, `Stage` | core |
+| [`tracker`](./tracker/tracker.go) | `Tracker` + optional `StageMover`, `Linker`, `AttachmentFetcher`, `DoneChecker`; `Ticket`, `TicketRef`, `Stage` | core |
 | [`forge`](./forge/forge.go) | `Forge` + optional `ChangeRequestUpdater`; `GitRemote`, `ChangeRequest`, `ChangeRequestInput` | core |
 | [`agent`](./agent/agent.go) | `Agent`; `Task`, `Checkout`, `Outcome`, `Usage` | tracker, env |
 | [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`, `Actions`), `Host`, `SSHAccess`, `Action` | — |
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
-| [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`; `Source`, `Deployment` | env, tracker |
+| [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`, `Destroyer`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
 | [`cleanup`](./cleanup/cleanup.go) | `Cleaner`; `Workspace`, `Checkout` | — |
 | [`notify`](./notify/notify.go) | `Notifier`; `Event`, `EventType`, the `Finished` / `Problems` event sets | core, run |
 | [`trigger`](./trigger/trigger.go) | `Trigger`, `Dispatcher` | run, tracker |
-| [`hinziel`](./factory.go) (root) | `Factory`, `Repo`, `Endpoint`, `DNSTarget` (+ `HostAddress`, `CNAME`), `Deployer`, `Notifier`, `Trigger`, `Step`, `Main`, `Run`, `Env` | all of the above |
+| [`hinziel`](./factory.go) (root) | `Factory`, `Repo`, `Endpoint`, `DNSTarget` (+ `HostAddress`, `CNAME`), `Deployer`, `Notifier`, `Trigger`, `Teardown`, `Step`, `Main`, `Run`, `Env` | all of the above |
 
 Imports only point down the table. `run` is its own package so that `notify`
 and `trigger` can use `run.Snapshot` without importing the root package, which
@@ -760,7 +758,8 @@ These rules keep the interfaces from fighting each other:
   org username and instance URL go in `Environment.State` and `Hosts` stays
   empty.
 - **Stages are the tracker's to show.** The engine reports three abstract
-  stages (in progress, in review, blocked). How a team shows them varies
+  stages (in progress, in review, blocked), and reads a fourth, done, which
+  only people set (`tracker.DoneChecker`, for [teardown](#teardown)). How a team shows them varies
   with every board: list or column names in any spelling, labels instead of
   columns, or not at all. That mapping is the tracker component's option,
   matched leniently (case and spacing don't matter, IDs survive renames)
@@ -771,7 +770,8 @@ These rules keep the interfaces from fighting each other:
   uses the same routing as "tell the dev channel on Slack".
 - **Triggers belong to a factory.** Each trigger gets a `Dispatcher` scoped to
   its factory, and `daemon` mounts its HTTP handlers under
-  `/triggers/<factory>/<trigger>/`.
+  `/triggers/<factory>/<trigger>/`. Besides starting runs, a trigger can ask
+  for a ticket's environment to be torn down (`Dispatcher.Teardown`).
 - **Actions.** A provisioner, or the factory, asks a human to do something the
   environment needs ([Human actions](#human-actions)). Unlike
   `Outcome.ManualSteps`, which arrive at the end of a run, actions are raised
@@ -869,10 +869,12 @@ func main() {
 		// A finished run goes to QA, where the team reviews it on the
 		// preview. The board has no list for blocked, and gets none: that
 		// stage shows in comments only. Another board might map stages to
-		// lists, labels or both (trello.Stage).
+		// lists, labels or both (trello.Stage). Done is where people put a
+		// card once it's in production; the factory never moves it there.
 		Stages: map[tracker.Stage]trello.Stage{
 			tracker.StageInProgress: {List: "In progress"},
 			tracker.StageInReview:   {List: "Deployed to QA / staging"},
+			tracker.StageDone:       {List: "Done / Verified on production"},
 		},
 	})
 
@@ -967,14 +969,19 @@ func main() {
 		// it is stopped when implement ends, so it doesn't outlive the run.
 		Cleanup: []cleanup.Cleaner{cleancompose.New(cleancompose.Options{})},
 
-		// "@hinzielsoftwarefactory implement" in a comment on a card starts a run.
+		// The daemon destroys a card's preview once the card is done.
+		Teardown: hinziel.Teardown{WhenDone: true},
+
+		// "@hinzielsoftwarefactory implement" in a comment on a card starts a
+		// run; "@hinzielsoftwarefactory teardown" destroys the card's preview.
 		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
 			APIKey: hinziel.Env("TRELLO_API_KEY"),
 			Token:  hinziel.Env("TRELLO_TOKEN"),
 			Board:  "FbGOL7Wb",
 		})}},
 		Notifiers: []hinziel.Notifier{
-			{On: notify.Problems, Notifier: ticket.New(board)}, // failures, questions and actions, on the card
+			// Failures, questions, actions and teardowns, on the card.
+			{On: append(notify.Problems, notify.EventEnvironmentDestroyed), Notifier: ticket.New(board)},
 			{On: notify.Finished, Notifier: slack.New(hinziel.Env("SLACK_DEV_WEBHOOK"))},
 		},
 	})
@@ -1233,11 +1240,12 @@ learns from.
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
                                        # components: hinziel, tracker, agent, repo, environment, dns, deployer,
                                        # trigger, notifier, or one by name ("deployer api")
-<factory> daemon [--listen ADDR]       # run triggers and execute the runs they start, one at a time
+<factory> daemon [--listen ADDR]       # run triggers and execute the runs they start, one at a time;
+                                       # tear down environments by the factories' Teardown
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
-<factory> env list                     # (M6)
-<factory> env destroy <run-id | env-name>   # (M6)
+<factory> env list [--all]             # environments the runs know (--all: destroyed ones too), and orphans
+<factory> env destroy [--factory F] <run-id | env-name | ticket>   # tear one down
 
 # used by the agent inside a run (engine found via $HINZIEL_SOCKET)
 $HINZIEL_BIN deploy                    # deploy every repo's pushed HEAD to the run's environment
@@ -1313,12 +1321,47 @@ command at a time. It:
   the run that was executing is interrupted, also to be resumed by hand.
   `trigger/trellocomments` replies "started run …" even when the run waits
   behind another;
+- **tears down environments** by the factories' [`Teardown`](#teardown),
+  when it starts and every 10 minutes, and when a trigger asks;
 - later, **does the factory's other ongoing work**, such as confirming human
-  actions from a trigger and tearing down environments by policy (open
-  question 1).
+  actions from a trigger.
 
 It's one process, so a factory needs no queue or other external service
 between receiving a request and executing the run.
+
+### Teardown
+
+An environment costs money while it exists, and nothing a run does removes
+it. Tearing one down runs every deployer's `Destroy` (`deploy.Destroyer`,
+for what a deploy created outside the environment), deletes the endpoints'
+DNS records, then calls the provisioner's `Destroy`. If a deployer or a
+record fails, the environment stays, so trying again finds its hosts; every
+part is idempotent. The runs that used the environment record that it's
+gone. Resuming one provisions a new environment and deploys to it again, and
+so does a new run for the ticket.
+
+Three things tear one down:
+
+- **`env destroy <run-id | env-name | ticket>`**, by hand. `env list` shows
+  the environments the runs know, and orphans: those a provisioner with
+  `env.Lister` has but no run knows, such as one left behind by a crash.
+  `env destroy` takes an orphan's name too.
+- **A trigger**, through `Dispatcher.Teardown`. `trigger/trellocomments`
+  does it for a comment such as `@hinzielsoftwarefactory teardown`, and
+  replies on the card only if it fails.
+- **The factory's `Teardown`**, applied by `daemon`. `WhenDone` destroys an
+  environment once its ticket is done, as the tracker reports it
+  (`tracker.DoneChecker`; for Trello, the card is in `tracker.StageDone`'s
+  list or has its label, or is archived or deleted). `After` destroys it a
+  while after the ticket's latest run last changed, a backstop for tickets
+  that never get done.
+
+None of them destroys an environment while its ticket has an unfinished run,
+other than a failed one: cancel the run first. A run that reaches
+provisioning while the same daemon tears down its environment waits until
+it's gone. Every teardown emits `environment.destroyed`, so `notify/ticket`
+can say on the ticket that the preview is gone and why, listing the
+environment's [human actions](#human-actions) as a reminder to undo them.
 
 ### Hosting a factory
 
@@ -1401,11 +1444,11 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); `env up`; [per-environment certificates](#per-environment-certificates) and the `deploy.Destroyer` teardown hook they need; the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
+| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); `env up`; [per-environment certificates](#per-environment-certificates); the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
-| M6 | Gates/approve, `env list/destroy`, hardening |
+| M6 | Gates/approve, hardening |
 | M7 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
@@ -1413,10 +1456,10 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 
 ## 11. Open questions
 
-1. **Environment teardown policy.** Options: on MR merged/closed (needs a forge
-   webhook or poller), a TTL, ticket moved to "Done", or manual only. The
-   interfaces support all of them (`Provisioner.Destroy`, `env.Lister`,
-   `dns.Provider.Delete`). v1 ships only `env destroy`.
+1. **Environment teardown policy** (resolved: [Teardown](#teardown)). The
+   ticket being done, with a TTL as a backstop, plus `env destroy` and
+   trigger requests. Still open: on MR merged or closed, which needs the
+   forge to report a change request's state.
 2. **Merge order across repos.** When one ticket changes several repos, some
    MRs may need to merge before others (API before SPA). For now a factory only
    links the MRs to each other and states the dependency in their
@@ -1471,7 +1514,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     BlankTracker's wrangler (4.87) has it only as a private beta; the docs
     name 4.135 as the minimum. For a static SPA with no bindings, aliases
     work, so M1 keeps them. Moving `deploy/cfworkers` to Previews brings a
-    real teardown (`wrangler preview delete`, through the planned
+    real teardown (`wrangler preview delete`, through
     `deploy.Destroyer`) and known limits, but needs the newer wrangler in
     the app's dependencies. We still don't know whether aliases themselves
     have a limit.
@@ -1512,10 +1555,8 @@ certificate for each environment from Cloudflare's Origin CA API:
   environment, so later deploys reuse them. If they're lost, issue a new
   certificate and revoke the old one, found by its hostnames, so no state is
   needed to clean up.
-- **Revoke.** Teardown revokes the certificate. Deployers have no teardown
-  hook yet, so this adds an optional `deploy.Destroyer` interface
-  (`Destroy(ctx, e)`), called by `env destroy` before the provisioner's
-  `Destroy`. `deploy/cfworkers` can use the same hook for its aliases (open
+- **Revoke.** Teardown revokes the certificate, through `deploy.Destroyer`,
+  which runs before the provisioner's `Destroy`. `deploy/cfworkers` can use the same hook for its aliases (open
   question 10).
 - **Credentials.** A Cloudflare token with SSL and Certificates:Edit on the
   zone, in place of the certificate files. The shared certificate stays
@@ -1541,7 +1582,9 @@ factory's Trello member and says "implement" (`@hinzielsoftwarefactory
 implement`) starts a run. The factory replies on the card with the run it
 started, or why it couldn't start one, moves the card through the board's
 lists as the run goes, and comments there when it fails, has a question or
-needs a human.
+needs a human. Its preview is destroyed once the card reaches `Done /
+Verified on production`, or earlier on a comment that says "teardown"
+(`@hinzielsoftwarefactory teardown`).
 
 **How it maps.**
 
@@ -1552,6 +1595,7 @@ needs a human.
 | Which factory | the trigger belongs to one factory, and its `Dispatcher` is scoped to it, so no board-to-factory mapping is needed |
 | Requester | the commenter's username, in the run's `RequestedBy` |
 | Progress | the tracker's stages (`In progress`, then `Deployed to QA / staging`) and `notify/ticket` comments |
+| Teardown | `Teardown{WhenDone: true}` with `tracker.StageDone` mapped to the done list, and the trigger's "teardown" word; `notify/ticket` comments when the preview is gone |
 
 **Design points this case confirms.**
 

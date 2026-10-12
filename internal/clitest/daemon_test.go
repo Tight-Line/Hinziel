@@ -13,6 +13,7 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent"
+	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
 	"github.com/Tight-Line/hinziel/trigger"
@@ -98,5 +99,71 @@ func TestDaemonWithoutTriggersRefuses(t *testing.T) {
 	_, err := runCLI(t, cliFactory(t, nil), "daemon")
 	if err == nil || !strings.Contains(err.Error(), "no factory has triggers") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// tearDownAfterRun runs D-1, then asks for its environment's teardown, as a
+// "teardown" comment would, and stops the daemon.
+type tearDownAfterRun struct {
+	stop     context.CancelFunc
+	env      string
+	err      error
+	statuses []run.Status
+}
+
+func (s *tearDownAfterRun) Start(ctx context.Context, d trigger.Dispatcher, _ *http.ServeMux) error {
+	go func() {
+		defer s.stop()
+		ticket := tracker.TicketRef{ID: "D-1"}
+		id, err := d.Submit(ctx, run.Request{Ticket: ticket, RequestedBy: "test"})
+		if err != nil {
+			s.err = err
+			return
+		}
+		for ctx.Err() == nil {
+			if r, _ := d.Get(ctx, id); r != nil && r.Status == run.StatusSucceeded {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		s.env, s.err = d.Teardown(ctx, ticket, "trello:ante")
+	}()
+	return nil
+}
+
+func TestDaemonTearsDownOnRequest(t *testing.T) {
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
+	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		os.WriteFile(filepath.Join(task.Repos[0].Path, "hello.txt"), []byte("hello\n"), 0o644)
+		return nil, nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	trig := &tearDownAfterRun{stop: cancel}
+	f.Triggers = []hinziel.Trigger{{Name: "test", Trigger: trig}}
+
+	var out syncBuffer
+	if err := hinziel.Run(ctx, []string{"daemon"}, &out, f); err != nil {
+		t.Fatalf("daemon: %v\n%s", err, out.String())
+	}
+	if trig.err != nil || trig.env != "hz-demo-d-1" {
+		t.Fatalf("teardown: %q, %v\n%s", trig.env, trig.err, out.String())
+	}
+	if envs, _ := f.Environment.(env.Lister).List(context.Background()); len(envs) != 0 {
+		t.Errorf("environments left: %+v", envs)
+	}
+	if !strings.Contains(out.String(), "environment hz-demo-d-1 destroyed (asked for by trello:ante)") {
+		t.Errorf("output:\n%s", out.String())
+	}
+}
+
+func TestDaemonSweepsWithoutTriggers(t *testing.T) {
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
+	f := cliFactory(t, nil)
+	f.Teardown = hinziel.Teardown{After: time.Hour}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := hinziel.Run(ctx, []string{"daemon"}, &bytes.Buffer{}, f); err != nil {
+		t.Fatalf("a factory with a Teardown gives the daemon something to do: %v", err)
 	}
 }

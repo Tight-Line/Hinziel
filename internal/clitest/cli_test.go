@@ -185,3 +185,32 @@ func TestCLIRunFollowsAWait(t *testing.T) {
 		t.Errorf("run must follow the wait to the end:\n%s", out)
 	}
 }
+
+func TestCLIEnvListAndDestroy(t *testing.T) {
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
+	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		os.WriteFile(filepath.Join(task.Repos[0].Path, "hello.txt"), []byte("hello\n"), 0o644)
+		return nil, nil
+	})
+	if out, err := runCLI(t, f, "run", "D-1"); err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+
+	out, err := runCLI(t, f, "env", "list")
+	if err != nil || !regexp.MustCompile(`hz-demo-d-1\s+demo\s+D-1\s+\S+ \(succeeded\)\s+exists`).MatchString(out) {
+		t.Fatalf("env list: %v\n%s", err, out)
+	}
+	out, err = runCLI(t, f, "env", "destroy", "hz-demo-d-1")
+	if err != nil || !strings.Contains(out, "environment hz-demo-d-1 destroyed (asked for by cli:") {
+		t.Fatalf("env destroy: %v\n%s", err, out)
+	}
+	if out, _ := runCLI(t, f, "env", "list"); !strings.Contains(out, "no environments") {
+		t.Errorf("env list after destroy:\n%s", out)
+	}
+	if out, _ := runCLI(t, f, "env", "list", "--all"); !strings.Contains(out, "destroyed") {
+		t.Errorf("env list --all after destroy:\n%s", out)
+	}
+	if _, err := runCLI(t, f, "env", "destroy", "hz-demo-d-1"); err == nil {
+		t.Error("destroying it again must fail")
+	}
+}

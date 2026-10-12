@@ -80,10 +80,24 @@ func (f *fakeTrello) repliesTo(card string) []string {
 	return slices.Clone(f.replies["card-"+card])
 }
 
-// fakeDispatcher accepts one run per ticket.
+// fakeDispatcher accepts one run per ticket, and tears down environments
+// only of tickets in envs.
 type fakeDispatcher struct {
-	mu   sync.Mutex
-	reqs []run.Request
+	mu        sync.Mutex
+	reqs      []run.Request
+	envs      map[string]bool
+	teardowns []string
+}
+
+func (d *fakeDispatcher) Teardown(_ context.Context, ticket tracker.TicketRef, requestedBy string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.envs[ticket.ID] {
+		return "", errors.New(`no environment "` + ticket.ID + `"`)
+	}
+	delete(d.envs, ticket.ID)
+	d.teardowns = append(d.teardowns, ticket.ID+" by "+requestedBy)
+	return "hz-" + ticket.ID, nil
 }
 
 func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, error) {
@@ -162,6 +176,42 @@ func TestCommentsStartRuns(t *testing.T) {
 		if r := f.repliesTo(card); len(r) > 0 {
 			t.Errorf("card %s must be left alone, got %q", card, r)
 		}
+	}
+}
+
+func TestCommentsTearDown(t *testing.T) {
+	tr, f := newTest(t)
+	d := &fakeDispatcher{envs: map[string]bool{"c1": true}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := tr.Start(ctx, d, http.NewServeMux()); err != nil {
+		t.Fatal(err)
+	}
+
+	f.comment("ante", "c1", "@hinziel teardown")
+	f.comment("ante", "c2", "@hinziel Teardown please")        // no environment
+	f.comment("ante", "c3", "@hinziel implement or teardown?") // both words
+	f.comment("ante", "c4", "time to teardown")                // no mention
+
+	eventually(t, "a reply on c3", func() bool { return len(f.repliesTo("c3")) == 1 })
+	eventually(t, "a reply on c2", func() bool { return len(f.repliesTo("c2")) == 1 })
+	d.mu.Lock()
+	teardowns := slices.Clone(d.teardowns)
+	d.mu.Unlock()
+	if !slices.Equal(teardowns, []string{"c1 by trello:ante"}) {
+		t.Errorf("teardowns: %v", teardowns)
+	}
+	if r := f.repliesTo("c1"); len(r) > 0 {
+		t.Errorf("a teardown that worked is announced by the notifiers, not a reply: %q", r)
+	}
+	if r := f.repliesTo("c2"); !strings.Contains(r[0], `@ante, I couldn't tear down the environment: no environment "c2"`) {
+		t.Errorf("reply on c2: %q", r)
+	}
+	if r := f.repliesTo("c3"); !strings.Contains(r[0], "should I implement or teardown?") {
+		t.Errorf("reply on c3: %q", r)
+	}
+	if len(d.requests()) != 0 || len(f.repliesTo("c4")) != 0 {
+		t.Error("no run starts, and c4 is left alone")
 	}
 }
 

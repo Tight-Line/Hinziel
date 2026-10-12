@@ -6,6 +6,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Tight-Line/hinziel/agent"
 	"github.com/Tight-Line/hinziel/cleanup"
@@ -60,10 +61,27 @@ type Factory struct {
 	// environment reaches the agent, its credentials least of all: only a
 	// minimal base (PATH, HOME, locale, …) and the agent component's own
 	// credentials. Read the values with Env while building the Factory.
-	AgentEnv            map[string]string
+	AgentEnv map[string]string
+	// Teardown says when `daemon` destroys a ticket's environment on its own.
+	// The zero value never does; `env destroy` and triggers that ask for a
+	// teardown (trigger/trellocomments) work either way.
+	Teardown            Teardown
 	Gates               []Step // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step
 	DraftChangeRequests bool
+}
+
+// Teardown says when the daemon destroys an environment that is no longer
+// needed. Either condition is enough. An environment is never destroyed while
+// its ticket has an unfinished run, other than a failed one.
+type Teardown struct {
+	// WhenDone destroys it once its ticket is done: the tracker must
+	// implement tracker.DoneChecker (for tracker/trello, the card is in
+	// tracker.StageDone's list or has its label, or is archived or deleted).
+	WhenDone bool
+	// After destroys it this long after the ticket's latest run last
+	// changed, a backstop for tickets that never get done; 0 = never.
+	After time.Duration
 }
 
 // Repo is one repository of a factory. Repos may live on different forges.
@@ -227,6 +245,18 @@ func (f *Factory) validate() error {
 		if n.Notifier == nil {
 			bad("Notifiers[%d]: Notifier is required", i)
 		}
+	}
+
+	if f.Teardown.WhenDone {
+		if _, ok := f.Tracker.(tracker.DoneChecker); f.Tracker != nil && !ok {
+			bad("Teardown.WhenDone: the Tracker can't tell when a ticket is done (tracker.DoneChecker)")
+		}
+	}
+	if f.Teardown.After < 0 {
+		bad("Teardown.After must not be negative")
+	}
+	if (f.Teardown.WhenDone || f.Teardown.After > 0) && f.Environment == nil {
+		bad("Teardown needs an Environment")
 	}
 
 	for i, c := range f.Cleanup {

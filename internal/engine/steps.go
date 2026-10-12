@@ -194,6 +194,9 @@ func (x *execution) provisionEnvironment(ctx context.Context) error {
 	if f := x.p.Settings.EnvName; f != nil {
 		name = f(x.r.Ticket)
 	}
+	if err := x.e.tearingDownErr(x.p.Name, name); err != nil {
+		return err
+	}
 	spec := env.Spec{Name: name, Labels: map[string]string{
 		"hinziel-factory": x.p.Name,
 		"hinziel-ticket":  x.r.Ticket.Key,

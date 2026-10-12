@@ -47,6 +47,8 @@ type Snapshot struct {
 	// Repos without changes get no change request.
 	ChangeRequests map[string]*forge.ChangeRequest `json:"change_requests,omitempty"`
 	Environment    *env.Environment                `json:"environment,omitempty"`
+	// EnvironmentDestroyed is when Environment was torn down; zero while it exists.
+	EnvironmentDestroyed time.Time `json:"environment_destroyed,omitempty"`
 	// Deployments holds the latest deployment per deployer, keyed by deployer name.
 	Deployments map[string]*deploy.Deployment `json:"deployments,omitempty"`
 	// WaitingFor and WaitUntil say what a waiting run waits for, and when its

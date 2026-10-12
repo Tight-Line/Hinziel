@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tight-Line/hinziel/agent"
 	"github.com/Tight-Line/hinziel/core"
@@ -301,5 +302,24 @@ func TestValidateRejectsBadAgentEnv(t *testing.T) {
 		if err := validate(f); err == nil || !strings.Contains(err.Error(), "AgentEnv") {
 			t.Errorf("AgentEnv %q: got %v", name, err)
 		}
+	}
+}
+
+func TestValidateTeardown(t *testing.T) {
+	f := validFactory()
+	f.Teardown = hinziel.Teardown{After: -time.Hour}
+	if err := validate(f); err == nil || !strings.Contains(err.Error(), "must not be negative") {
+		t.Errorf("got %v", err)
+	}
+	f = validFactory()
+	f.Teardown = hinziel.Teardown{WhenDone: true}
+	if err := validate(f); err == nil || !strings.Contains(err.Error(), "can't tell when a ticket is done") {
+		t.Errorf("got %v", err)
+	}
+	f = validFactory()
+	f.Environment, f.Endpoints, f.Deployers, f.DNS = nil, nil, nil, nil
+	f.Teardown = hinziel.Teardown{After: time.Hour}
+	if err := validate(f); err == nil || !strings.Contains(err.Error(), "Teardown needs an Environment") {
+		t.Errorf("got %v", err)
 	}
 }

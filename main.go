@@ -60,8 +60,6 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	case "help", "-h", "--help":
 		usage(out)
 		return nil
-	case "env":
-		return fmt.Errorf("%s: not implemented yet (milestone M2)", cmd)
 	}
 
 	c := &cli{out: out, factories: factories}
@@ -83,6 +81,8 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 		return c.withRun(ctx, args, c.eng.Cancel)
 	case "daemon":
 		return c.daemon(ctx, args)
+	case "env":
+		return c.environments(ctx, args)
 	}
 	return fmt.Errorf("unknown command %q (try 'help')", cmd)
 }
@@ -162,8 +162,10 @@ Commands:
                                  test credentials and the tools this host needs;
                                  components as listed by check, e.g. tracker, repo, "deployer api"
   daemon [--listen ADDR]         run the factories' triggers and execute the runs they start,
-                                 one at a time, until Ctrl-C
-  env up | list | destroy        manage environments (not yet)
+                                 one at a time, and apply the factories' Teardown, until Ctrl-C
+  env list [--all]               list environments, and orphans the provisioners still have
+  env destroy [--factory F] <run-id | env-name | ticket>
+                                 tear down an environment (not while a run may still use it)
 
 Used by the agent inside a run (found via $HINZIEL_SOCKET):
   deploy                         deploy every repo's pushed HEAD to the environment

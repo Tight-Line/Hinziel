@@ -1,7 +1,8 @@
 // Package trellocomments is a trigger.Trigger that starts a run when someone
 // asks for one in a comment on a Trello card: the comment @mentions the
 // factory's own Trello member and contains the word "implement", e.g.
-// "@hinziel implement". The member is whoever the token belongs to, so each
+// "@hinziel implement". With the word "teardown" instead, it destroys the
+// card's environment. The member is whoever the token belongs to, so each
 // installation's agent answers to its own name without configuration.
 //
 // It polls the board's comments, so it needs no public URL, no webhook and
@@ -10,7 +11,9 @@
 // while it was stopped, are not picked up.
 //
 // It replies on the card with the run it started, or why it couldn't start
-// one (the card already has an unfinished run, for example).
+// one (the card already has an unfinished run, for example). A teardown
+// replies only when it fails: success is announced by the factory's
+// notifiers (environment.destroyed), as is a teardown for other reasons.
 //
 // # Credentials
 //
@@ -42,9 +45,12 @@ type Options struct {
 	APIKey string
 	Token  string
 	Board  string // ID or shortLink
-	// Word is what a comment must contain, besides the mention, to start a
-	// run; matched as a whole word, in any case. "" = "implement".
-	Word string
+	// ImplementWord is what a comment must contain, besides the mention, to
+	// start a run; matched as a whole word, in any case. "" = "implement".
+	ImplementWord string
+	// TeardownWord asks for the card's environment to be destroyed instead;
+	// "" = "teardown".
+	TeardownWord string
 	// Interval between polls; 0 = 30 seconds.
 	Interval time.Duration
 	// BaseURL of the API; "" = https://api.trello.com.
@@ -53,9 +59,10 @@ type Options struct {
 
 // Trigger starts runs from comments on one board.
 type Trigger struct {
-	opts Options
-	api  *apiclient.Client
-	word *regexp.Regexp
+	opts      Options
+	api       *apiclient.Client
+	implement *regexp.Regexp
+	teardown  *regexp.Regexp
 }
 
 var (
@@ -68,8 +75,11 @@ const pageSize = 50
 
 // New returns a comment trigger.
 func New(opts Options) *Trigger {
-	if opts.Word == "" {
-		opts.Word = "implement"
+	if opts.ImplementWord == "" {
+		opts.ImplementWord = "implement"
+	}
+	if opts.TeardownWord == "" {
+		opts.TeardownWord = "teardown"
 	}
 	if opts.Interval == 0 {
 		opts.Interval = 30 * time.Second
@@ -78,7 +88,7 @@ func New(opts Options) *Trigger {
 	if base == "" {
 		base = "https://api.trello.com"
 	}
-	t := &Trigger{opts: opts, word: wordRE(opts.Word)}
+	t := &Trigger{opts: opts, implement: wordRE(opts.ImplementWord), teardown: wordRE(opts.TeardownWord)}
 	t.api = &apiclient.Client{Name: "trello", BaseURL: base + "/1", Auth: func(r *http.Request) {
 		r.Header.Set("Authorization", fmt.Sprintf(`OAuth oauth_consumer_key="%s", oauth_token="%s"`, opts.APIKey, opts.Token))
 	}}
@@ -177,10 +187,21 @@ func (t *Trigger) poll(ctx context.Context, d trigger.Dispatcher, me *member, me
 	slices.Reverse(all)
 	for _, a := range all {
 		cursor = a.ID
-		if a.IDMemberCreator == me.ID || !mention.MatchString(a.Data.Text) || !t.word.MatchString(a.Data.Text) {
+		if a.IDMemberCreator == me.ID || !mention.MatchString(a.Data.Text) {
 			continue
 		}
-		if err := t.start(ctx, d, a); err != nil {
+		implement, teardown := t.implement.MatchString(a.Data.Text), t.teardown.MatchString(a.Data.Text)
+		var err error
+		switch {
+		case implement && teardown:
+			err = t.reply(ctx, a, fmt.Sprintf("@%s, should I %s or %s? Ask for one at a time.",
+				a.MemberCreator.Username, t.opts.ImplementWord, t.opts.TeardownWord))
+		case implement:
+			err = t.start(ctx, d, a)
+		case teardown:
+			err = t.tearDown(ctx, d, a)
+		}
+		if err != nil {
 			return cursor, err
 		}
 	}
@@ -197,8 +218,22 @@ func (t *Trigger) start(ctx context.Context, d trigger.Dispatcher, a action) err
 	if err != nil {
 		reply = fmt.Sprintf("@%s, I couldn't start a run: %v", a.MemberCreator.Username, err)
 	}
+	return t.reply(ctx, a, reply)
+}
+
+// tearDown destroys the comment's card's environment, and replies only if
+// that fails.
+func (t *Trigger) tearDown(ctx context.Context, d trigger.Dispatcher, a action) error {
+	_, err := d.Teardown(ctx, tracker.TicketRef{ID: a.Data.Card.ShortLink}, "trello:"+a.MemberCreator.Username)
+	if err == nil {
+		return nil
+	}
+	return t.reply(ctx, a, fmt.Sprintf("@%s, I couldn't tear down the environment: %v", a.MemberCreator.Username, err))
+}
+
+func (t *Trigger) reply(ctx context.Context, a action, text string) error {
 	return t.api.Do(ctx, http.MethodPost, "/cards/"+url.PathEscape(a.Data.Card.ID)+"/actions/comments",
-		nil, map[string]string{"text": reply}, nil)
+		nil, map[string]string{"text": text}, nil)
 }
 
 func (t *Trigger) me(ctx context.Context) (*member, error) {

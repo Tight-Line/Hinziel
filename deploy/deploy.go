@@ -24,6 +24,15 @@ type Retriever interface {
 	Retrieve(ctx context.Context, e *env.Environment, workdir string) error
 }
 
+// Destroyer is optional: it removes what Deploy created outside the
+// environment, such as a certificate or a preview of a static site, which the
+// provisioner's Destroy doesn't reach. It is called when the environment is
+// torn down, before the provisioner's Destroy. Destroying what is already
+// gone is not an error.
+type Destroyer interface {
+	Destroy(ctx context.Context, e *env.Environment) error
+}
+
 // Source is always a pushed commit: Hinziel never deploys uncommitted or
 // unpushed work, so an environment only ever runs something in the forge.
 // Each deployer is bound to one of the project's repos in config.

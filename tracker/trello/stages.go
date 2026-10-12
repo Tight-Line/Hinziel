@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Tight-Line/hinziel/internal/apiclient"
 	"github.com/Tight-Line/hinziel/tracker"
 )
 
@@ -156,6 +157,52 @@ func (t *Tracker) MoveTo(ctx context.Context, id string, stage tracker.Stage) er
 		}
 	}
 	return nil
+}
+
+// Done reports whether the card is done: archived, deleted, or showing
+// StageDone (in its list, or with its label). Without a StageDone, only
+// archived and deleted cards are done.
+func (t *Tracker) Done(ctx context.Context, id string) (bool, error) {
+	var c struct {
+		Closed   bool     `json:"closed"`
+		IDBoard  string   `json:"idBoard"`
+		IDList   string   `json:"idList"`
+		IDLabels []string `json:"idLabels"`
+	}
+	q := url.Values{"fields": {"closed,idBoard,idList,idLabels"}}
+	err := t.api.Do(ctx, http.MethodGet, "/cards/"+url.PathEscape(cardID(id)), q, nil, &c)
+	if apiclient.IsStatus(err, http.StatusNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if c.Closed {
+		return true, nil
+	}
+	done, ok := t.opts.Stages[tracker.StageDone]
+	if !ok {
+		return false, nil
+	}
+	if done.List != "" {
+		list, err := t.resolveList(ctx, c.IDBoard, done.List)
+		if err != nil {
+			return false, fmt.Errorf("stage %s: %w", tracker.StageDone, err)
+		}
+		if list == c.IDList {
+			return true, nil
+		}
+	}
+	if done.Label != "" {
+		label, err := t.resolveLabel(ctx, c.IDBoard, done.Label)
+		if err != nil {
+			return false, fmt.Errorf("stage %s: %w", tracker.StageDone, err)
+		}
+		if slices.Contains(c.IDLabels, label) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // checkStages resolves every stage's list and label on the board, reporting
