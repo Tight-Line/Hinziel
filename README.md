@@ -105,12 +105,14 @@ no tickets or agents involved.
 - Optional approval gates for teams that don't want full autonomy.
 
 **Working assumption: the agent has everything it needs.** Every agent runs
-on the factory's host and works against a provisioned environment: it
+in a [sandbox](#the-agents-sandbox) on the factory's host (from M2) and
+works against a provisioned environment: it
 deploys to it, reaches it over SSH or its tools, and tests it through its
 URLs. It has whatever access it needs: tools, credentials, the running app
 or org. A factory keeps its own credentials
-from the agent (design rule 7), but doesn't sandbox it or limit what its work
-can reach. Limiting that makes every scenario much harder, so it's out of
+from the agent (design rule 7), and the sandbox keeps the factory's host
+from it, but nothing limits what its work can reach: the environment, the
+forge, the APIs its `AgentEnv` opens. Limiting that makes every scenario much harder, so it's out of
 scope until we choose to revisit it.
 
 **Non-goals (v1)**
@@ -688,7 +690,8 @@ These rules keep the interfaces from fighting each other:
    HOME, locale), the agent component's own credentials and what the
    factory declares in `AgentEnv`, nothing else. On Linux the factory also
    makes itself non-dumpable, so the agent can't read the factory's
-   environment from `/proc`. The agent commits and pushes, but
+   environment from `/proc`. From M2 its [sandbox](#the-agents-sandbox) goes
+   further: the agent sees only its run's checkouts, not the factory's files. The agent commits and pushes, but
    **only to its own run branch**, and it deploys only through the `deploy`
    command. The engine creates the branch, makes the final commit and push
    (`finalize_branch`), opens the MRs and owns the final deploy. That keeps
@@ -734,7 +737,9 @@ These rules keep the interfaces from fighting each other:
   how a project runs locally; the factory says, with `cleanup/dockercompose`
   (the Compose projects started from the run's checkouts), `cleanup/command`
   (the team's own command, e.g. `./toolkit down`) or a cleaner of its own.
-  A cleaner's error is logged and never fails the run. A cleaner runs with
+  A cleaner's error is logged and never fails the run. The
+  [sandbox](#the-agents-sandbox) (M2) replaces cleaners: removing it
+  removes everything in it. A cleaner runs with
   the agent's environment, not the factory's, because the checkout holds
   code the agent wrote.
 - **Several repos.** Each repo has its own forge, so one factory can span
@@ -1240,7 +1245,7 @@ learns from.
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
                                        # components: hinziel, tracker, agent, repo, environment, dns, deployer,
                                        # trigger, notifier, or one by name ("deployer api")
-<factory> daemon [--listen ADDR]       # run triggers and execute the runs they start, one at a time;
+<factory> daemon [--listen ADDR] [--runs N]   # run triggers and execute the runs they start, N at a time (default 1);
                                        # tear down environments by the factories' Teardown
 <factory> host install <user@host>     # install or update the factory on a server (M2)
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
@@ -1275,8 +1280,8 @@ try the CLI without any accounts.
   Deployers build in their own worktree (`deploy/<deployer>/`) at the
   commit being deployed, so build output never shows up as uncommitted
   changes in the agent's checkout.
-- **Concurrency:** at most one unfinished run per (factory, ticket). A global
-  worker limit applies in `daemon`.
+- **Concurrency:** at most one unfinished run per (factory, ticket). `daemon
+  --runs N` limits how many execute at once.
 - **Re-triggering a ticket that already has a run:** refused while that run is
   unfinished (queued, running, awaiting approval, waiting, needs input or
   failed): resume or cancel it first. After a run succeeded or was cancelled,
@@ -1309,8 +1314,14 @@ command at a time. It:
   Others are pollers, such as `trigger/trellocomments` (a comment
   `@<member> implement` on a card), which need no inbound traffic at all,
   so the daemon can run on a laptop;
-- **executes runs in the background**, one at a time for now; a worker
-  pool with a global limit on concurrent runs comes with M2. A run that
+- **executes runs in the background**, up to `--runs N` at once (default
+  1; *planned for M2*, together with the [sandbox](#the-agents-sandbox),
+  which is what makes parallel runs safe: each agent has its own container,
+  ports and Docker). Size N to the host: every run in progress holds a
+  sandbox, often with the app's whole dev stack inside, and an environment
+  in the cloud. Parallel agents also share the agent's subscription limits,
+  if it has them. Two runs for the same ticket never run together; the
+  engine refuses the second. A run that
   waits (on CI, say) is checked again in the background, so it doesn't hold
   up the queue. Runs started from the CLI still execute in the foreground,
   outside the queue, so they can run alongside the daemon's.
@@ -1369,29 +1380,46 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 same everywhere; only routing traffic to it differs, and only when a trigger
 receives HTTP.
 
-**The host needs Docker, nothing else.** The factory ships as a container
-image holding the binary and every tool `check` asks for (git, ssh, Node,
-Claude Code). Ubuntu 24.04 is the reference, but any Linux with Docker works.
-Running the factory in a container also keeps it apart from anything else
-on a shared host: no host mounts, no Docker socket, no `--privileged`.
+**The host needs Docker and Sysbox, nothing else.** The factory ships as a
+container image holding the binary and every tool its own steps need (git,
+ssh, Node for `deploy/cfworkers`). Each run's agent works in a
+[sandbox](#the-agents-sandbox) of its own, a second container, run with the
+[Sysbox](https://github.com/nestybox/sysbox) runtime. Ubuntu 22.04 and 24.04
+are the reference, but any Linux that Sysbox supports works.
+
+The factory's container gets the host's Docker socket, because it starts the
+sandboxes. That makes the factory root on its host, and it already holds every
+credential the factory has, so a host shared with other work must trust it.
+The agent never gets the socket.
 
 **`host install <user@host>`**, run from a machine that has the factory and
 its env file, over SSH (`core/remote`):
 
-1. check for Docker, and install it with Docker's official script if missing;
+1. check for Docker and Sysbox, and install what's missing (Docker's
+   official script, Sysbox's package). Installing Sysbox restarts Docker,
+   which stops the containers already running on the host, so `host install`
+   asks first if there are any;
 2. create a non-root `hinziel` user;
-3. copy the env file, the SSH key and any certificate files, mode 600;
-4. pull the factory image and start `daemon` with a restart policy and a
-   volume for run state (`HINZIEL_STATE_DIR`);
-5. set up routing (below), if any trigger receives HTTP;
-6. run `check` on the host and report.
+3. copy the env file, the SSH key and any certificate files to
+   `/etc/hinziel/<factory>/`, mode 600;
+4. upload the factory binary and build both images on the host, the
+   factory's and the sandbox's, from Dockerfiles Hinziel embeds. Building on
+   the host needs no registry and no Docker on the machine you install from;
+5. start `daemon` in the factory's container with a restart policy, the
+   host's Docker socket, the config read-only and the state directory
+   (`/var/lib/hinziel/<factory>`, `HINZIEL_STATE_DIR`). Both directories are
+   mounted at the same paths inside as on the host, because the sandboxes
+   mount from them and the host's Docker resolves host paths;
+6. set up routing (below), if any trigger receives HTTP;
+7. run `check` in the container and report.
 
 Running it again updates in place, so it's also the upgrade command. It
-works on any machine you point it at; the factory doesn't create its own host.
-What it can't do: Claude Code's login (run `claude setup-token` once and put
-the token in the env file as `CLAUDE_CODE_OAUTH_TOKEN`), and registering the
-public URL wherever the trigger's sender needs it (a webhook in GitLab's
-project settings, …).
+waits for a run that is executing to finish, or with `--force` interrupts it
+(to be resumed). It works on any machine you point it at; the factory doesn't
+create its own host. What it can't do: Claude Code's login (run
+`claude setup-token` once and put the token in the env file as
+`CLAUDE_CODE_OAUTH_TOKEN`), and registering the public URL wherever the
+trigger's sender needs it (a webhook in GitLab's project settings, …).
 
 **Routing.** HTTP triggers need a fixed public HTTPS URL: senders are
 configured with it once, and most refuse plain HTTP (Trello, Slack and
@@ -1414,6 +1442,67 @@ on Cloudflare works, such as a cheap spare one. A CNAME from a domain hosted
 elsewhere does *not* work: a tunnel's `cfargotunnel.com` address only serves
 DNS records in the same Cloudflare account. (Cloudflare for SaaS custom
 hostnames might get around that, but it's extra setup for no benefit here.)
+
+A factory whose triggers only poll, such as BlankTracker's
+`trigger/trellocomments`, needs no routing, so the first version of
+`host install` comes without it.
+
+### The agent's sandbox
+
+*Planned for M2.* The agent always works in a sandbox: a container of its
+own per run. Before the sandbox, the agent ran on the factory's host, as the
+factory's user, and BlankTracker showed what that costs (§11, question 5).
+Its agent started the app's dev stack to run `./toolkit check`. The stack's
+published ports were open to the internet, because Docker's port publishing
+bypasses ufw. Two such runs at once would have collided on the same ports and
+the same Compose project name. And every file the factory's user can read,
+the env file included unless it's root-only, was readable to the agent.
+
+The engine starts the sandbox before `implement` and removes it, with
+everything started in it, when `implement` ends, whether it succeeded or not,
+and when the run is cancelled. Responsibilities split two ways:
+
+**The factory says what's inside.** `Factory.Sandbox` describes the
+container's contents. Hinziel's base image has what every agent needs: git,
+ssh, Node and Claude Code. The factory adds what its project needs:
+
+```go
+Sandbox: hinziel.Sandbox{
+	Docker: true, // a Docker daemon of its own, with Compose: the app's dev stack runs inside
+	Dockerfile: `RUN apt-get install -y --no-install-recommends php-cli`, // appended to the base image
+},
+```
+
+The zero value is the base image alone, which is enough for an agent that
+only edits, pushes and tests against its environment.
+
+**The host says how it runs.** The runtime is a property of the host, not of
+the factory: `HINZIEL_SANDBOX_RUNTIME`, default `sysbox-runc`.
+[Sysbox](https://github.com/nestybox/sysbox) is what Hinziel requires. It
+maps root in the container to an unprivileged user on the host and still lets
+a Docker daemon run inside, so `Docker: true` works without `--privileged`.
+Plain `runc` works too, for factories that don't set `Docker`; `check`
+refuses `Docker: true` without Sysbox, and Hinziel never runs a sandbox
+`--privileged`. So a factory that needs Docker inside runs only on a Linux
+host with Sysbox, the factory's own laptop included.
+
+What's mounted, always at the same path as outside so the paths in the prompt
+stay valid: the run's checkouts, the agent's socket, the factory binary
+(`$HINZIEL_BIN`), and read-only the environment's SSH key and
+`known_hosts`. Nothing else of the factory's host is inside: not its env
+file, not its other runs, not the host's Docker. What the agent publishes
+from its own Docker stays inside its container, so nothing reaches the host's
+network and concurrent runs don't see each other. The agent's environment is
+still `Task.Env`. An agent component runs its process through the task's
+sandbox (`Task.Sandbox`, which wraps an `exec.Cmd` to run inside);
+`agent/claudecode` does.
+
+`check` builds the sandbox's image and verifies the runtime. The image is
+cached by its contents, so a run doesn't rebuild it.
+
+Removing the sandbox removes whatever the agent left running, so
+[`Cleanup`](#behaviour-the-types-alone-dont-show) has no job left. It goes
+away once the sandbox has replaced it in BlankTracker's factory.
 
 ## 9. Testing strategy
 
@@ -1444,7 +1533,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); `env up`; [per-environment certificates](#per-environment-certificates); the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing |
+| M2 | [`daemon`](#the-daemon) (a first version, with `trigger/trellocomments` and one run at a time, exists); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); `env up`; [per-environment certificates](#per-environment-certificates); the factory as a container image and [`host install`](#hosting-a-factory), with a Cloudflare Tunnel as default routing; the [agent's sandbox](#the-agents-sandbox) (a container per run, with Docker inside when the factory asks; replaces `Cleanup`) and parallel runs (`daemon --runs N`) |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1469,10 +1558,10 @@ hostnames might get around that, but it's extra setup for no benefit here.)
    Who allocates ports (proposed: the provisioner, stored in `Environment.State`)?
 4. **Re-trigger semantics** (resolved by [Iteration](#iteration)). A new run
    for a ticket continues the existing branch, environment and MRs.
-5. **Where the agent process runs.** Directly on the factory's host (v1,
-   simplest), or in a container per run for isolation between concurrent
-   runs? This is an option of the agent component and does not change the
-   interface. BlankTracker showed why it matters. Its instructions ask for
+5. **Where the agent process runs** (resolved for M2: a
+   [sandbox](#the-agents-sandbox), a container per run, for every agent;
+   the factory says what's inside, the host's runtime how it runs).
+   BlankTracker showed why it matters. Its instructions ask for
    `./toolkit check`, which only runs in the repository's local dev stack,
    so the agent started that stack on the runner and left it running after
    the run (since then, the factory stops it with `cleanup/dockercompose`
@@ -1529,8 +1618,9 @@ hostnames might get around that, but it's extra setup for no benefit here.)
     and a minimal base, though files the factory's user can read stay
     readable to the agent); run the agent in its own container per
     run, with only the environment's access (D2) and a push token for the
-    run's repositories. The last is the real answer, and an option of the
-    agent component (question 5), not an interface change.
+    run's repositories. The last is the real answer. The
+    [sandbox](#the-agents-sandbox) (M2) is its first half: the agent sees
+    only its run's files. The push token is still the factory's.
 12. **Forks.** Teams whose bots can't push to the upstream repository work
     from forks (12.6). `forge.GitRemote` would get an upstream to fetch base
     branches from, separate from the remote the factory pushes to, and forge
