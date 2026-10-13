@@ -948,10 +948,11 @@ hinziel.Main(hinziel.Factory{
 
 ```go
 org := scratchorg.New(scratchorg.Options{
-	DevHub:       "client-devhub", // sf alias, authorised on the factory's host via JWT
-	Definition:   "config/project-scratch-def.json",
-	DurationDays: 7,
-	PostDeploy:   []string{"sf org assign permset --name Client_Admin", "sf data import tree --plan data/plan.json"},
+	DevHub:         "client-devhub", // sf alias, authorised on the factory's host via JWT
+	Definition:     "../config/project-scratch-def.json",
+	Packages:       []string{"04tKA000000cCA1YAM"}, // installed before the first deploy
+	PermissionSets: []string{"Client_Admin"},
+	Setup:          []string{"sf data import tree --plan data/plan.json"}, // once per org
 })
 
 hinziel.Main(hinziel.Factory{
@@ -1577,7 +1578,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M6 | Gates/approve, hardening |
-| M7 | Scenario C: `forge/github`, `deploy/scratchorg`, `retrieve` step, browser tooling for `agent/claudecode` |
+| M7 | Scenario C: `forge/github`, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
 ---
