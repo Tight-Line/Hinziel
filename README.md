@@ -16,7 +16,7 @@ A team uses the skill; the skill uses the library. The library is still an
 ordinary Go library, open to any team that would rather write its factory by
 hand.
 
-> Note: the name is a play on *hinzielen* (German: to aim at, to work toward),
+> Note: the name is both a play on *hinzielen* (German: to aim at, to work toward), and
 inspired by the Heinzelmännchen of Cologne, house spirits who did the
 townsfolk's work while they slept.
 
