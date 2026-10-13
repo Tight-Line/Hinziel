@@ -357,6 +357,27 @@ factory option and not an interface change; a branch-name generator on
 - **Action.** Something a human must do for an environment that the factory
   can't, such as registering its URLs with a third party. It may hold back a
   later step until someone confirms it's done ([Human actions](#human-actions)).
+- **Host.** The always-on machine a factory is installed on with
+  [`host install`](#hosting-a-factory). It runs the factory's container,
+  where the daemon is, and a sandbox per run in progress. It needs only Docker
+  and Sysbox. It's optional: `run` works from a laptop without one.
+- **Daemon.** The factory's binary running continuously
+  (`<factory> daemon`, [The daemon](#the-daemon)). It runs the triggers,
+  executes the runs they start, up to `--runs N` at once, and tears down
+  environments by the factory's [`Teardown`](#teardown).
+- **Engine.** The part of Hinziel that executes a run's pipeline step by
+  step, inside the daemon or a CLI command. It provisions the environment,
+  starts the sandbox, calls the agent, and owns the final commit, deploy and
+  MRs.
+- **Agent.** The component that does `implement`. It works in the sandbox:
+  edits and tests the checkouts there, commits and pushes its run branch with
+  `git`, and asks the engine to deploy the pushed commits
+  (`$HINZIEL_BIN deploy`, [Agent loop](#agent-loop)), then tests against
+  the environment. It never creates environments, runs deployers itself or
+  opens MRs.
+- **Sandbox.** A container per run in which the agent works
+  ([The agent's sandbox](#the-agents-sandbox)). It sees only its run's
+  checkouts, and is removed with everything in it when `implement` ends.
 
 ### Pipeline
 
@@ -1559,7 +1580,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
    the factory says what's inside, the host's runtime how it runs).
    BlankTracker showed why it matters. Its instructions ask for
    `./toolkit check`, which only runs in the repository's local dev stack,
-   so the agent started that stack on the runner and left it running after
+   so the agent started that stack on the host and left it running after
    the run. Its published ports (Postgres, Redis, nginx, …) were open to
    the internet, because Docker's port publishing bypasses ufw; only a
    cloud firewall in front of the host closes them. Two such runs at once
