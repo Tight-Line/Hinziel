@@ -93,6 +93,7 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 	f.Repos = append(f.Repos, hinziel.Repo{Name: "app", Forge: fakeForge{}, TargetBranch: "main"})
 	f.Deployers[0].Repo = "web"
 	f.Gates = []hinziel.Step{"deploy_everything"}
+	f.Timeouts = map[hinziel.Step]time.Duration{"lunch": time.Hour, hinziel.StepImplement: 0}
 
 	err := validate(f)
 	if err == nil {
@@ -104,6 +105,8 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 		`duplicate name "app"`,
 		`Repo "web" is not one of the factory's repos`,
 		`unknown step "deploy_everything"`,
+		`Timeouts: unknown step "lunch"`,
+		"Timeouts: implement must be positive",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not mention %q:\n%v", want, err)

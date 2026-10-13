@@ -456,12 +456,20 @@ func (x *execution) pipeline(ctx context.Context) error {
 	return nil
 }
 
+// timeout is how long one attempt at a step may take.
+func (x *execution) timeout(step string) time.Duration {
+	if d, ok := x.p.Settings.Timeouts[step]; ok {
+		return d
+	}
+	return stepTimeouts[step]
+}
+
 // attempt runs a step with its timeout, retrying core.RetryableError with
 // exponential backoff.
 func (x *execution) attempt(ctx context.Context, name string) error {
 	delay := x.e.opts.RetryDelay
 	for n := 1; ; n++ {
-		stepCtx, cancel := context.WithTimeout(ctx, stepTimeouts[name])
+		stepCtx, cancel := context.WithTimeout(ctx, x.timeout(name))
 		err := x.runStep(stepCtx, name)
 		cancel()
 		if err == nil {

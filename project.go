@@ -1,6 +1,8 @@
 package hinziel
 
 import (
+	"time"
+
 	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/internal/engine"
 	"github.com/Tight-Line/hinziel/internal/sandbox"
@@ -35,6 +37,7 @@ func (f *Factory) project() *engine.Project {
 			AgentEnv:            f.AgentEnv,
 			Teardown:            engine.Teardown{WhenDone: f.Teardown.WhenDone, After: f.Teardown.After},
 			Sandbox:             f.sandboxContents(),
+			Timeouts:            f.timeouts(),
 		},
 	}
 	if f.Sandbox != nil {
@@ -57,4 +60,15 @@ func (f *Factory) project() *engine.Project {
 		p.Notifiers = append(p.Notifiers, engine.Notifier{On: n.On, Notifier: n.Notifier})
 	}
 	return p
+}
+
+func (f *Factory) timeouts() map[string]time.Duration {
+	if f.Timeouts == nil {
+		return nil
+	}
+	out := make(map[string]time.Duration, len(f.Timeouts))
+	for s, d := range f.Timeouts {
+		out[string(s)] = d
+	}
+	return out
 }

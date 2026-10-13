@@ -68,6 +68,11 @@ type Factory struct {
 	Gates               []Step // pause before these steps; empty = fully autonomous
 	DisabledSteps       []Step
 	DraftChangeRequests bool
+	// Timeouts replace the default timeouts of the steps they name: 60
+	// minutes for implement, 20 for deploy_base and deploy, less for the
+	// rest. An agent that builds a dev stack and runs a slow test suite
+	// needs longer.
+	Timeouts map[Step]time.Duration
 }
 
 // Sandbox is what a factory puts in its agent's container, on top of
@@ -275,6 +280,14 @@ func (f *Factory) validate() error {
 	for _, s := range f.Gates {
 		if !s.valid() {
 			bad("Gates: unknown step %q", s)
+		}
+	}
+	for s, d := range f.Timeouts {
+		switch {
+		case !s.valid():
+			bad("Timeouts: unknown step %q", s)
+		case d <= 0:
+			bad("Timeouts: %s must be positive", s)
 		}
 	}
 	for _, s := range f.DisabledSteps {

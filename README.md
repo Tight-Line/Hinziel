@@ -1895,6 +1895,9 @@ ingress, so no per-environment DNS is needed.
   progress. Waiting on CI is better modelled as its own step outcome
   than as a long timeout (open question 13), which would leave timeouts for
   steps that are really stuck.
+  Done: `Factory.Timeouts`, first needed by BlankTracker, whose agent builds
+  a dev stack and runs the full test suite inside implement's 60 minutes.
+  The deploy log channel is still open.
 - **D6. Merge order.** MRs already link each other; with a shared library
   the order matters (`proto` before `orders`). The MR description states it,
   and the agent says so in its summary. Enforcing it stays open question 2.

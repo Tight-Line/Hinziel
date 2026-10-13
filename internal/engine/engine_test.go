@@ -325,6 +325,19 @@ func TestResumeAfterFailure(t *testing.T) {
 	}
 }
 
+func TestFactoryTimeoutReplacesTheDefault(t *testing.T) {
+	f := newFixture(t)
+	f.project.Settings.Timeouts = map[string]time.Duration{StepImplement: 50 * time.Millisecond}
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		<-ctx.Done() // an agent still waiting on its test suite
+		return nil, ctx.Err()
+	}
+	r, err := f.start()
+	if !errors.Is(err, context.DeadlineExceeded) || f.step(r, StepImplement).Status != stepFailed {
+		t.Fatalf("implement must time out after 50ms: %v, step %+v", err, f.step(r, StepImplement))
+	}
+}
+
 func TestRetryableErrorsAreRetried(t *testing.T) {
 	f := newFixture(t)
 	f.apiDep.DeployErrs = []error{&core.RetryableError{Err: errors.New("server busy")}}

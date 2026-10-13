@@ -67,6 +67,8 @@ type Settings struct {
 	AgentEnv map[string]string
 	Teardown Teardown
 	Sandbox  sandbox.Contents
+	// Timeouts replace stepTimeouts for the steps they name.
+	Timeouts map[string]time.Duration
 }
 
 // Step names, in pipeline order.
@@ -97,7 +99,7 @@ var Pipeline = []string{
 	StepPublish,
 }
 
-// Default step timeouts.
+// Default step timeouts; Settings.Timeouts replaces them per step.
 var stepTimeouts = map[string]time.Duration{
 	StepFetchTicket:          2 * time.Minute,
 	StepPrepareWorkspace:     15 * time.Minute,
