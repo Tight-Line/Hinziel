@@ -1256,16 +1256,68 @@ trigger's sender needs it (a webhook in GitLab's project settings, …).
 
 **On a container platform** the team already runs, such as a dev
 Kubernetes cluster, the factory is one long-lived container running
-`daemon`: exactly one replica, so a trigger isn't answered twice, its state
-directory (`HINZIEL_STATE_DIR`) on a persistent volume, and its variables
-from the platform's secrets. Without a [sandbox](#the-agents-sandbox) it
-needs no Docker socket and no privileges: the agent runs in the factory's
-container, and `--runs` stays at 1 unless the agent starts nothing. Hinziel
-doesn't build that image or manifest yet; the factory repository holds
-them, starting from `internal/hostinstall/factory.Dockerfile` and the
-static binary. A pod per run would need run state outside the pod (a
-shared `run.Store`) and a daemon that starts a pod per run instead of
-executing it; neither exists yet.
+`daemon`, and there's nothing to install: the platform does what
+`host install` does on a server.
+
+| `host install` does | On Kubernetes |
+|---|---|
+| builds the factory's image on the host | the team's CI builds it, `internal/hostinstall/factory.Dockerfile` plus the static binary, and pushes it to their registry |
+| copies the env file, and the files its variables name, to `/etc/hinziel/<factory>` | a Secret: the variables through `envFrom`, the files (SSH key, certificates) mounted as a volume, with the variables pointing at the mounted paths |
+| keeps state in `/var/lib/hinziel/<factory>` | a PersistentVolumeClaim mounted at `HINZIEL_STATE_DIR` |
+| restarts the container, logs with `docker logs` | the Deployment restarts the pod; `kubectl logs` |
+| runs `check` after starting | `kubectl exec deploy/<factory> -- <factory> check`, or an init container |
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: blanktracker}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}      # never two daemons at once, even during a rollout
+  selector: {matchLabels: {app: blanktracker}}
+  template:
+    metadata: {labels: {app: blanktracker}}
+    spec:
+      securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+      containers:
+        - name: factory
+          image: registry.example.com/blanktracker-factory:1.2.3
+          args: [daemon, --runs, "1"]
+          envFrom: [{secretRef: {name: blanktracker-env}}]
+          env:
+            - {name: HINZIEL_STATE_DIR, value: /state}
+            - {name: HOME, value: /state/home}
+            - {name: SSH_KEY_PATH, value: /secrets/id_ed25519} # a variable the factory reads, pointing at a mounted file
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: files, mountPath: /secrets, readOnly: true}
+      volumes:
+        - {name: state, persistentVolumeClaim: {claimName: blanktracker-state}}
+        - {name: files, secret: {secretName: blanktracker-files, defaultMode: 0400}}
+```
+
+The factory has no [sandbox](#the-agents-sandbox), so the pod needs no
+Docker socket, no privileges and no special RuntimeClass. The agent runs in
+the factory's container, so `--runs` stays at 1 unless the agent starts
+nothing. What differs from a server:
+
+- **`Recreate`, not a rolling update.** A rolling update briefly runs two
+  daemons, and both answer the same trigger.
+- **A rollout interrupts runs.** `host install` refuses to update while a
+  run executes; a rollout kills the pod, and the interrupted run waits to
+  be `resume`d, as after any daemon restart. Roll out between runs, or give
+  the pod a pre-stop hook that waits.
+- **Files by hand.** `host install` finds the files the env file names and
+  rewrites their paths; here the Secret's volume and the variables pointing
+  into it are written by hand.
+
+*Not yet tried*: Hinziel has never run in a pod, and builds neither the
+image nor the manifest. If clusters become a common target, the next step
+is a command such as `<factory> kube manifest --env-file F`, doing
+`host install`'s analysis but printing a Dockerfile, a Secret and a
+Deployment, so the team only builds, pushes and applies. A pod per run
+would need run state outside the pod (a shared `run.Store`) and a daemon
+that starts a pod per run instead of executing it; neither exists yet.
 
 **Routing.** HTTP triggers need a fixed public HTTPS URL: senders are
 configured with it once, and most refuse plain HTTP (Trello, Slack and
