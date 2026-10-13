@@ -40,9 +40,10 @@ type Factory struct {
 
 	Triggers  []Trigger
 	Notifiers []Notifier
-	// Sandbox says what's in the container the agent works in, one per run.
-	// The zero value is Hinziel's base image alone.
-	Sandbox Sandbox
+	// Sandbox puts the agent in a container of its own, one per run. Nil runs
+	// the agent on the factory's host, as the factory's user, with what the
+	// host has installed.
+	Sandbox *Sandbox
 
 	// Optional behaviour. Zero values give the defaults.
 
@@ -70,9 +71,9 @@ type Factory struct {
 }
 
 // Sandbox is what a factory puts in its agent's container, on top of
-// Hinziel's base image (Ubuntu with git, ssh, Node and Claude Code). The
-// host decides how the container runs: $HINZIEL_SANDBOX_RUNTIME, default
-// sysbox-runc. See the README, "The agent's sandbox".
+// Hinziel's base image (Ubuntu with git, ssh, Node and Claude Code). The zero
+// value is the base image alone. A sandbox needs Docker on the host; one with
+// Docker inside needs Sysbox too. See the README, "The agent's sandbox".
 type Sandbox struct {
 	// Docker gives the sandbox a Docker daemon of its own, with Compose, for
 	// projects whose checks or dev stack run in containers. It needs the

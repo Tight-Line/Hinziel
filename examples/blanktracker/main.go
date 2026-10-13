@@ -102,7 +102,7 @@ func main() {
 				},
 			})},
 		},
-		Sandbox:  hinziel.Sandbox{Docker: true},
+		Sandbox:  &hinziel.Sandbox{Docker: true},
 		Teardown: hinziel.Teardown{WhenDone: true},
 		Triggers: []hinziel.Trigger{{Name: "trello", Trigger: trellocomments.New(trellocomments.Options{
 			APIKey: hinziel.Env("TRELLO_API_KEY"), Token: hinziel.Env("TRELLO_TOKEN"), Board: "FbGOL7Wb",

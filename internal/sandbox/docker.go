@@ -16,10 +16,13 @@ import (
 	"time"
 )
 
-// DefaultRuntime is the Docker runtime sandboxes run with unless
-// $HINZIEL_SANDBOX_RUNTIME says otherwise: Sysbox, which lets a Docker
-// daemon run inside without --privileged.
-const DefaultRuntime = "sysbox-runc"
+// Runtimes sandboxes run with, unless $HINZIEL_SANDBOX_RUNTIME says
+// otherwise: Docker's own, or Sysbox for a sandbox with Docker inside, which
+// it lets run without --privileged.
+const (
+	DefaultRuntime = "runc"
+	SysboxRuntime  = "sysbox-runc"
+)
 
 // User is the user the agent runs as inside, with the factory's uid and gid,
 // so it owns the checkouts it's given.
@@ -36,7 +39,7 @@ var entrypoint string
 
 // Docker runs sandboxes as containers of the host's Docker.
 type Docker struct {
-	Runtime string   // "" = $HINZIEL_SANDBOX_RUNTIME, else DefaultRuntime
+	Runtime string   // "" = $HINZIEL_SANDBOX_RUNTIME, else by the contents
 	Command []string // nil = {"docker"}
 	// UID and GID are the agent's inside; 0 = this process's.
 	UID, GID int
@@ -44,12 +47,15 @@ type Docker struct {
 
 var _ Runner = (*Docker)(nil)
 
-func (d *Docker) runtime() string {
+func (d *Docker) runtime(c Contents) string {
 	if d.Runtime != "" {
 		return d.Runtime
 	}
 	if r := os.Getenv("HINZIEL_SANDBOX_RUNTIME"); r != "" {
 		return r
+	}
+	if c.Docker {
+		return SysboxRuntime
 	}
 	return DefaultRuntime
 }
@@ -149,9 +155,9 @@ func (d *Docker) Check(ctx context.Context, c Contents) error {
 }
 
 func (d *Docker) checkRuntime(ctx context.Context, c Contents) error {
-	rt := d.runtime()
-	if c.Docker && rt != DefaultRuntime {
-		return fmt.Errorf("the factory's sandbox has Docker inside, which needs the %s runtime (Sysbox: https://github.com/nestybox/sysbox), not %s; Hinziel never runs a sandbox --privileged", DefaultRuntime, rt)
+	rt := d.runtime(c)
+	if c.Docker && rt != SysboxRuntime {
+		return fmt.Errorf("the factory's sandbox has Docker inside, which needs the %s runtime (Sysbox: https://github.com/nestybox/sysbox), not %s; Hinziel never runs a sandbox --privileged", SysboxRuntime, rt)
 	}
 	runtimes, err := d.output(ctx, "info", "--format", "{{range $name, $_ := .Runtimes}}{{$name}} {{end}}")
 	if err != nil {
@@ -159,7 +165,7 @@ func (d *Docker) checkRuntime(ctx context.Context, c Contents) error {
 	}
 	if !slices.Contains(strings.Fields(runtimes), rt) {
 		hint := ""
-		if rt == DefaultRuntime {
+		if rt == SysboxRuntime {
 			hint = " (install Sysbox: https://github.com/nestybox/sysbox)"
 		}
 		return fmt.Errorf("Docker has no %s runtime%s; it has: %s", rt, hint, runtimes)
@@ -181,7 +187,7 @@ func (d *Docker) Start(ctx context.Context, spec Spec) (Instance, error) {
 		return nil, err
 	}
 	args := []string{"run", "--detach", "--init", "--name", spec.Name, "--hostname", spec.Name,
-		"--runtime", d.runtime(), "--label", "hinziel.sandbox=1"}
+		"--runtime", d.runtime(spec.Contents), "--label", "hinziel.sandbox=1"}
 	for _, k := range sortedKeys(spec.Labels) {
 		args = append(args, "--label", k+"="+spec.Labels[k])
 	}

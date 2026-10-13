@@ -105,12 +105,17 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    so decide each one on purpose: wire it in, or leave it out.
 5. **Choose components** from the README's package map. Name any that must
    be written, and say why none of the existing ones fits.
-6. **What goes in the agent's sandbox.** The agent always works in a
-   container of its own per run, removed when it's done, with everything it
-   started (README, "The agent's sandbox"). Hinziel's base image has git,
-   ssh, Node 22 and Claude Code. Find what the team's "before you finish"
-   checks need beyond that: a dev stack in Docker Compose means
-   `Sandbox{Docker: true}`; other tools (PHP, Python, a database client)
+6. **Does the agent need a sandbox, and what goes in it.** Each level asks
+   more of the host (README, "The agent's sandbox"): no sandbox needs
+   nothing, `&Sandbox{}` needs Docker, `&Sandbox{Docker: true}` needs
+   Sysbox too. Choose the least that's safe. Find what the team's "before
+   you finish" checks need. An agent that only edits, pushes and tests
+   against its environment needs no sandbox when the host serves one run
+   at a time or goes away after it (a pod per run); one that starts
+   anything, or shares a long-lived host with other runs, needs one, so
+   what it started dies with it. Hinziel's base image has git, ssh, Node
+   22 and Claude Code. A dev stack in Docker Compose means
+   `&Sandbox{Docker: true}`; other tools (PHP, Python, a database client)
    go in `Sandbox.Dockerfile` lines. Run the checks once yourself in a
    fresh checkout, timed: the first run in a sandbox builds the dev images
    from nothing, and BlankTracker's took 15 minutes. If it's long, say it
@@ -122,10 +127,11 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
 7. **Where the factory runs.** A sandbox with Docker inside needs Sysbox,
    so Linux, never `--privileged`: Docker Desktop on a Mac can't run it.
    For a team, recommend an always-on Linux host, prepared and updated by
-   `host install` (README, "Hosting a factory"); it installs Docker and
-   Sysbox itself. A laptop is fine for trying the factory when the sandbox
-   needs no Docker. Ask how many runs may execute at once (`--runs`): each
-   runs its own sandbox and dev stack, so size the host for that many.
+   `host install` (README, "Hosting a factory"); it installs Docker, and
+   Sysbox if needed, itself. A laptop is fine for trying the factory when
+   there's no sandbox or it needs no Docker. Ask how many runs may execute
+   at once (`--runs`): each runs its own sandbox and dev stack, so size the
+   host for that many.
 8. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it
@@ -169,8 +175,9 @@ review them as files.
 6. **Install it on its host** with `<factory> host install --env-file
    <file> --binary <linux build> <host>` (after the first run, or for it,
    if the sandbox needs Docker and this machine can't run Sysbox). Say
-   first what it installs (Docker, Sysbox, a `hinziel` user, a container)
-   and that installing Sysbox restarts Docker. Put the command in a small
+   first what it installs (Docker, Sysbox if the sandbox has Docker
+   inside, a `hinziel` user, a container) and that installing Sysbox
+   restarts Docker. Put the command in a small
    script in the factory repository (BlankTracker: `hinziel/runner/deploy.sh`)
    so an update is one command. Before updating a host with a running
    daemon, make sure no run is executing; `host install` refuses otherwise.

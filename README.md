@@ -105,12 +105,12 @@ no tickets or agents involved.
 - Optional approval gates for teams that don't want full autonomy.
 
 **Working assumption: the agent has everything it needs.** Every agent runs
-in a [sandbox](#the-agents-sandbox) on the factory's host (from M2) and
-works against a provisioned environment: it
+on the factory's host, in a [sandbox](#the-agents-sandbox) if the factory
+asks for one (from M2), and works against a provisioned environment: it
 deploys to it, reaches it over SSH or its tools, and tests it through its
 URLs. It has whatever access it needs: tools, credentials, the running app
 or org. A factory keeps its own credentials
-from the agent (design rule 7), and the sandbox keeps the factory's host
+from the agent (design rule 7), and a sandbox keeps the factory's host
 from it, but nothing limits what its work can reach: the environment, the
 forge, the APIs its `AgentEnv` opens. Limiting that makes every scenario much harder, so it's out of
 scope until we choose to revisit it.
@@ -357,25 +357,26 @@ factory option and not an interface change; a branch-name generator on
 - **Action.** Something a human must do for an environment that the factory
   can't, such as registering its URLs with a third party. It may hold back a
   later step until someone confirms it's done ([Human actions](#human-actions)).
-- **Host.** The always-on machine a factory is installed on with
-  [`host install`](#hosting-a-factory). It runs the factory's container,
-  where the daemon is, and a sandbox per run in progress. It needs only Docker
-  and Sysbox. It's optional: `run` works from a laptop without one.
+- **Host.** Where the factory runs: an always-on machine it's installed on
+  with [`host install`](#hosting-a-factory), a pod, or a laptop running
+  `run`. It runs the engine and each run's agent, directly or in a
+  sandbox. What it needs grows with the sandbox: nothing, Docker, or
+  Docker and Sysbox.
 - **Daemon.** The factory's binary running continuously
   (`<factory> daemon`, [The daemon](#the-daemon)). It runs the triggers,
   executes the runs they start, up to `--runs N` at once, and tears down
   environments by the factory's [`Teardown`](#teardown).
 - **Engine.** The part of Hinziel that executes a run's pipeline step by
   step, inside the daemon or a CLI command. It provisions the environment,
-  starts the sandbox, calls the agent, and owns the final commit, deploy and
-  MRs.
-- **Agent.** The component that does `implement`. It works in the sandbox:
-  edits and tests the checkouts there, commits and pushes its run branch with
-  `git`, and asks the engine to deploy the pushed commits
+  starts the sandbox if there is one, calls the agent, and owns the final
+  commit, deploy and MRs.
+- **Agent.** The component that does `implement`. It works on the host or
+  in the sandbox: edits and tests the checkouts, commits and pushes its run
+  branch with `git`, and asks the engine to deploy the pushed commits
   (`$HINZIEL_BIN deploy`, [Agent loop](#agent-loop)), then tests against
   the environment. It never creates environments, runs deployers itself or
   opens MRs.
-- **Sandbox.** A container per run in which the agent works
+- **Sandbox.** An optional container per run in which the agent works
   ([The agent's sandbox](#the-agents-sandbox)). It sees only its run's
   checkouts, and is removed with everything in it when `implement` ends.
 
@@ -710,7 +711,7 @@ These rules keep the interfaces from fighting each other:
    HOME, locale), the agent component's own credentials and what the
    factory declares in `AgentEnv`, nothing else. On Linux the factory also
    makes itself non-dumpable, so the agent can't read the factory's
-   environment from `/proc`. From M2 its [sandbox](#the-agents-sandbox) goes
+   environment from `/proc`. From M2 a [sandbox](#the-agents-sandbox) goes
    further: the agent sees only its run's checkouts, not the factory's files. The agent commits and pushes, but
    **only to its own run branch**, and it deploys only through the `deploy`
    command. The engine creates the branch, makes the final commit and push
@@ -747,11 +748,13 @@ These rules keep the interfaces from fighting each other:
   prompt) and says that it replaces any branching, deploying or
   confirmation rules in the project's instructions. Everything else in them,
   such as coding conventions and how to run the tests, still applies.
-- **What the agent leaves running.** The agent starts things on the
-  agent's [sandbox](#the-agents-sandbox) to test its work: a dev stack, a
-  database, a server. The sandbox is removed when `implement` ends, whether
-  it succeeded or not, and when a run is cancelled, and everything the agent
-  started goes with it, containers of the sandbox's own Docker included.
+- **What the agent leaves running.** The agent starts things to test its
+  work: a dev stack, a database, a server. In a
+  [sandbox](#the-agents-sandbox), they go with it: the sandbox is removed
+  when `implement` ends, whether it succeeded or not, and when a run is
+  cancelled, containers of the sandbox's own Docker included. Without one,
+  they outlive the run, so a factory whose agent starts anything has a
+  sandbox, or a host that goes away after the run.
 - **Several repos.** Each repo has its own forge, so one factory can span
   GitLab and GitHub. The agent sees all checkouts (`Task.Repos`). Each
   deployer is bound to one repo and gets that repo's `Source`.
@@ -980,7 +983,7 @@ func main() {
 
 		// The agent runs the repository's dev stack to test (`./toolkit check`),
 		// so its sandbox has a Docker daemon of its own.
-		Sandbox: hinziel.Sandbox{Docker: true},
+		Sandbox: &hinziel.Sandbox{Docker: true},
 
 		// The daemon destroys a card's preview once the card is done.
 		Teardown: hinziel.Teardown{WhenDone: true},
@@ -1326,9 +1329,10 @@ command at a time. It:
 - **executes runs in the background**, up to `--runs N` at once (default
   1; *planned for M2*, together with the [sandbox](#the-agents-sandbox),
   which is what makes parallel runs safe: each agent has its own container,
-  ports and Docker). Size N to the host: every run in progress holds a
-  sandbox, often with the app's whole dev stack inside, and an environment
-  in the cloud. Parallel agents also share the agent's subscription limits,
+  ports and Docker. Without one, parallel agents share the host, which is
+  safe only for agents that start nothing). Size N to the host: every run
+  in progress holds a sandbox, often with the app's whole dev stack inside,
+  and an environment in the cloud. Parallel agents also share the agent's subscription limits,
   if it has them. Two runs for the same ticket never run together; the
   engine refuses the second. A run that
   waits (on CI, say) is checked again in the background, so it doesn't hold
@@ -1389,25 +1393,32 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 same everywhere; only routing traffic to it differs, and only when a trigger
 receives HTTP.
 
-**The host needs Docker and Sysbox, nothing else.** The factory ships as a
-container image holding the binary and every tool its own steps need (git,
-ssh, Node for `deploy/cfworkers`). Each run's agent works in a
-[sandbox](#the-agents-sandbox) of its own, a second container, run with the
-[Sysbox](https://github.com/nestybox/sysbox) runtime. Ubuntu 22.04 and 24.04
-are the reference, but any Linux that Sysbox supports works.
+**The host needs Docker, and Sysbox for a sandbox with Docker inside.** The
+factory ships as a container image holding the binary, every tool its own
+steps need (git, ssh, Node for `deploy/cfworkers`) and what Hinziel's
+sandbox base image gives an agent (Claude Code, …). Without a
+[sandbox](#the-agents-sandbox), each run's agent works in the factory's
+container, so its project needs nothing more than that image; one that
+does, such as PHP or a dev stack, asks for a sandbox. With one, each run's
+agent works in a second container, run with the
+[Sysbox](https://github.com/nestybox/sysbox) runtime if it has Docker
+inside. Ubuntu 22.04 and 24.04 are the reference, but any Linux that Docker
+(and Sysbox) supports works.
 
-The factory's container gets the host's Docker socket, because it starts the
-sandboxes. That makes the factory root on its host, and it already holds every
-credential the factory has, so a host shared with other work must trust it.
-The agent never gets the socket.
+With sandboxes, the factory's container gets the host's Docker socket,
+because it starts them. That makes the factory root on its host, and it
+already holds every credential the factory has, so a host shared with other
+work must trust it. The agent never gets the socket: without sandboxes, the
+factory's container doesn't have it either, and `host install` refuses a
+binary whose factories mix the two.
 
 **`host install --env-file F <[user@]host[:port]>`**, run from a machine
 that has the factory binary and its env file, over SSH as root or a user
 with passwordless sudo (`internal/hostinstall`):
 
-1. check for Docker and Sysbox, and install what's missing (Docker's
-   official script, Sysbox's package on Ubuntu and Debian). Installing
-   Sysbox restarts Docker, which stops the containers already running on the
+1. check for Docker, and Sysbox if a sandbox has Docker inside, and install
+   what's missing (Docker's official script, Sysbox's package on Ubuntu and
+   Debian). Installing Sysbox restarts Docker, which stops the containers already running on the
    host, so with containers running it needs `--force`;
 2. create a non-root `hinziel` user;
 3. copy the env file to `/etc/hinziel/<factory>/env` (root only) and every
@@ -1420,10 +1431,10 @@ with passwordless sudo (`internal/hostinstall`):
 5. build the factory's image on the host from a Dockerfile Hinziel embeds:
    the tools of the factory's own steps, not the binary, which is mounted.
    Building on the host needs no registry and no Docker on the machine you
-   install from. The first `check` builds the sandbox's image the same way;
+   install from. The first `check` builds the sandbox's image, if any, the same way;
 6. start `daemon --runs N` in the factory's container, `hinziel-<factory>`,
    with a restart policy, as the `hinziel` user, with the host's Docker
-   socket, the config read-only and `/var/lib/hinziel/<factory>` (binary,
+   socket if there are sandboxes, the config read-only and `/var/lib/hinziel/<factory>` (binary,
    home, state). Both directories are mounted at the same paths inside as on
    the host, because the sandboxes mount from them and the host's Docker
    resolves host paths;
@@ -1466,42 +1477,50 @@ A factory whose triggers only poll, such as BlankTracker's
 
 ### The agent's sandbox
 
-*Planned for M2.* The agent always works in a sandbox: a container of its
-own per run. Before the sandbox, the agent ran on the factory's host, as the
-factory's user, and BlankTracker showed what that costs (§11, question 5).
-Its agent started the app's dev stack to run `./toolkit check`. The stack's
-published ports were open to the internet, because Docker's port publishing
-bypasses ufw. Two such runs at once would have collided on the same ports and
-the same Compose project name. And every file the factory's user can read,
-the env file included unless it's root-only, was readable to the agent.
+*Planned for M2.* A factory chooses how much isolation its agent gets, and
+each level asks more of the host:
 
-The engine starts the sandbox before `implement` and removes it, with
-everything started in it, when `implement` ends, whether it succeeded or not,
-and when the run is cancelled. Responsibilities split two ways:
+| `Factory.Sandbox` | The agent runs | The host needs |
+|---|---|---|
+| nil (the default) | on the factory's host, as the factory's user | only the agent's tools: Claude Code and what the project needs |
+| `&hinziel.Sandbox{}` | in a container of its own per run, Hinziel's base image plus the factory's `Dockerfile` lines | Docker |
+| `&hinziel.Sandbox{Docker: true}` | the same, with a Docker daemon of its own inside, for the app's dev stack | Docker and [Sysbox](https://github.com/nestybox/sysbox) |
 
-**The factory says what's inside.** `Factory.Sandbox` describes the
-container's contents. Hinziel's base image has what every agent needs: git,
-ssh, Node and Claude Code. The factory adds what its project needs:
+**Without a sandbox** the host is the sandbox. That fits a host that serves
+one run and goes away, such as a Kubernetes pod per run, and a laptop
+trying out a factory whose agent only edits, pushes and tests against its
+environment. The agent's process still gets only `Task.Env` (design rule 7),
+but it sees every file the factory's user can read, and what it starts
+outlives `implement`. BlankTracker showed what that costs on a long-lived
+host (§11, question 5). Its agent started the app's dev stack to run
+`./toolkit check`. The stack's published ports were open to the internet,
+because Docker's port publishing bypasses ufw. Two such runs at once would
+have collided on the same ports and the same Compose project name. And every
+file the factory's user can read, the env file included unless it's
+root-only, was readable to the agent. A factory whose agent starts anything,
+or that runs several runs at once on a shared host, wants a sandbox.
+
+**With a sandbox** the engine starts it before `implement` and removes it,
+with everything started in it, when `implement` ends, whether it succeeded or
+not, and when the run is cancelled. Hinziel's base image has what every
+agent needs: git, ssh, Node and Claude Code. The factory adds what its
+project needs:
 
 ```go
-Sandbox: hinziel.Sandbox{
+Sandbox: &hinziel.Sandbox{
 	Docker: true, // a Docker daemon of its own, with Compose: the app's dev stack runs inside
 	Dockerfile: `RUN apt-get install -y --no-install-recommends php-cli`, // appended to the base image
 },
 ```
 
-The zero value is the base image alone, which is enough for an agent that
-only edits, pushes and tests against its environment.
-
-**The host says how it runs.** The runtime is a property of the host, not of
-the factory: `HINZIEL_SANDBOX_RUNTIME`, default `sysbox-runc`.
-[Sysbox](https://github.com/nestybox/sysbox) is what Hinziel requires. It
-maps root in the container to an unprivileged user on the host and still lets
-a Docker daemon run inside, so `Docker: true` works without `--privileged`.
-Plain `runc` works too, for factories that don't set `Docker`; `check`
-refuses `Docker: true` without Sysbox, and Hinziel never runs a sandbox
-`--privileged`. So a factory that needs Docker inside runs only on a Linux
-host with Sysbox, the factory's own laptop included.
+The runtime follows from the contents: Docker's default `runc`, or
+`sysbox-runc` with Docker inside. Sysbox maps root in the container to an
+unprivileged user on the host and still lets a Docker daemon run inside, so
+`Docker: true` works without `--privileged`; Hinziel never runs a sandbox
+`--privileged`, and `check` refuses `Docker: true` without Sysbox. So a
+factory that needs Docker inside runs only on a Linux host with Sysbox, the
+factory's own laptop included. A host may choose another runtime with
+`HINZIEL_SANDBOX_RUNTIME`, such as gVisor's `runsc`.
 
 What's mounted, always at the same path as outside so the paths in the prompt
 stay valid: the run's checkouts, the agent's socket, the factory binary
@@ -1511,11 +1530,12 @@ file, not its other runs, not the host's Docker. What the agent publishes
 from its own Docker stays inside its container, so nothing reaches the host's
 network and concurrent runs don't see each other. The agent's environment is
 still `Task.Env`. An agent component runs its process through the task's
-sandbox (`Task.Sandbox`, which wraps an `exec.Cmd` to run inside);
-`agent/claudecode` does.
+sandbox (`Task.Sandbox`, which wraps an `exec.Cmd` to run inside, and is nil
+without one); `agent/claudecode` does.
 
-`check` builds the sandbox's image and verifies the runtime. The image is
-cached by its contents, so a run doesn't rebuild it.
+`check` builds the sandbox's image and verifies the runtime; without a
+sandbox, the agent's check verifies that its tools are installed on the
+host. The image is cached by its contents, so a run doesn't rebuild it.
 
 Removing the sandbox removes whatever the agent left running, so a factory
 has nothing to clean up after the agent. (Before the sandbox, factories
@@ -1550,7 +1570,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
+| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1575,9 +1595,10 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
    Who allocates ports (proposed: the provisioner, stored in `Environment.State`)?
 4. **Re-trigger semantics** (resolved by [Iteration](#iteration)). A new run
    for a ticket continues the existing branch, environment and MRs.
-5. **Where the agent process runs** (resolved for M2: a
-   [sandbox](#the-agents-sandbox), a container per run, for every agent;
-   the factory says what's inside, the host's runtime how it runs).
+5. **Where the agent process runs** (resolved for M2: on the factory's
+   host, or in a [sandbox](#the-agents-sandbox), a container per run, when
+   the factory asks for one; it says what's inside, and the contents decide
+   the runtime).
    BlankTracker showed why it matters. Its instructions ask for
    `./toolkit check`, which only runs in the repository's local dev stack,
    so the agent started that stack on the host and left it running after

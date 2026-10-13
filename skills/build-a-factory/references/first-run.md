@@ -16,10 +16,11 @@ for a few rounds of fix and resume.
 - **Say what the run will create**: a host (with its hourly and monthly
   price), DNS records, a preview deployment, a branch and an MR, and
   comments on the ticket, which the team will see. Get a yes.
-- **What the agent needs**: `check` passes its `sandbox` line (the runtime
-  is there and the sandbox's image builds) and its `agent` line (a Claude
-  token in the env file: the agent runs in its sandbox, where nobody is
-  logged in).
+- **What the agent needs**: `check` passes its `sandbox` line, if it has
+  a sandbox (the runtime is there and the sandbox's image builds), and its
+  `agent` line (a Claude token in the env file, which the agent needs even
+  on a logged-in laptop; without a sandbox, also Claude Code installed on
+  the host).
 
 ## Starting and watching
 
@@ -31,8 +32,8 @@ finishes. During `implement`, the run's log has the agent's own narration
 (`runs/<id>/log.txt` in the state directory: `~/.local/state/hinziel` on a
 laptop, `/var/lib/hinziel/<factory>/state` on a host from `host
 install`); summarise it when asked, and point out anything the person
-should know, such as data sources the agent reached. The agent's sandbox
-is the container `hinziel-<factory>-<run id>` while it works. Its first
+should know, such as data sources the agent reached. The agent's sandbox,
+if it has one, is the container `hinziel-<factory>-<run id>` while it works. Its first
 check may take long while it builds the dev images; that's expected, not
 a hang.
 

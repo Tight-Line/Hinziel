@@ -153,14 +153,27 @@ func TestFailures(t *testing.T) {
 }
 
 func TestCheck(t *testing.T) {
+	sandboxed := agent.WithSandbox(context.Background(), true)
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	if err := New(Options{}).Check(context.Background()); err == nil || !strings.Contains(err.Error(), "claude setup-token") {
+	if err := New(Options{}).Check(sandboxed); err == nil || !strings.Contains(err.Error(), "claude setup-token") {
 		t.Errorf("without a token, want a hint at claude setup-token, got %v", err)
 	}
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "token")
-	if err := New(Options{}).Check(context.Background()); err != nil {
+	if err := New(Options{}).Check(sandboxed); err != nil {
 		t.Errorf("with a token: %v", err)
+	}
+}
+
+// Without a sandbox, claude runs on the factory's host, so it must be there.
+func TestCheckWithoutSandbox(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "token")
+	ctx := agent.WithSandbox(context.Background(), false)
+	if err := New(Options{Command: []string{"hinziel-no-such-claude"}}).Check(ctx); err == nil || !strings.Contains(err.Error(), "hinziel-no-such-claude") {
+		t.Errorf("want the missing command named, got %v", err)
+	}
+	if err := New(Options{Command: []string{"sh"}}).Check(ctx); err != nil {
+		t.Errorf("with the command installed: %v", err)
 	}
 }
 

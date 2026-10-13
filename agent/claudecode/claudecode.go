@@ -1,5 +1,6 @@
 // Package claudecode is an agent.Agent that runs Claude Code
-// (https://claude.com/claude-code) headless in the run's sandbox.
+// (https://claude.com/claude-code) headless, in the run's sandbox if the
+// factory has one.
 //
 // The engine's task becomes the prompt. Hinziel's own rules (work unattended,
 // branch, push and deploy only as the task says, report back in a file) go
@@ -11,8 +12,9 @@
 // question there becomes core.NeedsInputError. The session is rendered into
 // a readable transcript in the run log.
 //
-// Claude Code is in Hinziel's sandbox image. It needs a token, because a
-// login on the factory's host doesn't reach the sandbox. It runs with
+// Claude Code is in Hinziel's sandbox image; without a sandbox it must be
+// installed on the factory's host. It needs a token, because a login on the
+// factory's host doesn't reach the sandbox. It runs with
 // permission prompts off (bypassPermissions), as Hinziel's agents have full
 // access by design.
 //
@@ -211,13 +213,18 @@ func (a *Agent) systemPrompt() string {
 	return systemPrompt
 }
 
-// Check verifies that Claude Code has a token. Claude Code itself is in the
-// sandbox's image, which the factory's sandbox check builds.
+// Check verifies that Claude Code has a token, and without a sandbox that
+// it's installed. In a sandbox it's in the image, which the factory's
+// sandbox check builds.
 func (a *Agent) Check(ctx context.Context) error {
+	var errs []error
 	if os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") == "" && os.Getenv("ANTHROPIC_API_KEY") == "" {
-		return errors.New("neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set: run `claude setup-token` once and set CLAUDE_CODE_OAUTH_TOKEN, or create an API key at https://console.anthropic.com")
+		errs = append(errs, errors.New("neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is set: run `claude setup-token` once and set CLAUDE_CODE_OAUTH_TOKEN, or create an API key at https://console.anthropic.com"))
 	}
-	return nil
+	if !agent.InSandbox(ctx) {
+		errs = append(errs, core.NeedTools(a.command()[0]))
+	}
+	return errors.Join(errs...)
 }
 
 // result is the final event of a stream-json session.

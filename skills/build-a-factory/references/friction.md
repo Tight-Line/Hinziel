@@ -116,7 +116,7 @@ and what BlankTracker showed.
   and got a stack next to the developer's. On the hosted runner, the stack
   it left behind once published Postgres, Redis and nginx to the internet,
   because Docker's ports bypass ufw. The sandbox fixed both:
-  `Sandbox{Docker: true}` gives each run a Docker daemon of its own
+  `&Sandbox{Docker: true}` gives each run a Docker daemon of its own
   (Sysbox), and the stack dies with the sandbox. What's left is time: the
   first check in an empty sandbox built the dev image for 15 minutes,
   longer than one command of the agent may take, so the factory's
@@ -145,11 +145,12 @@ and what BlankTracker showed.
   the factory's host.
 - **Since then:** the agent no longer inherits the factory's environment.
   It gets a minimal base, its own credentials and the factory's
-  `AgentEnv`, in a sandbox that holds only its run's checkouts. Decide with
-  the team what goes in `AgentEnv` (a read-only database URL, say). The
-  factory's own secrets stay outside the sandbox: on a host, `host install`
-  puts them in `/etc/hinziel/<factory>`, readable by root and the factory
-  alone.
+  `AgentEnv`, and with a sandbox sees only its run's checkouts. Decide
+  with the team what goes in `AgentEnv` (a read-only database URL, say).
+  The factory's own secrets stay outside the sandbox: on a host, `host
+  install` puts them in `/etc/hinziel/<factory>`, readable by root and the
+  factory alone. Without a sandbox, the agent can read every file the
+  factory's user can, the files its variables name included.
 
 ## Plan, permission and policy limits
 

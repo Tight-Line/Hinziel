@@ -51,6 +51,22 @@ func TestDockerfile(t *testing.T) {
 	}
 }
 
+// Sysbox only when there's Docker inside; the host may override either.
+func TestRuntime(t *testing.T) {
+	t.Setenv("HINZIEL_SANDBOX_RUNTIME", "")
+	d := &Docker{}
+	if rt := d.runtime(Contents{}); rt != "runc" {
+		t.Errorf("without Docker inside: %s", rt)
+	}
+	if rt := d.runtime(Contents{Docker: true}); rt != "sysbox-runc" {
+		t.Errorf("with Docker inside: %s", rt)
+	}
+	t.Setenv("HINZIEL_SANDBOX_RUNTIME", "runsc")
+	if rt := d.runtime(Contents{}); rt != "runsc" {
+		t.Errorf("the host's choice: %s", rt)
+	}
+}
+
 func TestDockerNeedsSysbox(t *testing.T) {
 	d := &Docker{Runtime: "runc"}
 	err := d.checkRuntime(context.Background(), Contents{Docker: true})
@@ -71,7 +87,7 @@ func TestIntegration(t *testing.T) {
 	if d.Runtime == "" {
 		d.Runtime = "runc"
 	}
-	contents := Contents{Docker: d.Runtime == DefaultRuntime, Dockerfile: "RUN echo factory > /etc/factory-line"}
+	contents := Contents{Docker: d.Runtime == SysboxRuntime, Dockerfile: "RUN echo factory > /etc/factory-line"}
 	work := t.TempDir()
 	os.WriteFile(filepath.Join(work, "README.md"), []byte("hello\n"), 0o644)
 	secret := t.TempDir()

@@ -11,7 +11,7 @@ recorded with the reason and who made them.
 | | Factory lives in <dedicated repo / `hinziel/` in the monorepo> | | |
 | | Previews copy <environment> | | |
 | | Runs start from <CLI / comment trigger / …> | | |
-| | The agent's sandbox has <Docker / tools> | | |
+| | The agent's sandbox: <none / base image / Docker, tools> | | |
 | | The factory runs on <host>, <N> runs at once | | |
 | | Commits: <who branches, commits and pushes> | | |
 

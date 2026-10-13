@@ -1,6 +1,7 @@
 // Package hostinstall installs a factory on a server, or updates it: `host
 // install`. The host needs only SSH and root (or passwordless sudo); the
-// rest it gets here: Docker, Sysbox, a hinziel user, the factory's
+// rest it gets here: Docker, Sysbox if a sandbox has Docker inside, a hinziel
+// user, the factory's
 // configuration and binary, and the factory's container running `daemon`.
 // See the README, "Hosting a factory".
 package hostinstall
@@ -42,8 +43,13 @@ type Options struct {
 	Required []string
 	Binary   string // the factory binary for the host: linux, statically linked
 	Runs     int    // daemon --runs; 0 = 1
-	Force    bool   // restart Docker for Sysbox, and interrupt executing runs
-	Out      io.Writer
+	// Sandbox gives the factory's container the host's Docker socket, to
+	// start the agents' sandboxes. Without it, the agents run in the
+	// factory's container.
+	Sandbox bool
+	Sysbox  bool // a sandbox has Docker inside, which needs Sysbox
+	Force   bool // restart Docker for Sysbox, and interrupt executing runs
+	Out     io.Writer
 }
 
 // Paths on the host.
@@ -89,8 +95,12 @@ func Install(ctx context.Context, o Options) error {
 		return err
 	}
 
-	say("preparing %s: Docker, Sysbox, the hinziel user, /etc/hinziel/%s and /var/lib/hinziel/%s", o.Host.Address, o.Factory, o.Factory)
-	script := fmt.Sprintf("FACTORY=%s SYSBOX_VERSION=%s FORCE=%d\n%s", remote.Quote(o.Factory), SysboxVersion, b2i(o.Force), prepareScript)
+	tools := "Docker"
+	if o.Sysbox {
+		tools += ", Sysbox"
+	}
+	say("preparing %s: %s, the hinziel user, /etc/hinziel/%s and /var/lib/hinziel/%s", o.Host.Address, tools, o.Factory, o.Factory)
+	script := fmt.Sprintf("FACTORY=%s SYSBOX=%d SYSBOX_VERSION=%s FORCE=%d\n%s", remote.Quote(o.Factory), b2i(o.Sysbox), SysboxVersion, b2i(o.Force), prepareScript)
 	ids, err := h.output(ctx, script)
 	if err != nil {
 		return err
@@ -145,28 +155,39 @@ func Install(ctx context.Context, o Options) error {
 
 	say("starting the factory's container %s: daemon --runs %d", Container(o.Factory), o.Runs)
 	cfg, data := configDir(o.Factory), dataDir(o.Factory)
+	run := []string{
+		"docker run --detach --init --restart unless-stopped",
+		"--name", Container(o.Factory), "--label", "hinziel.factory=" + remote.Quote(o.Factory),
+		"--user", uid + ":" + gid,
+		"--env-file", cfg + "/env",
+		"--env", "HOME=" + data + "/home", "--env", "HINZIEL_STATE_DIR=" + data + "/state",
+	}
+	if o.Sandbox {
+		// Only with sandboxes: an agent in this container would be root on
+		// the host with the socket.
+		run = append(run, "--group-add", dockerGID, "--volume", "/var/run/docker.sock:/var/run/docker.sock")
+	}
+	run = append(run,
+		// The same paths inside as on the host: the sandboxes are
+		// started by the host's Docker, which mounts host paths.
+		"--mount", "type=bind,source="+cfg+",target="+cfg+",readonly",
+		"--mount", "type=bind,source="+data+",target="+data,
+		image, binPath(o.Factory), "daemon", "--runs", strconv.Itoa(o.Runs),
+	)
 	start := strings.Join([]string{
 		"set -e",
 		"docker rm --force " + Container(o.Factory) + " >/dev/null 2>&1 || true",
-		strings.Join([]string{
-			"docker run --detach --init --restart unless-stopped",
-			"--name", Container(o.Factory), "--label", "hinziel.factory=" + remote.Quote(o.Factory),
-			"--user", uid + ":" + gid, "--group-add", dockerGID,
-			"--env-file", cfg + "/env",
-			"--env", "HOME=" + data + "/home", "--env", "HINZIEL_STATE_DIR=" + data + "/state",
-			"--volume", "/var/run/docker.sock:/var/run/docker.sock",
-			// The same paths inside as on the host: the sandboxes are
-			// started by the host's Docker, which mounts host paths.
-			"--mount", "type=bind,source=" + cfg + ",target=" + cfg + ",readonly",
-			"--mount", "type=bind,source=" + data + ",target=" + data,
-			image, binPath(o.Factory), "daemon", "--runs", strconv.Itoa(o.Runs),
-		}, " ") + " >/dev/null",
+		strings.Join(run, " ") + " >/dev/null",
 	}, "\n")
 	if err := h.run(ctx, start, nil, nil); err != nil {
 		return err
 	}
 
-	say("checking the factory on the host (the first check builds the agent's sandbox image, which takes a few minutes)")
+	if o.Sandbox {
+		say("checking the factory on the host (the first check builds the agent's sandbox image, which takes a few minutes)")
+	} else {
+		say("checking the factory on the host")
+	}
 	var out bytes.Buffer
 	err = h.run(ctx, "docker exec "+Container(o.Factory)+" "+binPath(o.Factory)+" check", nil, io.MultiWriter(o.Out, &out))
 	if err != nil {

@@ -33,9 +33,10 @@ type Task struct {
 	Prompt      string    // built by the engine from the ticket and the factory's Instructions
 	Env         []string  // process environment: whatever access the agent needs, plus HINZIEL_BIN and HINZIEL_RUN_ID for `$HINZIEL_BIN deploy`/`retrieve`
 	Log         io.Writer // full agent transcript goes here (run log)
-	// Sandbox is the run's container, which the factory describes. An agent
-	// component MUST start every process of the agent through it; it is nil
-	// only in tests. Paths in the task are the same inside as outside.
+	// Sandbox is the run's container, if the factory has one. An agent
+	// component MUST start every process of the agent through it. Nil means
+	// the agent's processes run on the factory's host, as the factory's user.
+	// Paths in the task are the same inside as outside.
 	Sandbox Sandbox
 	// TempDir is for the agent component's own files, such as the file the
 	// agent reports its outcome in. The agent's processes can reach it.
@@ -50,6 +51,22 @@ type Sandbox interface {
 	// the program need not exist on the host. It starts the sandbox if it
 	// isn't running yet.
 	Wrap(ctx context.Context, cmd *exec.Cmd) error
+}
+
+type sandboxedKey struct{}
+
+// WithSandbox records in ctx, for an agent component's Check, whether the
+// factory's agent runs in a sandbox.
+func WithSandbox(ctx context.Context, sandboxed bool) context.Context {
+	return context.WithValue(ctx, sandboxedKey{}, sandboxed)
+}
+
+// InSandbox reports whether ctx is a Check for an agent that runs in a
+// sandbox. If not, the programs the agent starts must be on the factory's
+// host, and Check should say if they aren't (core.NeedTools).
+func InSandbox(ctx context.Context) bool {
+	b, _ := ctx.Value(sandboxedKey{}).(bool)
+	return b
 }
 
 type Checkout struct {

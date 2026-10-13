@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/Tight-Line/hinziel/agent"
 	"github.com/Tight-Line/hinziel/core"
 	"github.com/Tight-Line/hinziel/internal/engine"
 	"github.com/Tight-Line/hinziel/internal/envcheck"
@@ -229,7 +230,7 @@ func check(ctx context.Context, out io.Writer, factories []Factory, args []strin
 			if !ok || !selected(selectors, c.label) {
 				continue
 			}
-			if err := ch.Check(ctx); err != nil {
+			if err := ch.Check(agent.WithSandbox(ctx, f.Sandbox != nil)); err != nil {
 				failed++
 				fmt.Fprintf(out, "FAIL  %s: %s: %v\n", f.Name, c.label, err)
 				continue
@@ -285,7 +286,10 @@ type component struct {
 }
 
 func components(f *Factory) []component {
-	cs := []component{{"tracker", f.Tracker}, {"agent", f.Agent}, {"sandbox", sandboxCheck{f.sandboxContents()}}}
+	cs := []component{{"tracker", f.Tracker}, {"agent", f.Agent}}
+	if f.Sandbox != nil {
+		cs = append(cs, component{"sandbox", sandboxCheck{f.sandboxContents()}})
+	}
 	for _, r := range f.Repos {
 		cs = append(cs, component{"repo " + r.Name, r.Forge})
 	}

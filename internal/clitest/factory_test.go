@@ -273,7 +273,7 @@ func TestRunCheckSelectsComponents(t *testing.T) {
 
 func TestRunCheckRejectsUnknownSelector(t *testing.T) {
 	err := hinziel.Run(context.Background(), []string{"check", "deployer nova"}, &bytes.Buffer{}, checkFactory())
-	if err == nil || !strings.Contains(err.Error(), `nothing to check called "deployer nova"; choose from: hinziel, tracker, sandbox, deployer api, deployer web`) {
+	if err == nil || !strings.Contains(err.Error(), `nothing to check called "deployer nova"; choose from: hinziel, tracker, deployer api, deployer web`) {
 		t.Fatalf("got %v", err)
 	}
 	err = hinziel.Run(context.Background(), []string{"check", "--factory", "other"}, &bytes.Buffer{}, checkFactory())
@@ -321,5 +321,17 @@ func TestValidateTeardown(t *testing.T) {
 	f.Teardown = hinziel.Teardown{After: time.Hour}
 	if err := validate(f); err == nil || !strings.Contains(err.Error(), "Teardown needs an Environment") {
 		t.Errorf("got %v", err)
+	}
+}
+
+// Factories in one binary share the factory's container on the host, so
+// either all of them sandbox their agents or none does.
+func TestHostInstallRejectsMixedSandboxes(t *testing.T) {
+	a, b := validFactory(), validFactory()
+	b.Name = "other"
+	b.Sandbox = &hinziel.Sandbox{}
+	err := hinziel.Run(context.Background(), []string{"host", "install", "--env-file", "env", "host.example"}, &bytes.Buffer{}, a, b)
+	if err == nil || !strings.Contains(err.Error(), "give every one a Sandbox, or none") {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -52,6 +52,18 @@ func host(ctx context.Context, out io.Writer, factories []Factory, args []string
 	if len(factories) > 1 {
 		name = filepath.Base(*binary)
 	}
+	sandboxes, sysbox := 0, false
+	for _, f := range factories {
+		if f.Sandbox != nil {
+			sandboxes++
+			sysbox = sysbox || f.Sandbox.Docker
+		}
+	}
+	if sandboxes > 0 && sandboxes < len(factories) {
+		// They share one container, which has the host's Docker socket for
+		// the sandboxes: an agent running there would be root on the host.
+		return errors.New("host install: some of the binary's factories have a sandbox and some don't; give every one a Sandbox, or none")
+	}
 	return hostinstall.Install(ctx, hostinstall.Options{
 		Host:     h,
 		Factory:  name,
@@ -59,6 +71,8 @@ func host(ctx context.Context, out io.Writer, factories []Factory, args []string
 		Required: envcheck.Read(),
 		Binary:   *binary,
 		Runs:     *runs,
+		Sandbox:  sandboxes > 0,
+		Sysbox:   sysbox,
 		Force:    *force,
 		Out:      out,
 	})

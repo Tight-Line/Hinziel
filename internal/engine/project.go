@@ -28,7 +28,7 @@ type Project struct {
 	Endpoints   []Endpoint
 	Deployers   []Deployer
 	Notifiers   []Notifier
-	Sandbox     sandbox.Runner // starts the agent's sandbox; nil = none (tests)
+	Sandbox     sandbox.Runner // starts the agent's sandbox; nil = none, the agent runs on the host
 	Settings    Settings
 }
 

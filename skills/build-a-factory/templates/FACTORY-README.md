@@ -33,7 +33,7 @@ go build -o <factory> .
 - Runs and their logs: `/var/lib/hinziel/<factory>/state/runs/`
 - Configuration: `/etc/hinziel/<factory>/env` (root only)
 
-The agent works in a sandbox per run: <its contents: Docker, extra tools>.
+The agent works <in the factory's container | in a sandbox per run: its contents: Docker, extra tools>.
 
 ## What a run creates
 

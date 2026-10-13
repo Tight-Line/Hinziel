@@ -10,6 +10,9 @@ import (
 var sandboxRunner = &sandbox.Docker{}
 
 func (f *Factory) sandboxContents() sandbox.Contents {
+	if f.Sandbox == nil {
+		return sandbox.Contents{}
+	}
 	return sandbox.Contents{Docker: f.Sandbox.Docker, Dockerfile: f.Sandbox.Dockerfile}
 }
 
@@ -21,7 +24,6 @@ func (f *Factory) project() *engine.Project {
 		Agent:       f.Agent,
 		Provisioner: f.Environment,
 		DNS:         f.DNS,
-		Sandbox:     sandboxRunner,
 		Settings: engine.Settings{
 			Instructions:        f.Instructions,
 			BranchName:          f.BranchName,
@@ -34,6 +36,9 @@ func (f *Factory) project() *engine.Project {
 			Teardown:            engine.Teardown{WhenDone: f.Teardown.WhenDone, After: f.Teardown.After},
 			Sandbox:             f.sandboxContents(),
 		},
+	}
+	if f.Sandbox != nil {
+		p.Sandbox = sandboxRunner
 	}
 	for _, r := range f.Repos {
 		p.Repos = append(p.Repos, engine.Repo{Name: r.Name, Forge: r.Forge, TargetBranch: r.TargetBranch})
