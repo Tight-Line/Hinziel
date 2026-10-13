@@ -1499,7 +1499,8 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 8. **Shared sandboxes for scenario C.** Some work (integrations, realistic
    data) needs a full or partial-copy sandbox instead of a scratch org. That
    would be a pool of existing environments that runs lease, not create, which
-   is closer to scenario B.
+   is closer to scenario B. [Scenario E](#scenario-e-in-more-detail) is the
+   pool of one, and sketches the lease.
 9. **A YAML front end.** Once there are enough ready-made components, a
     `hinziel` binary could build a factory from YAML for teams that only use
     those. It would be a thin layer over the library, not a second
@@ -1569,17 +1570,17 @@ certificate for each environment from Cloudflare's Origin CA API:
 
 ## 11. Reference scenarios
 
-| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** | **D: Microservices on Kubernetes** |
-|---|---|---|---|---|
-| Repos | one (monorepo) | one | one | eight, plus a dedicated factory repo |
-| Tracker | Trello | Jira | Jira | Jira |
-| Forge | GitLab | Forgejo (self-hosted) | GitHub | GitHub |
-| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` |
-| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
-| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
-| Human steps | — (Google login goes through a shared OAuth relay) | — | — | — |
-| Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook |
-| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
+| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** | **D: Microservices on Kubernetes** | **E: One shared staging** |
+|---|---|---|---|---|---|
+| Repos | one (monorepo) | one | one | eight, plus a dedicated factory repo | one or several |
+| Tracker | Trello | Jira | Jira | Jira | Jira |
+| Forge | GitLab | Forgejo (self-hosted) | GitHub | GitHub | GitLab |
+| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` | Claude Code |
+| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate | The team's one existing staging environment: nothing created, nothing destroyed |
+| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image | the team's own staging deploy (a script or CI job), with the run branch |
+| Human steps | — (Google login goes through a shared OAuth relay) | — | — | — | — |
+| Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook | CLI |
+| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR | Jira comment + chat, saying which ticket staging now runs |
 
 Any design decision that makes one column awkward is wrong.
 
@@ -1770,6 +1771,63 @@ ApplicationSet. A platform that only creates previews from open MRs (an
 Argo CD pull-request generator) would also need draft MRs opened early, a
 factory option and not an interface change; a branch-name generator on
 `hinziel/*` avoids that.
+
+### Scenario E in more detail
+
+*A design exercise: no team has run this yet. Many teams can't bring up an
+environment of their own per ticket, and test every change on the one
+staging environment they have.*
+
+**Why there's only one.** The system depends on something that can't be
+copied: a licensed product with one test instance, an appliance or a
+mainframe, a partner's integration that allows a single host, or data too
+large or too sensitive to copy. Staging exists, it works, and the team
+deploys branches to it by hand today.
+
+**How it maps.** The factory doesn't provision anything; it deploys to
+staging:
+
+| Piece | Implementation |
+|---|---|
+| Environment | a provisioner whose `Ensure` returns staging as it is: its fixed URLs as endpoints and its hosts, with whatever access the deployers and the agent need. `Destroy` does nothing. A generic `env/static`, configured with the URLs and hosts, would cover most teams (not built) |
+| DNS | none: staging's names already exist |
+| Deployers | the team's own staging deploy, run for the run branch's commit: their script over SSH, or their CI job |
+| Teardown | none: `Factory.Teardown` stays zero, and `env up` changes nothing |
+
+Everything else is unchanged: the agent loop and `$HINZIEL_BIN deploy`, the
+final deploy, the MRs and the notifications. `env list` shows staging once
+per ticket that used it.
+
+**What the team accepts.** These are the trade-offs a team on one staging
+lives with already; the factory makes them visible, not worse.
+
+- **The last deploy wins.** Two tickets in progress overwrite each other on
+  staging, and so does a developer's own deploy. `daemon --runs 1` keeps
+  runs from interleaving, but a ticket's preview still lasts only until the
+  next ticket deploys. Reviewers look soon, or redeploy the branch (a new
+  run for the ticket does).
+- **Data doesn't roll back.** Redeploying the target branch restores the
+  code, not the database: a branch's migrations and a test's writes stay.
+  The factory's `Instructions` say what the agent may do to staging's data,
+  and the agent tests as much as it can locally first, in a
+  [sandbox](#the-agents-sandbox) with the app's dev stack if it has one.
+- **Throughput is one ticket at a time** wherever staging is involved.
+
+**If that's not enough.** Only once a team asks, and with what it actually
+needs:
+
+- **A lease.** `Ensure` claims staging for one ticket, marked on staging
+  itself so people see it, and returns `core.WaitError` while another
+  ticket holds it, so runs queue instead of overwriting. `Destroy`
+  releases it and redeploys the target branch (`deploy.Destroyer`), with
+  `Teardown.After` as the backstop for a forgotten review. Ideally the
+  lease is the lock the team already uses.
+- **Provisioning late.** Today the environment exists before `implement`,
+  so a lease would cover the agent's whole session. An option to provision
+  after `implement` would hold staging only for the deploy, the checks and
+  the review.
+- **Telling the previous ticket.** When staging moves to another ticket,
+  a comment on the one it left says its preview is gone.
 
 ---
 
