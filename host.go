@@ -16,15 +16,15 @@ import (
 	"github.com/Tight-Line/hinziel/internal/hostinstall"
 )
 
-// host runs `host install`, which installs or updates the factory on a
+// host runs `host install-daemon`, which installs or updates the factory on a
 // server over SSH. It runs on the machine you install from, so it needs the
 // env file, not the variables themselves.
 func host(ctx context.Context, out io.Writer, factories []Factory, args []string) error {
-	const usage = "usage: host install [--env-file F] [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>"
-	if len(args) == 0 || args[0] != "install" {
+	const usage = "usage: host install-daemon [--env-file F] [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>"
+	if len(args) == 0 || args[0] != "install-daemon" {
 		return errors.New(usage)
 	}
-	fs := flag.NewFlagSet("host install", flag.ContinueOnError)
+	fs := flag.NewFlagSet("host install-daemon", flag.ContinueOnError)
 	fs.SetOutput(out)
 	envFile := fs.String("env-file", "", "the factory's variables as KEY=VALUE lines; files they name (keys, certificates) are copied too")
 	binary := fs.String("binary", "", "the factory binary for the host (linux, CGO_ENABLED=0); default: this one")
@@ -62,7 +62,7 @@ func host(ctx context.Context, out io.Writer, factories []Factory, args []string
 	if sandboxes > 0 && sandboxes < len(factories) {
 		// They share one container, which has the host's Docker socket for
 		// the sandboxes: an agent running there would be root on the host.
-		return errors.New("host install: some of the binary's factories have a sandbox and some don't; give every one a Sandbox, or none")
+		return errors.New("host install-daemon: some of the binary's factories have a sandbox and some don't; give every one a Sandbox, or none")
 	}
 	return hostinstall.Install(ctx, hostinstall.Options{
 		Host:     h,

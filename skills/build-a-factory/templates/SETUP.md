@@ -34,7 +34,7 @@ recorded with the reason and who made them.
 - [ ] Full `check` passes
 - [ ] Environment for the target branch up, parity checked
 - [ ] First run: ticket <id>, run <run id>, MR <link>
-- [ ] Installed on <host> with `host install`; check passes there
+- [ ] Installed on <host> with `host install-daemon`; check passes there
 - [ ] Handover README written
 
 ## Open items

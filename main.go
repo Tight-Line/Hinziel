@@ -169,8 +169,8 @@ Commands:
   daemon [--listen ADDR] [--runs N]
                                  run the factories' triggers and execute the runs they start,
                                  N at a time (default 1), and apply the factories' Teardown, until Ctrl-C
-  host install --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
-                                 install or update the factory on a server: Docker, Sysbox, the
+  host install-daemon --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
+                                 install or update the factory on a server: Docker, Sysbox if needed, the
                                  config and the binary, and daemon in a container
   env list [--all]               list environments, and orphans the provisioners still have
   env destroy [--factory F] <run-id | env-name | ticket>

@@ -191,7 +191,7 @@ func Install(ctx context.Context, o Options) error {
 	var out bytes.Buffer
 	err = h.run(ctx, "docker exec "+Container(o.Factory)+" "+binPath(o.Factory)+" check", nil, io.MultiWriter(o.Out, &out))
 	if err != nil {
-		return fmt.Errorf("the factory is running, but its check failed; see above, fix the env file and run host install again")
+		return fmt.Errorf("the factory is running, but its check failed; see above, fix the env file and run host install-daemon again")
 	}
 	say("done: the factory runs as container %s; logs: ssh %s docker logs -f %s", Container(o.Factory), o.Host.Address, Container(o.Factory))
 	return nil

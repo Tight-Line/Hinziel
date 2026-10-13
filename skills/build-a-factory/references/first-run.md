@@ -31,7 +31,7 @@ log) and follow the steps: `fetch_ticket`, `prepare_workspace`,
 finishes. During `implement`, the run's log has the agent's own narration
 (`runs/<id>/log.txt` in the state directory: `~/.local/state/hinziel` on a
 laptop, `/var/lib/hinziel/<factory>/state` on a host from `host
-install`); summarise it when asked, and point out anything the person
+install-daemon`); summarise it when asked, and point out anything the person
 should know, such as data sources the agent reached. The agent's sandbox,
 if it has one, is the container `hinziel-<factory>-<run id>` while it works. Its first
 check may take long while it builds the dev images; that's expected, not
@@ -82,5 +82,5 @@ When the run succeeds, check with the person:
 - **Record** what the run taught you in `SETUP.md` and `ENVIRONMENT.md`.
 - **Triggers.** Once a run from the CLI works, set up how the team will
   start runs (`<factory> daemon` with a comment trigger, for example, on
-  the host from `host install`) and try it with a second ticket. A ticket whose run already finished needs
+  the host from `host install-daemon`) and try it with a second ticket. A ticket whose run already finished needs
   iteration support to run again; use a new one.

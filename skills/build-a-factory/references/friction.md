@@ -148,7 +148,7 @@ and what BlankTracker showed.
   `AgentEnv`, and with a sandbox sees only its run's checkouts. Decide
   with the team what goes in `AgentEnv` (a read-only database URL, say).
   The factory's own secrets stay outside the sandbox: on a host, `host
-  install` puts them in `/etc/hinziel/<factory>`, readable by root and the
+  install-daemon` puts them in `/etc/hinziel/<factory>`, readable by root and the
   factory alone. Without a sandbox, the agent can read every file the
   factory's user can, the files its variables name included.
 
@@ -184,7 +184,7 @@ and what BlankTracker showed.
   run, such as a dev cluster (no sandbox, one daemon replica, a persistent
   volume for its state), or on a dedicated always-on host, and its cost.
 - **BlankTracker:** the runner started as a systemd service from a deploy
-  script, then moved to `host install`: the factory runs in a container,
+  script, then moved to `host install-daemon`: the factory runs in a container,
   and the agent's sandboxes with Docker inside need Sysbox, so Linux. A
   Mac can't run those sandboxes at all; a factory whose checks need Docker
   is tried on a Linux host from the start. Installing Sysbox restarts

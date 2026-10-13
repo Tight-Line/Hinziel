@@ -152,10 +152,10 @@ scope until we choose to revisit it.
   can't, such as registering its URLs with a third party. It may hold back a
   later step until someone confirms it's done ([Human actions](#human-actions)).
 - **Host.** Where the factory runs: an always-on machine it's installed on
-  with [`host install`](#hosting-a-factory), a pod, or a laptop running
+  with [`host install-daemon`](#hosting-a-factory), a pod, or a laptop running
   `run`. It runs the engine and each run's agent, directly or in a
   sandbox. What it needs grows with the sandbox: nothing, Docker, or
-  Docker and Sysbox; `host install` needs Docker in any case, as it runs
+  Docker and Sysbox; `host install-daemon` needs Docker in any case, as it runs
   the factory itself as a container.
 - **Daemon.** The factory's binary running continuously
   (`<factory> daemon`, [The daemon](#the-daemon)). It runs the triggers,
@@ -1054,7 +1054,7 @@ learns from.
                                        # trigger, notifier, or one by name ("deployer api")
 <factory> daemon [--listen ADDR] [--runs N]   # run triggers and execute the runs they start, N at a time (default 1);
                                        # tear down environments by the factories' Teardown
-<factory> host install --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
+<factory> host install-daemon --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
                                        # install or update the factory on a server
 <factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
 <factory> env list [--all]             # environments the runs know (--all: destroyed ones too), and orphans
@@ -1186,7 +1186,7 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 ### Hosting a factory
 
 *Planned for M2.* The daemon needs an always-on host: a server that
-`host install` prepares, or a container platform the team already runs.
+`host install-daemon` prepares, or a container platform the team already runs.
 On a server, installing it is the same everywhere; only routing traffic to
 it differs, and only when a trigger receives HTTP.
 
@@ -1196,10 +1196,10 @@ the [sandbox](#the-agents-sandbox):
 | The factory runs | The host needs |
 |---|---|
 | as a plain binary (`run`, or `daemon` on a laptop or VM) | what the sandbox needs: nothing beyond the agent's tools without one, Docker for one, Docker and Sysbox for Docker inside |
-| as a container set up by `host install` | Docker always, because the factory itself is a container; Sysbox only for a sandbox with Docker inside |
+| as a container set up by `host install-daemon` | Docker always, because the factory itself is a container; Sysbox only for a sandbox with Docker inside |
 | as a container on the team's own platform | nothing on the nodes: no sandbox, so no Docker socket and no privileges |
 
-With `host install`, the factory ships as a container image holding the
+With `host install-daemon`, the factory ships as a container image holding the
 binary, every tool its own steps need (git, ssh, Node for
 `deploy/cfworkers`) and what Hinziel's sandbox base image gives an agent
 (Claude Code, …). Without a sandbox, each run's agent works in the
@@ -1214,10 +1214,10 @@ With sandboxes, the factory's container gets the host's Docker socket,
 because it starts them. That makes the factory root on its host, and it
 already holds every credential the factory has, so a host shared with other
 work must trust it. The agent never gets the socket: without sandboxes, the
-factory's container doesn't have it either, and `host install` refuses a
+factory's container doesn't have it either, and `host install-daemon` refuses a
 binary whose factories mix the two.
 
-**`host install --env-file F <[user@]host[:port]>`**, run from a machine
+**`host install-daemon --env-file F <[user@]host[:port]>`**, run from a machine
 that has the factory binary and its env file, over SSH as root or a user
 with passwordless sudo (`internal/hostinstall`):
 
@@ -1257,9 +1257,9 @@ trigger's sender needs it (a webhook in GitLab's project settings, …).
 **On a container platform** the team already runs, such as a dev
 Kubernetes cluster, the factory is one long-lived container running
 `daemon`, and there's nothing to install: the platform does what
-`host install` does on a server.
+`host install-daemon` does on a server.
 
-| `host install` does | On Kubernetes |
+| `host install-daemon` does | On Kubernetes |
 |---|---|
 | builds the factory's image on the host | the team's CI builds it, `internal/hostinstall/factory.Dockerfile` plus the static binary, and pushes it to their registry |
 | copies the env file, and the files its variables name, to `/etc/hinziel/<factory>` | a Secret: the variables through `envFrom`, the files (SSH key, certificates) mounted as a volume, with the variables pointing at the mounted paths |
@@ -1303,18 +1303,18 @@ nothing. What differs from a server:
 
 - **`Recreate`, not a rolling update.** A rolling update briefly runs two
   daemons, and both answer the same trigger.
-- **A rollout interrupts runs.** `host install` refuses to update while a
+- **A rollout interrupts runs.** `host install-daemon` refuses to update while a
   run executes; a rollout kills the pod, and the interrupted run waits to
   be `resume`d, as after any daemon restart. Roll out between runs, or give
   the pod a pre-stop hook that waits.
-- **Files by hand.** `host install` finds the files the env file names and
+- **Files by hand.** `host install-daemon` finds the files the env file names and
   rewrites their paths; here the Secret's volume and the variables pointing
   into it are written by hand.
 
 *Not yet tried*: Hinziel has never run in a pod, and builds neither the
 image nor the manifest. If clusters become a common target, the next step
 is a command such as `<factory> kube manifest --env-file F`, doing
-`host install`'s analysis but printing a Dockerfile, a Secret and a
+`host install-daemon`'s analysis but printing a Dockerfile, a Secret and a
 Deployment, so the team only builds, pushes and applies. A pod per run
 would need run state outside the pod (a shared `run.Store`) and a daemon
 that starts a pod per run instead of executing it; neither exists yet.
@@ -1343,7 +1343,7 @@ hostnames might get around that, but it's extra setup for no benefit here.)
 
 A factory whose triggers only poll, such as BlankTracker's
 `trigger/trellocomments`, needs no routing, so the first version of
-`host install` comes without it.
+`host install-daemon` comes without it.
 
 ### The agent's sandbox
 
@@ -1357,7 +1357,7 @@ each level asks more of the host:
 | `&hinziel.Sandbox{Docker: true}` | the same, with a Docker daemon of its own inside, for the app's dev stack | Docker and [Sysbox](https://github.com/nestybox/sysbox) |
 
 That's what the sandbox asks; how the factory itself runs may ask more
-(`host install` always needs Docker; see [Hosting a factory](#hosting-a-factory)).
+(`host install-daemon` always needs Docker; see [Hosting a factory](#hosting-a-factory)).
 
 **Without a sandbox** the host is the sandbox. That fits a host that holds
 the factory alone and one run at a time, such as a pod in a cluster the team
@@ -1446,7 +1446,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
+| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install-daemon`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |

@@ -330,7 +330,7 @@ func TestHostInstallRejectsMixedSandboxes(t *testing.T) {
 	a, b := validFactory(), validFactory()
 	b.Name = "other"
 	b.Sandbox = &hinziel.Sandbox{}
-	err := hinziel.Run(context.Background(), []string{"host", "install", "--env-file", "env", "host.example"}, &bytes.Buffer{}, a, b)
+	err := hinziel.Run(context.Background(), []string{"host", "install-daemon", "--env-file", "env", "host.example"}, &bytes.Buffer{}, a, b)
 	if err == nil || !strings.Contains(err.Error(), "give every one a Sandbox, or none") {
 		t.Fatalf("got %v", err)
 	}

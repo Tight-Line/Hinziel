@@ -143,7 +143,7 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
      `internal/hostinstall/factory.Dockerfile` plus the static factory
      binary, and record the gap. A pod per run isn't possible yet.
    - **A server or VM**: an always-on Linux host, prepared and updated by
-     `host install`; it installs Docker, and Sysbox if needed, itself.
+     `host install-daemon`; it installs Docker, and Sysbox if needed, itself.
      Any sandbox level works there.
    - **A laptop**: fine for trying the factory with no sandbox or one
      without Docker inside, and for polling triggers; comments made while
@@ -196,7 +196,7 @@ review them as files.
 6. **Install it where it runs.** On the team's container platform, apply
    the image and manifest from Phase 1 step 7 with their usual tooling,
    after showing them what it creates. On a server, use `<factory> host
-   install --env-file <file> --binary <linux build> <host>` (after the
+   install-daemon --env-file <file> --binary <linux build> <host>` (after the
    first run, or for it, if the sandbox needs Docker and this machine
    can't run Sysbox). Say
    first what it installs (Docker, Sysbox if the sandbox has Docker
@@ -204,7 +204,7 @@ review them as files.
    restarts Docker. Put the command in a small
    script in the factory repository (BlankTracker: `hinziel/runner/deploy.sh`)
    so an update is one command. Before updating a host with a running
-   daemon, make sure no run is executing; `host install` refuses otherwise.
+   daemon, make sure no run is executing; `host install-daemon` refuses otherwise.
 7. **Hand over**: write the factory README from
    `templates/FACTORY-README.md`, finish `SETUP.md`, and tell the person
    what's still running and costing money.

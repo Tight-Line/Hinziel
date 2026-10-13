@@ -26,7 +26,7 @@ go build -o <factory> .
 ## Where it runs
 
 <host, size and cost>, installed and updated with `<script>` (Hinziel's
-`host install`): the factory runs there as the container
+`host install-daemon`): the factory runs there as the container
 `hinziel-<factory>`, up to <N> runs at once.
 
 - Logs: `ssh <host> docker logs -f hinziel-<factory>`
