@@ -110,10 +110,11 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    nothing, `&Sandbox{}` needs Docker, `&Sandbox{Docker: true}` needs
    Sysbox too. Choose the least that's safe. Find what the team's "before
    you finish" checks need. An agent that only edits, pushes and tests
-   against its environment needs no sandbox when the host serves one run
-   at a time or goes away after it (a pod per run); one that starts
-   anything, or shares a long-lived host with other runs, needs one, so
-   what it started dies with it. Hinziel's base image has git, ssh, Node
+   against its environment needs no sandbox when its host holds the
+   factory alone and one run at a time (a pod in the team's cluster); one
+   that starts anything, or shares its host with other runs or other work,
+   needs one, so what it started dies with it. Decide this together with
+   step 7: where the factory runs limits which levels are possible. Hinziel's base image has git, ssh, Node
    22 and Claude Code. A dev stack in Docker Compose means
    `&Sandbox{Docker: true}`; other tools (PHP, Python, a database client)
    go in `Sandbox.Dockerfile` lines. Run the checks once yourself in a
@@ -124,14 +125,34 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    the team publish its dev images to a registry so a sandbox pulls them
    instead of building them. That's the team's change to make, not the
    factory's.
-7. **Where the factory runs.** A sandbox with Docker inside needs Sysbox,
-   so Linux, never `--privileged`: Docker Desktop on a Mac can't run it.
-   For a team, recommend an always-on Linux host, prepared and updated by
-   `host install` (README, "Hosting a factory"); it installs Docker, and
-   Sysbox if needed, itself. A laptop is fine for trying the factory when
-   there's no sandbox or it needs no Docker. Ask how many runs may execute
-   at once (`--runs`): each runs its own sandbox and dev stack, so size the
-   host for that many.
+7. **Where the factory runs: start from how the team runs things today.**
+   Look first: Kubernetes manifests or Helm charts, Terraform, ECS task
+   definitions, a compose file on a server, CI runners. Then ask how they
+   run internal tools and what they'd rather not add. Fit the factory to
+   the platform they have, not the other way round (README, "Hosting a
+   factory"):
+   - **A container platform they already run** (a dev Kubernetes cluster,
+     ECS, Nomad): one long-lived container running `daemon`, exactly one
+     replica so a trigger isn't answered twice, its state directory
+     (`HINZIEL_STATE_DIR`) on a persistent volume, its variables from the
+     platform's secrets. No sandbox is the natural fit: it needs no Docker
+     socket and no privileges, which a cluster rarely gives. Keep
+     `--runs 1` unless the agent starts nothing, since parallel agents
+     share the container. Hinziel builds no image or manifest for this yet:
+     write them in the factory repository, starting from
+     `internal/hostinstall/factory.Dockerfile` plus the static factory
+     binary, and record the gap. A pod per run isn't possible yet.
+   - **A server or VM**: an always-on Linux host, prepared and updated by
+     `host install`; it installs Docker, and Sysbox if needed, itself.
+     Any sandbox level works there.
+   - **A laptop**: fine for trying the factory with no sandbox or one
+     without Docker inside, and for polling triggers; comments made while
+     it's off are missed.
+   A sandbox with Docker inside needs Sysbox, so Linux, never
+   `--privileged`: Docker Desktop on a Mac can't run it, and most managed
+   clusters can't either. Ask how many runs may execute at once
+   (`--runs`): each holds its own agent, sandbox and dev stack, so size
+   the host for that many.
 8. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it
@@ -172,9 +193,12 @@ review them as files.
    Watch it, report each step to the person as it finishes, and fix what
    fails. Expect the first run to find problems; each is either the
    factory's or Hinziel's.
-6. **Install it on its host** with `<factory> host install --env-file
-   <file> --binary <linux build> <host>` (after the first run, or for it,
-   if the sandbox needs Docker and this machine can't run Sysbox). Say
+6. **Install it where it runs.** On the team's container platform, apply
+   the image and manifest from Phase 1 step 7 with their usual tooling,
+   after showing them what it creates. On a server, use `<factory> host
+   install --env-file <file> --binary <linux build> <host>` (after the
+   first run, or for it, if the sandbox needs Docker and this machine
+   can't run Sysbox). Say
    first what it installs (Docker, Sysbox if the sandbox has Docker
    inside, a `hinziel` user, a container) and that installing Sysbox
    restarts Docker. Put the command in a small

@@ -176,9 +176,13 @@ and what BlankTracker showed.
 
 ## Where the factory can run
 
-- **Look for:** the OS of the machines on offer, whether Docker is there,
-  and whether anything else runs on a host you'd install on.
-- **Ask:** whether a dedicated always-on host is acceptable, and its cost.
+- **Look for:** how the team already runs services (Kubernetes manifests,
+  Helm charts, ECS task definitions, Terraform), the OS of the machines on
+  offer, whether Docker is there, and whether anything else runs on a host
+  you'd install on.
+- **Ask:** whether the factory should run where their services already
+  run, such as a dev cluster (no sandbox, one daemon replica, a persistent
+  volume for its state), or on a dedicated always-on host, and its cost.
 - **BlankTracker:** the runner started as a systemd service from a deploy
   script, then moved to `host install`: the factory runs in a container,
   and the agent's sandboxes with Docker inside need Sysbox, so Linux. A

@@ -1184,9 +1184,10 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 
 ### Hosting a factory
 
-*Planned for M2.* The daemon needs an always-on host. Installing it is the
-same everywhere; only routing traffic to it differs, and only when a trigger
-receives HTTP.
+*Planned for M2.* The daemon needs an always-on host: a server that
+`host install` prepares, or a container platform the team already runs.
+On a server, installing it is the same everywhere; only routing traffic to
+it differs, and only when a trigger receives HTTP.
 
 **The host needs Docker, and Sysbox for a sandbox with Docker inside.** The
 factory ships as a container image holding the binary, every tool its own
@@ -1244,6 +1245,19 @@ create its own host. What it can't do: Claude Code's login (run
 `CLAUDE_CODE_OAUTH_TOKEN`), and registering the public URL wherever the
 trigger's sender needs it (a webhook in GitLab's project settings, …).
 
+**On a container platform** the team already runs, such as a dev
+Kubernetes cluster, the factory is one long-lived container running
+`daemon`: exactly one replica, so a trigger isn't answered twice, its state
+directory (`HINZIEL_STATE_DIR`) on a persistent volume, and its variables
+from the platform's secrets. Without a [sandbox](#the-agents-sandbox) it
+needs no Docker socket and no privileges: the agent runs in the factory's
+container, and `--runs` stays at 1 unless the agent starts nothing. Hinziel
+doesn't build that image or manifest yet; the factory repository holds
+them, starting from `internal/hostinstall/factory.Dockerfile` and the
+static binary. A pod per run would need run state outside the pod (a
+shared `run.Store`) and a daemon that starts a pod per run instead of
+executing it; neither exists yet.
+
 **Routing.** HTTP triggers need a fixed public HTTPS URL: senders are
 configured with it once, and most refuse plain HTTP (Trello, Slack and
 GitHub all do). The daemon itself only serves plain HTTP on a port. On top
@@ -1281,8 +1295,9 @@ each level asks more of the host:
 | `&hinziel.Sandbox{}` | in a container of its own per run, Hinziel's base image plus the factory's `Dockerfile` lines | Docker |
 | `&hinziel.Sandbox{Docker: true}` | the same, with a Docker daemon of its own inside, for the app's dev stack | Docker and [Sysbox](https://github.com/nestybox/sysbox) |
 
-**Without a sandbox** the host is the sandbox. That fits a host that serves
-one run and goes away, such as a Kubernetes pod per run, and a laptop
+**Without a sandbox** the host is the sandbox. That fits a host that holds
+the factory alone and one run at a time, such as a pod in a cluster the team
+already runs ([Hosting a factory](#hosting-a-factory)), and a laptop
 trying out a factory whose agent only edits, pushes and tests against its
 environment. The agent's process still gets only `Task.Env` (design rule 7),
 but it sees every file the factory's user can read, and what it starts
