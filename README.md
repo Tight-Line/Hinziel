@@ -67,7 +67,7 @@ run state, the interfaces, and a growing **library of ready-made components**.
 run a handful of environments (production, staging, perhaps a shared dev),
 and standing up another one is a project they rarely take on. The hard part
 is knowing how the app actually gets deployed, and that knowledge is tacit,
-scattered and often partly wrong. The **build-a-factory skill** (§6) goes
+scattered and often partly wrong. The **build-a-factory skill** (§5) goes
 into a team's repositories and running environments, works out how the app
 is really deployed, and reproduces it, so that every ticket gets an
 environment of its own.
@@ -118,7 +118,7 @@ scope until we choose to revisit it.
 **Non-goals (v1)**
 
 - A zero-code setup. A YAML front end over the ready-made components may come
-  later, once the library is rich enough (§11).
+  later, once the library is rich enough (§10).
 - Reacting to review comments on MRs. Iterating on feedback in the ticket is
   planned for M4 ([Iteration](#iteration)); comments on the MR may follow.
 - Multi-tenant/public SaaS deployment.
@@ -128,213 +128,7 @@ scope until we choose to revisit it.
 
 ---
 
-## 2. Reference scenarios
-
-| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** | **D: Microservices on Kubernetes** |
-|---|---|---|---|---|
-| Repos | one (monorepo) | one | one | eight, plus a dedicated factory repo |
-| Tracker | Trello | Jira | Jira | Jira |
-| Forge | GitLab | Forgejo (self-hosted) | GitHub | GitHub |
-| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` |
-| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
-| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
-| Human steps | — (Google login goes through a shared OAuth relay) | — | — | — |
-| Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook |
-| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
-
-Any design decision that makes one column awkward is wrong.
-
-### Scenario A in more detail
-
-BlankTracker is one GitLab repository (`blanktracker/app`) holding a Laravel
-API with a Nova admin, and a Vue SPA, both at the repository root. Work merges
-into `develop`; `master` is production. Every deployed environment
-(production, staging, vibe) is three hostnames: the SPA on Cloudflare Workers
-static assets, and `api` and `nova`, which both reach one Docker Compose stack
-on a droplet. A preview environment looks like this:
-
-| Part | Where | URL |
-|---|---|---|
-| API and Nova | new droplet, the repository's own `vibe.docker-compose.yaml` | `https://<env>-api.blanktracker.com`, `https://<env>-nova.blanktracker.com` (proxied A records to the droplet) |
-| SPA | preview alias `<env>` of `blanktracker-frontend-preview`, a Worker used only for previews | `https://<env>-blanktracker-frontend-preview.<account>.workers.dev` |
-
-- **All URLs are decided in `provision_environment`, before any deploy**
-  (`env.Environment.Endpoints`). A Workers preview alias URL is predictable,
-  so the SPA's URL is too. The two deployers don't depend on each other's
-  output, and their order doesn't matter.
-- **The SPA is built by the factory, with the team's own script.** The deployer
-  runs `cloudflare-build.sh` with the variables Cloudflare's CI would set
-  (`API_URL`, `NOVA_URL`, `WORKERS_CI_COMMIT_SHA`) and uploads with
-  `--name blanktracker-frontend-preview`, so `wrangler.jsonc` is used as it is.
-  Workers Builds can't do this: it bakes one API URL into every branch.
-- **The SPA stays on `workers.dev`.** Preview aliases can't have a custom
-  domain, and the SPA doesn't need one: it authenticates with a Sanctum token,
-  not a cookie, and the API allows any origin.
-- **The API and Nova need hostnames in the production zone.** An HTTPS SPA
-  can't call a plain-HTTP API, and Google rejects redirect URIs on bare IPs.
-  Names are one level deep (`<env>-api`, not `api.<env>`), which Cloudflare's
-  free Universal SSL certificate covers. This is safe because production sets
-  no `SESSION_DOMAIN`, so its cookies are host-only and never reach a preview.
-  A Cloudflare token can't be limited to some records of a zone, so
-  `dns/cloudflare` refuses any name outside `hz-*`: a bug must not be able to
-  rewrite `api.blanktracker.com`.
-- **TLS to the droplet.** The zone is in Full (strict) mode with proxied
-  records, so the droplet needs a certificate Cloudflare trusts. One
-  Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
-  factory's host, and `deploy/dockercompose` adds a TLS proxy in front of the
-  stack's own nginx. Every droplet gets the same key, and each runs
-  unreviewed code, so one leak exposes them all. That's acceptable for the
-  first runs only: certificates per environment are planned for M2 (see
-  [Per-environment certificates](#per-environment-certificates)).
-- **Previews are cheap and quiet.** The compose stack reads `.env`, which the
-  deployer writes from a template in the factory: no third-party API keys,
-  `ONSOCIAL_DISABLED` and `SCRAPECREATORS_DISABLED` set, mail to the log. An
-  override file drops the `cron` service, because the nightly schedule calls
-  paid APIs. Postgres runs in the stack, seeded from the dump the repository
-  already uses for vibe.
-- **Google login goes through a relay.** Login is Google OAuth, through a
-  dedicated "previews" OAuth client. Google has no API for adding redirect
-  URIs, so every preview calls back to one OAuth relay whose URLs were
-  registered once, and the relay sends the browser on to the preview the login
-  started on (§12.2). The agent doesn't need Google login: it creates a
-  Sanctum token with `artisan tinker` over SSH.
-- **The app's code needs no changes.** The only addition to the
-  repository is the factory's directory. See §12.3.
-
-### Scenario C in more detail
-
-The client's work is about 70% code (Apex, Lightning Web Components) and 30%
-clicks in Salesforce Setup (Flows, objects, fields, layouts, permissions).
-Almost every click produces **metadata**. Metadata can be written as XML,
-deployed, and pulled back out of a scratch org with `sf project retrieve start`,
-because scratch orgs track every change made in them. So the factory puts the
-clicks through git and PR review too, not only the code.
-
-The agent has three ways to handle a change, in order of preference:
-
-1. **Write the source or metadata directly**, then deploy it to the scratch org
-   to compile and test it. Apex only compiles inside an org, which is one
-   reason the environment always exists before the agent starts.
-2. **Click in the scratch org through a headless browser** (Playwright MCP),
-   for things that are impractical to write by hand, like complex Flows or
-   Lightning pages. The changes are then pulled back into the working tree
-   (`deploy.Retriever`) and committed. This is slower and more fragile than
-   option 1, so it's the fallback.
-3. **Changes the Metadata API can't deploy** become a manual checklist for a
-   human (`agent.Outcome.ManualSteps`), shown in the PR and the notifications.
-   The factory never clicks in production or in shared sandboxes.
-
----
-
-### Scenario D in more detail
-
-*A design exercise: no team has run this yet. It exists to keep the core
-interfaces honest for the most common shape of a larger system.*
-
-**The system.** "Shopfront" is a typical microservice setup across eight
-GitHub repositories in the `acme` organisation:
-
-| Repo | What | CI (GitHub Actions) |
-|---|---|---|
-| `web` | Next.js storefront | lint, unit tests, build image |
-| `gateway` | API gateway (Go) | tests, build image |
-| `orders`, `catalog`, `payments`, `notifications` | services in Go, Python, Java and Node | tests, contract tests, build and sign an image tagged with the commit, push it to the registry: 15–40 minutes |
-| `proto` | shared gRPC contracts, a library the services depend on by version | generate clients, publish a version on release |
-| `platform` | Helm charts, Argo CD applications, Terraform | policy checks |
-
-Production and staging run on Kubernetes. Deploying means committing image
-tags to `platform`; Argo CD syncs them, and Argo Rollouts does a canary with
-automated analysis in production. Database migrations run as pre-sync hooks,
-secrets come from Vault through External Secrets, and risky features hide
-behind feature flags. Every repo has required status checks and CODEOWNERS.
-
-**The factory lives in its own repository**, `acme/hinziel-factory` (§5),
-owned by the platform team. It lists all eight repos; the agent sees them
-all, and only the ones it changes get a branch and an MR.
-
-**What a preview is.** A namespace per ticket, `hz-<key>`, in a dedicated
-preview cluster, reachable at `https://<key>.preview.acme.dev`. A wildcard DNS
-record and a wildcard certificate (cert-manager) point at the cluster's
-ingress, so no per-environment DNS is needed.
-
-- **Provisioner:** creates the namespace with a resource quota, an
-  ExternalSecret that copies the preview secrets in, and a database seeded
-  from a sanitised snapshot (a Postgres operator). For the agent it writes a
-  kubeconfig limited to that namespace.
-- **Deployers:** one per service repo. A deploy waits until CI has built the
-  image for the commit, then sets that service's tag in the namespace and
-  waits until its rollout is healthy. Services the ticket doesn't touch run
-  the image of their target branch, which CI has already built. A system
-  deployer bound to `platform` renders the Helm umbrella chart with every
-  service's tag.
-- **No canaries in previews.** A preview has one user and no traffic. The
-  production rollout (canaries, analysis, flags, migrations in production)
-  stays the team's pipeline, after a human merges. The factory's job ends at
-  reviewed MRs and a working preview (non-goal in §1).
-
-**How a run goes, and what it asks of the core.**
-
-| Step | What happens | Fits today? |
-|---|---|---|
-| `prepare_workspace` | eight clones; the run branch in each | **Yes**, since branches became lazy (D1): only the repos the agent changes get a remote branch and CI runs. Still slow: eight full clones per run, where a cached mirror per repo would help |
-| `provision_environment` | namespace, secrets, database, kubeconfig | Yes. `Hosts` stays empty, as for a scratch org |
-| `deploy_base` | every service at its target branch's image | Yes, if a deployer can see every repo's commit (D3) |
-| `implement` | the agent edits `orders` and `proto`, runs unit tests locally, pushes, deploys, tests against the preview with `kubectl` | **Partly.** The agent has no way to reach a cluster (D2). Each deploy waits 15–40 minutes for CI, so the agent should test locally first and deploy sparingly; the default timeouts are too short (D5). It can't see why CI failed (D4) |
-| `finalize_branch`, `open_change_request` | two MRs, linked | Yes. CODEOWNERS picks the reviewers. The `proto` MR must merge first (open question 2) |
-| `deploy` | final commits, after CI | Yes, with D4 and D5 |
-| `publish` | MR links, preview URL, CI state | **Partly.** "Ready for review" while CI is red is misleading (D4) |
-| teardown | delete the namespace, the images, the database | Yes, with `deploy.Destroyer` for the images and a [`Teardown`](#teardown) policy; a cluster's cost makes an `After` backstop worth setting |
-
-**What it asks of the core**, proposed and not built:
-
-- **D1. Lazy run branches** (done). `prepare_workspace` creates the run branch
-  locally in every repo but pushes nothing. The agent pushes the repos it
-  changes, and `finalize_branch` pushes whatever it left. A repo nobody
-  changed never gets a remote branch, an MR or a CI run, and it deploys from
-  its target branch's commit, which is pushed already. An engine change; no
-  interface changes. It also helps every multi-repo factory.
-- **D2. Agent access beyond SSH.** `env.Environment` gets
-  `Access []Access{Name, Description, Env}`: what the agent may use to reach
-  the environment, as environment variables and a sentence for its prompt.
-  A Kubernetes provisioner sets `KUBECONFIG` to a namespace-limited file; a
-  scratch org (Scenario C) sets the `sf` target org. Like SSH key paths, the
-  values are references to files or aliases, never secrets themselves, so
-  they can be persisted. SSH hosts stay as they are.
-- **D3. Deployers that see every repo.** `deploy.Source` gets
-  `Commits map[string]string`: the commit being deployed in every repo of
-  the factory, not only the deployer's own. A system deployer (an umbrella
-  chart in `platform`) needs all the image tags at once. `Deployer.Repo`
-  stays the repo whose checkout it gets.
-- **D4. CI status.** An optional forge capability, `forge.CheckReader`:
-  `Checks(ctx, commit) ([]Check, error)`, with each check's name, state and
-  URL. The agent gets a `$HINZIEL_BIN checks` command to see failing
-  pipelines and their links, and `publish` reports the checks, waiting for
-  them to finish if the factory asks. CI-gated deployers can use the same
-  capability to wait for an image's build, or poll the registry themselves.
-- **D5. Configurable timeouts.** Per step, in the factory
-  (`Timeouts: map[hinziel.Step]time.Duration`), because a factory whose
-  deploys wait for CI needs hours, not the default 20 minutes. Deploy logs
-  also need a channel (`Deploy` has none today), so a 30-minute wait shows
-  progress. Waiting on CI is better modelled as its own step outcome
-  than as a long timeout (open question 13), which would leave timeouts for
-  steps that are really stuck.
-- **D6. Merge order.** MRs already link each other; with a shared library
-  the order matters (`proto` before `orders`). The MR description states it,
-  and the agent says so in its summary. Enforcing it stays open question 2.
-
-**What doesn't change.** The interfaces for tracker, agent, DNS and
-notifiers, and the pipeline's steps. Every component Shopfront needs is a
-new component, not a new kind: `forge/github` (M7), `tracker/jira` (M5),
-`env/k8snamespace`, `deploy/helm` (waits for CI images, sets tags, waits for
-the rollout) and possibly `deploy/argocd` for teams that preview through an
-ApplicationSet. A platform that only creates previews from open MRs (an
-Argo CD pull-request generator) would also need draft MRs opened early, a
-factory option and not an interface change; a branch-name generator on
-`hinziel/*` avoids that.
-
----
-
-## 3. Concepts
+## 2. Concepts
 
 - **Factory.** A Go value (`hinziel.Factory`) that wires a tracker, one or more
   repos, an agent, an environment, DNS, deployers, triggers and notifiers
@@ -601,7 +395,7 @@ deleting the branch.
 
 ---
 
-## 4. Go interfaces
+## 3. Go interfaces
 
 The interfaces are code, not prose. The code is the source of truth and this
 section only maps out the packages. Each interface package holds the interface
@@ -647,7 +441,7 @@ option, or in the factory's own code.
 **Components document what they need.** Every component's package
 documentation has a `Credentials` section: each secret, file or one-time
 setup it needs, the least access that works, and exactly where to create
-it. The build-a-factory skill (§6) assembles its list for the team from
+it. The build-a-factory skill (§5) assembles its list for the team from
 these sections, so a component isn't finished without one.
 
 Components outside this repository (in a team's factory code or a
@@ -657,7 +451,7 @@ third-party module) follow the same interfaces and are used the same way.
 
 | Package | Purpose |
 |---|---|
-| [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§9) |
+| [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§8) |
 | [`agent/agenttest`](./agent/agenttest) | public: a scriptable fake agent. No conformance suite; agents are tested end to end |
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
@@ -803,7 +597,7 @@ These rules keep the interfaces from fighting each other:
 
 ---
 
-## 5. Writing a factory
+## 4. Writing a factory
 
 A factory is a `main` package with its own `go.mod`. **By default it lives
 in a dedicated factory repository** (e.g. `acme/hinziel-factory`), owned by
@@ -1081,7 +875,7 @@ picks up the repo's own `AGENTS.md` / `CLAUDE.md` as usual.
 
 ---
 
-## 6. Building a factory with an agent
+## 5. Building a factory with an agent
 
 Teams shouldn't have to read this document. Upstream Hinziel ships a
 **build-a-factory guide and a Claude skill**
@@ -1089,7 +883,7 @@ Teams shouldn't have to read this document. Upstream Hinziel ships a
 draft): point an agent at a team's repositories and tools, and it builds,
 tests and hands over their factory. This section is the outline; the skill
 holds the method in full.
-The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§5).
+The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§4).
 
 Two parts carry most of the friction. **Reproducing the team's environment**
 is the hardest part and the most valuable one, and it has its own section
@@ -1102,7 +896,7 @@ and works in two phases.
 
 1. **Discover the system and the process.** First: one repository or
    several? A monorepo gets the factory in a directory of it; anything else
-   gets a dedicated factory repository (§5). With several, ask which repos
+   gets a dedicated factory repository (§4). With several, ask which repos
    make up the system and start from the one that knows how they run
    together (an infra, deploy or platform repo), if there is one. Then work
    out how the app is deployed and write down the
@@ -1132,7 +926,7 @@ and works in two phases.
    - **one-time setup** that isn't a secret: a Cloudflare zone for the
      daemon's URL, a webhook to register, a Slack channel, a test
      ticket and a sandbox repository for the integration tests;
-   - **human actions** each environment will need (§3), so nobody is
+   - **human actions** each environment will need (§2), so nobody is
      surprised by them later.
 4. **Ask for confirmation**, in this shape:
 
@@ -1241,7 +1035,7 @@ learns from.
 
 ---
 
-## 7. CLI
+## 6. CLI
 
 `hinziel.Main` provides these commands. The binary is the team's factory, e.g.
 `blanktracker-factory`.
@@ -1282,7 +1076,7 @@ try the CLI without any accounts.
 
 ---
 
-## 8. Operational behaviour
+## 7. Operational behaviour
 
 - **State:** `$HINZIEL_STATE_DIR`, else `$XDG_STATE_HOME/hinziel`, else
   `~/.local/state/hinziel`. Each run has
@@ -1492,7 +1286,7 @@ trying out a factory whose agent only edits, pushes and tests against its
 environment. The agent's process still gets only `Task.Env` (design rule 7),
 but it sees every file the factory's user can read, and what it starts
 outlives `implement`. BlankTracker showed what that costs on a long-lived
-host (§11, question 5). Its agent started the app's dev stack to run
+host (§10, question 5). Its agent started the app's dev stack to run
 `./toolkit check`. The stack's published ports were open to the internet,
 because Docker's port publishing bypasses ufw. Two such runs at once would
 have collided on the same ports and the same Compose project name. And every
@@ -1541,7 +1335,9 @@ Removing the sandbox removes whatever the agent left running, so a factory
 has nothing to clean up after the agent. (Before the sandbox, factories
 stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 
-## 9. Testing strategy
+---
+
+## 8. Testing strategy
 
 - `internal/engine` is tested end to end with fakes: two repos (one
   unchanged), the agent deploying over the socket, resume after a failure,
@@ -1559,12 +1355,12 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
   `HINZIEL_IT_DIGITALOCEAN`, `HINZIEL_IT_SLACK` and `HINZIEL_IT_CLAUDECODE`;
   each test's skip message names the credentials it needs. Components written by teams or
   agents run the same suites, which is what makes writing your own component
-  safe (§6).
+  safe (§5).
 - BlankTracker, the guinea-pig project, is the end-to-end acceptance test.
 
 ---
 
-## 10. Milestones
+## 9. Milestones
 
 | # | Deliverable |
 |---|---|
@@ -1580,7 +1376,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 
 ---
 
-## 11. Open questions
+## 10. Open questions
 
 1. **Environment teardown policy** (resolved: [Teardown](#teardown)). The
    ticket being done, with a TTL as a backstop, plus `env destroy` and
@@ -1688,6 +1484,212 @@ certificate for each environment from Cloudflare's Origin CA API:
 - **Credentials.** A Cloudflare token with SSL and Certificates:Edit on the
   zone, in place of the certificate files. The shared certificate stays
   available as an option for teams without one.
+
+---
+
+## 11. Reference scenarios
+
+| | **A: BlankTracker (guinea pig)** | **B: Go service** | **C: Salesforce client** | **D: Microservices on Kubernetes** |
+|---|---|---|---|---|
+| Repos | one (monorepo) | one | one | eight, plus a dedicated factory repo |
+| Tracker | Trello | Jira | Jira | Jira |
+| Forge | GitLab | Forgejo (self-hosted) | GitHub | GitHub |
+| Agent | Claude Code | Claude Code | Claude Code + Salesforce skills, DX MCP server, headless browser | Claude Code + `kubectl` |
+| Environment | New DigitalOcean droplet per ticket + Cloudflare DNS records in the production zone (`hz-*` names only) | Folder + nginx vhost on a shared server | New scratch org per ticket | A namespace per ticket in a preview cluster, wildcard DNS and certificate |
+| Deploy | API: the team's own compose file on the droplet over SSH, plus an override and `.env` from the factory. SPA: the team's own build script, then `wrangler versions upload` to a preview alias of a previews-only Worker | build locally, rsync, restart, reload nginx | `sf project deploy start`, assign permission sets, import seed data | wait for CI to build each changed service's image, set the tags with Helm, wait for the rollout; unchanged services run their target branch's image |
+| Human steps | — (Google login goes through a shared OAuth relay) | — | — | — |
+| Trigger | CLI + a Trello comment (`@<member> implement`) | CLI | CLI (Jira trigger later) | Jira webhook |
+| Notify | Trello comment + Slack | Jira comment + chat | Jira comment + chat | Jira comment + chat, CI state in the MR |
+
+Any design decision that makes one column awkward is wrong.
+
+### Scenario A in more detail
+
+BlankTracker is one GitLab repository (`blanktracker/app`) holding a Laravel
+API with a Nova admin, and a Vue SPA, both at the repository root. Work merges
+into `develop`; `master` is production. Every deployed environment
+(production, staging, vibe) is three hostnames: the SPA on Cloudflare Workers
+static assets, and `api` and `nova`, which both reach one Docker Compose stack
+on a droplet. A preview environment looks like this:
+
+| Part | Where | URL |
+|---|---|---|
+| API and Nova | new droplet, the repository's own `vibe.docker-compose.yaml` | `https://<env>-api.blanktracker.com`, `https://<env>-nova.blanktracker.com` (proxied A records to the droplet) |
+| SPA | preview alias `<env>` of `blanktracker-frontend-preview`, a Worker used only for previews | `https://<env>-blanktracker-frontend-preview.<account>.workers.dev` |
+
+- **All URLs are decided in `provision_environment`, before any deploy**
+  (`env.Environment.Endpoints`). A Workers preview alias URL is predictable,
+  so the SPA's URL is too. The two deployers don't depend on each other's
+  output, and their order doesn't matter.
+- **The SPA is built by the factory, with the team's own script.** The deployer
+  runs `cloudflare-build.sh` with the variables Cloudflare's CI would set
+  (`API_URL`, `NOVA_URL`, `WORKERS_CI_COMMIT_SHA`) and uploads with
+  `--name blanktracker-frontend-preview`, so `wrangler.jsonc` is used as it is.
+  Workers Builds can't do this: it bakes one API URL into every branch.
+- **The SPA stays on `workers.dev`.** Preview aliases can't have a custom
+  domain, and the SPA doesn't need one: it authenticates with a Sanctum token,
+  not a cookie, and the API allows any origin.
+- **The API and Nova need hostnames in the production zone.** An HTTPS SPA
+  can't call a plain-HTTP API, and Google rejects redirect URIs on bare IPs.
+  Names are one level deep (`<env>-api`, not `api.<env>`), which Cloudflare's
+  free Universal SSL certificate covers. This is safe because production sets
+  no `SESSION_DOMAIN`, so its cookies are host-only and never reach a preview.
+  A Cloudflare token can't be limited to some records of a zone, so
+  `dns/cloudflare` refuses any name outside `hz-*`: a bug must not be able to
+  rewrite `api.blanktracker.com`.
+- **TLS to the droplet.** The zone is in Full (strict) mode with proxied
+  records, so the droplet needs a certificate Cloudflare trusts. One
+  Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
+  factory's host, and `deploy/dockercompose` adds a TLS proxy in front of the
+  stack's own nginx. Every droplet gets the same key, and each runs
+  unreviewed code, so one leak exposes them all. That's acceptable for the
+  first runs only: certificates per environment are planned for M2 (see
+  [Per-environment certificates](#per-environment-certificates)).
+- **Previews are cheap and quiet.** The compose stack reads `.env`, which the
+  deployer writes from a template in the factory: no third-party API keys,
+  `ONSOCIAL_DISABLED` and `SCRAPECREATORS_DISABLED` set, mail to the log. An
+  override file drops the `cron` service, because the nightly schedule calls
+  paid APIs. Postgres runs in the stack, seeded from the dump the repository
+  already uses for vibe.
+- **Google login goes through a relay.** Login is Google OAuth, through a
+  dedicated "previews" OAuth client. Google has no API for adding redirect
+  URIs, so every preview calls back to one OAuth relay whose URLs were
+  registered once, and the relay sends the browser on to the preview the login
+  started on (§12.2). The agent doesn't need Google login: it creates a
+  Sanctum token with `artisan tinker` over SSH.
+- **The app's code needs no changes.** The only addition to the
+  repository is the factory's directory. See §12.3.
+
+### Scenario C in more detail
+
+The client's work is about 70% code (Apex, Lightning Web Components) and 30%
+clicks in Salesforce Setup (Flows, objects, fields, layouts, permissions).
+Almost every click produces **metadata**. Metadata can be written as XML,
+deployed, and pulled back out of a scratch org with `sf project retrieve start`,
+because scratch orgs track every change made in them. So the factory puts the
+clicks through git and PR review too, not only the code.
+
+The agent has three ways to handle a change, in order of preference:
+
+1. **Write the source or metadata directly**, then deploy it to the scratch org
+   to compile and test it. Apex only compiles inside an org, which is one
+   reason the environment always exists before the agent starts.
+2. **Click in the scratch org through a headless browser** (Playwright MCP),
+   for things that are impractical to write by hand, like complex Flows or
+   Lightning pages. The changes are then pulled back into the working tree
+   (`deploy.Retriever`) and committed. This is slower and more fragile than
+   option 1, so it's the fallback.
+3. **Changes the Metadata API can't deploy** become a manual checklist for a
+   human (`agent.Outcome.ManualSteps`), shown in the PR and the notifications.
+   The factory never clicks in production or in shared sandboxes.
+
+---
+
+### Scenario D in more detail
+
+*A design exercise: no team has run this yet. It exists to keep the core
+interfaces honest for the most common shape of a larger system.*
+
+**The system.** "Shopfront" is a typical microservice setup across eight
+GitHub repositories in the `acme` organisation:
+
+| Repo | What | CI (GitHub Actions) |
+|---|---|---|
+| `web` | Next.js storefront | lint, unit tests, build image |
+| `gateway` | API gateway (Go) | tests, build image |
+| `orders`, `catalog`, `payments`, `notifications` | services in Go, Python, Java and Node | tests, contract tests, build and sign an image tagged with the commit, push it to the registry: 15–40 minutes |
+| `proto` | shared gRPC contracts, a library the services depend on by version | generate clients, publish a version on release |
+| `platform` | Helm charts, Argo CD applications, Terraform | policy checks |
+
+Production and staging run on Kubernetes. Deploying means committing image
+tags to `platform`; Argo CD syncs them, and Argo Rollouts does a canary with
+automated analysis in production. Database migrations run as pre-sync hooks,
+secrets come from Vault through External Secrets, and risky features hide
+behind feature flags. Every repo has required status checks and CODEOWNERS.
+
+**The factory lives in its own repository**, `acme/hinziel-factory` (§4),
+owned by the platform team. It lists all eight repos; the agent sees them
+all, and only the ones it changes get a branch and an MR.
+
+**What a preview is.** A namespace per ticket, `hz-<key>`, in a dedicated
+preview cluster, reachable at `https://<key>.preview.acme.dev`. A wildcard DNS
+record and a wildcard certificate (cert-manager) point at the cluster's
+ingress, so no per-environment DNS is needed.
+
+- **Provisioner:** creates the namespace with a resource quota, an
+  ExternalSecret that copies the preview secrets in, and a database seeded
+  from a sanitised snapshot (a Postgres operator). For the agent it writes a
+  kubeconfig limited to that namespace.
+- **Deployers:** one per service repo. A deploy waits until CI has built the
+  image for the commit, then sets that service's tag in the namespace and
+  waits until its rollout is healthy. Services the ticket doesn't touch run
+  the image of their target branch, which CI has already built. A system
+  deployer bound to `platform` renders the Helm umbrella chart with every
+  service's tag.
+- **No canaries in previews.** A preview has one user and no traffic. The
+  production rollout (canaries, analysis, flags, migrations in production)
+  stays the team's pipeline, after a human merges. The factory's job ends at
+  reviewed MRs and a working preview (non-goal in §1).
+
+**How a run goes, and what it asks of the core.**
+
+| Step | What happens | Fits today? |
+|---|---|---|
+| `prepare_workspace` | eight clones; the run branch in each | **Yes**, since branches became lazy (D1): only the repos the agent changes get a remote branch and CI runs. Still slow: eight full clones per run, where a cached mirror per repo would help |
+| `provision_environment` | namespace, secrets, database, kubeconfig | Yes. `Hosts` stays empty, as for a scratch org |
+| `deploy_base` | every service at its target branch's image | Yes, if a deployer can see every repo's commit (D3) |
+| `implement` | the agent edits `orders` and `proto`, runs unit tests locally, pushes, deploys, tests against the preview with `kubectl` | **Partly.** The agent has no way to reach a cluster (D2). Each deploy waits 15–40 minutes for CI, so the agent should test locally first and deploy sparingly; the default timeouts are too short (D5). It can't see why CI failed (D4) |
+| `finalize_branch`, `open_change_request` | two MRs, linked | Yes. CODEOWNERS picks the reviewers. The `proto` MR must merge first (open question 2) |
+| `deploy` | final commits, after CI | Yes, with D4 and D5 |
+| `publish` | MR links, preview URL, CI state | **Partly.** "Ready for review" while CI is red is misleading (D4) |
+| teardown | delete the namespace, the images, the database | Yes, with `deploy.Destroyer` for the images and a [`Teardown`](#teardown) policy; a cluster's cost makes an `After` backstop worth setting |
+
+**What it asks of the core**, proposed and not built:
+
+- **D1. Lazy run branches** (done). `prepare_workspace` creates the run branch
+  locally in every repo but pushes nothing. The agent pushes the repos it
+  changes, and `finalize_branch` pushes whatever it left. A repo nobody
+  changed never gets a remote branch, an MR or a CI run, and it deploys from
+  its target branch's commit, which is pushed already. An engine change; no
+  interface changes. It also helps every multi-repo factory.
+- **D2. Agent access beyond SSH.** `env.Environment` gets
+  `Access []Access{Name, Description, Env}`: what the agent may use to reach
+  the environment, as environment variables and a sentence for its prompt.
+  A Kubernetes provisioner sets `KUBECONFIG` to a namespace-limited file; a
+  scratch org (Scenario C) sets the `sf` target org. Like SSH key paths, the
+  values are references to files or aliases, never secrets themselves, so
+  they can be persisted. SSH hosts stay as they are.
+- **D3. Deployers that see every repo.** `deploy.Source` gets
+  `Commits map[string]string`: the commit being deployed in every repo of
+  the factory, not only the deployer's own. A system deployer (an umbrella
+  chart in `platform`) needs all the image tags at once. `Deployer.Repo`
+  stays the repo whose checkout it gets.
+- **D4. CI status.** An optional forge capability, `forge.CheckReader`:
+  `Checks(ctx, commit) ([]Check, error)`, with each check's name, state and
+  URL. The agent gets a `$HINZIEL_BIN checks` command to see failing
+  pipelines and their links, and `publish` reports the checks, waiting for
+  them to finish if the factory asks. CI-gated deployers can use the same
+  capability to wait for an image's build, or poll the registry themselves.
+- **D5. Configurable timeouts.** Per step, in the factory
+  (`Timeouts: map[hinziel.Step]time.Duration`), because a factory whose
+  deploys wait for CI needs hours, not the default 20 minutes. Deploy logs
+  also need a channel (`Deploy` has none today), so a 30-minute wait shows
+  progress. Waiting on CI is better modelled as its own step outcome
+  than as a long timeout (open question 13), which would leave timeouts for
+  steps that are really stuck.
+- **D6. Merge order.** MRs already link each other; with a shared library
+  the order matters (`proto` before `orders`). The MR description states it,
+  and the agent says so in its summary. Enforcing it stays open question 2.
+
+**What doesn't change.** The interfaces for tracker, agent, DNS and
+notifiers, and the pipeline's steps. Every component Shopfront needs is a
+new component, not a new kind: `forge/github` (M7), `tracker/jira` (M5),
+`env/k8snamespace`, `deploy/helm` (waits for CI images, sets tags, waits for
+the rollout) and possibly `deploy/argocd` for teams that preview through an
+ApplicationSet. A platform that only creates previews from open MRs (an
+Argo CD pull-request generator) would also need draft MRs opened early, a
+factory option and not an interface change; a branch-name generator on
+`hinziel/*` avoids that.
 
 ---
 
@@ -1888,7 +1890,7 @@ most features touch the backend and one or both apps.
 
 | Piece | Implementation |
 |---|---|
-| Factory | a dedicated repository listing all three repos (§5) |
+| Factory | a dedicated repository listing all three repos (§4) |
 | Environment | a preview of the backend per ticket, like Scenario A or B |
 | Deployers | `backend`: as usual. `ios`, `android`: wait for CI to build the commit with the preview API URL baked in, then hand over the build's install link (TestFlight, Firebase) as `Deployment.URL` |
 | Agent | edits all three, runs unit tests where its host can (Kotlin, Ruby; Swift needs macOS), deploys, tests the API against the preview |

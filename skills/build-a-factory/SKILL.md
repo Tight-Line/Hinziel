@@ -11,8 +11,8 @@ deploys the branch to an environment of its own and opens a merge request.
 They also get the first written description of how their app is deployed.
 
 The library is in https://github.com/Tight-Line/hinziel. Its README is the
-reference for the concepts (§3), the interfaces (§4), how to write a factory
-(§5) and the components that exist. This skill is the method; read the
+reference for the concepts (§2), the interfaces (§3), how to write a factory
+(§4) and the components that exist. This skill is the method; read the
 README sections it points to when you need them, not up front.
 
 ## What makes this work
@@ -63,7 +63,7 @@ the person enjoyed. Keep to them.
 
 - **The factory:** in a dedicated factory repository by default; in a
   directory of the app's repository (`hinziel/`) when the app is a monorepo
-  (README §5). Ask which, with that recommendation.
+  (README §4). Ask which, with that recommendation.
 - **Secrets:** `~/.config/hinziel/<factory>.env` on the machine that runs
   the factory, mode 600, with a commented placeholder for every value: what
   it is, where to create it and the least access that works. Load it into a
@@ -154,7 +154,7 @@ review them as files.
 
 ## Phase 2: build and prove
 
-1. **Write the factory** against the interfaces (README §5), and any
+1. **Write the factory** against the interfaces (README §4), and any
    missing components, each passing its conformance suite. Read every
    `hinziel.Env` while building the `Factory`, never inside a func the
    factory holds. Keep the app's own files (compose files, build scripts)
