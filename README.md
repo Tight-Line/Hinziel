@@ -4,13 +4,14 @@
 
 Hinziel is a toolkit for building **software factories**: programs made for one
 team's tickets, repositories and deployment. Hand a factory a ticket and it
-comes back as merge requests, deployed to a preview environment for you to
-try. Hinziel comes in two parts:
+comes back as merge requests, deployed where you can try it: an environment
+of its own, or wherever the team tries changes today. Hinziel comes in two parts:
 
 1. **A Go library for building software factories**: the pipeline, run
    state, interfaces and ready-made components a factory is made of.
-2. **The build-a-factory skill**, which works out how a team's app is really
-   deployed and then writes and tests the team's factory with the library.
+2. **The build-a-factory skill**, which works out with a team what previewing
+   an autonomous change means for them, and then writes and tests the team's
+   factory with the library.
 
 A team uses the skill; the skill uses the library. The library is still an
 ordinary Go library, open to any team that would rather write its factory by
@@ -25,7 +26,7 @@ townsfolk's work while they slept.
 A factory takes a ticket and, without human help:
 
 1. creates a branch
-2. provisions an environment
+2. provisions an environment, or takes the one the team already tests in
 3. implements the ticket with a coding agent, testing it in that environment
 4. opens merge/pull requests
 5. deploys the result
@@ -63,19 +64,28 @@ run state, the interfaces, and a growing **library of ready-made components**.
 
 ### The skill
 
-**Hinziel's killer feature is a new environment whenever you need one.** Most teams
-run a handful of environments (production, staging, perhaps a shared dev),
-and standing up another one is a project they rarely take on. The hard part
-is knowing how the app actually gets deployed, and that knowledge is tacit,
+**Hinziel's killer feature is working out, with the team, what it means to
+preview a change nobody wrote by hand.** An agent's change is worth something
+only once someone can try it, and "try it" means something different for
+every team: an environment of its own per ticket, a namespace in a preview
+cluster, a scratch org, or simply a deploy to the one staging environment
+they have ([scenario E](#scenario-e-in-more-detail)). Which of these fits
+depends on how the app is really deployed, and that knowledge is tacit,
 scattered and often partly wrong. The **build-a-factory skill** (§5) goes
 into a team's repositories and running environments, works out how the app
-is really deployed, and reproduces it, so that every ticket gets an
-environment of its own.
+is really deployed, and then decides with the team what a preview is for
+them: what it must be faithful to, what it may share, what it must never
+touch, and what it may cost.
+
+Where an environment per ticket is possible and worth it, the skill
+reproduces the team's deployment so that every ticket gets one, something
+most teams rarely take on by hand. Where it isn't, the preview is what the
+team already does by hand, such as deploying to staging, done for them.
 
 The skill then writes the rest of the factory and tests it end to end, so a
-team never has to learn the library itself. A team that only wants the
-environments can stop there: `env up` gives them a fresh one on demand, with
-no tickets or agents involved.
+team never has to learn the library itself. A team whose previews are new
+environments, and that only wants those, can stop there: `env up` gives them
+a fresh one on demand, with no tickets or agents involved.
 
 ---
 
@@ -887,8 +897,8 @@ tests and hands over their factory. This section is the outline; the skill
 holds the method in full.
 The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§4).
 
-Two parts carry most of the friction. **Reproducing the team's environment**
-is the hardest part and the most valuable one, and it has its own section
+Two parts carry most of the friction. **Deciding what a preview is, and
+building it,** is the hardest part and the most valuable one, and it has its own section
 below ([Learning how the app is deployed](#learning-how-the-app-is-deployed)).
 **Collecting credentials** is the most tedious part, and a missing one stalls
 everything after it. The skill settles both **before it writes any code**,
@@ -932,8 +942,8 @@ and works in two phases.
      surprised by them later.
 4. **Ask for confirmation**, in this shape:
 
-   > Here's my plan: (components, the environment model and how a preview
-   > differs from your staging, what triggers runs, who gets notified). Here's what I need from you and how to get each
+   > Here's my plan: (components, the environment model, what a preview is
+   > for you and how it differs from your staging, what triggers runs, who gets notified). Here's what I need from you and how to get each
    > one: (the list). I'll write `~/.config/hinziel/<factory>.env` with a
    > commented placeholder for every value, so you only fill it in. Shall I
    > proceed to build?
@@ -968,7 +978,8 @@ and works in two phases.
 ### Learning how the app is deployed
 
 Writing the tracker, forge and agent parts of a factory is mostly
-mechanical. Reproducing an environment is not: the knowledge of how the app
+mechanical. Deciding where an autonomous change gets previewed is not, and
+neither is reproducing an environment: the knowledge of how the app
 actually gets deployed is tacit, scattered and often partly wrong. BlankTracker
 is the easy case. Its deploy scripts are in the repository and its owner
 could explain the rest. Most teams have none of that written down, and this
@@ -996,7 +1007,24 @@ keys, sizes, feature flags) and what is fixed. The varying parts become the
 preview's parameters. A team with a single environment gives no such
 comparison, and the skill must say so and ask more questions, not guess.
 
-**Write the environment model before reproducing it.** It is an inventory of
+**Then decide with the team what a preview is.** The evidence shows what's
+possible; the team decides what's worth it. The skill asks what reviewers
+need to check (the UI, real-looking data, an integration), how many tickets
+are in flight at once, what an environment per ticket would cost, and
+whether one can be created at all: a licensed product with one test
+instance, a partner that allows a single host, or data that can't be copied
+rules it out. Then it recommends one of the shapes the reference scenarios
+cover, and says what each gives up:
+
+- **the staging environment the team already has**
+  ([scenario E](#scenario-e-in-more-detail)): nothing to build, one ticket
+  at a time, the last deploy wins;
+- **a light copy on shared infrastructure**, such as a folder and a vhost
+  (scenario B) or a namespace (scenario D);
+- **a full environment per ticket** (scenarios A and C): the most faithful,
+  and the most to build and pay for.
+
+**Write the environment model before building the preview.** It is an inventory of
 every service, what it depends on, where each piece of its configuration
 comes from, its external integrations, where its data comes from, and every
 step done by hand. The skill reasons from it, the user confirms it in Phase 1,
@@ -1004,8 +1032,9 @@ and it stays in the factory repository. For many teams it is the first
 written description of their own deployment, and worth having even without
 the factory.
 
-The model also records what a preview needs that staging doesn't have.
-These are the friction points we already know of:
+For a preview that's a new environment, the model also records what it
+needs that staging doesn't have. These are the friction points we already
+know of:
 
 - **hostnames baked into the app**: CORS, cookie domains, OAuth redirect URIs;
 - **where preview data comes from**: seeds, fixtures, a sanitised dump;
