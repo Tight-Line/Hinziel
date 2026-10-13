@@ -654,6 +654,14 @@ These rules keep the interfaces from fighting each other:
 - **Environments without servers.** A scratch org has no hosts and no SSH. Its
   org username and instance URL go in `Environment.State` and `Hosts` stays
   empty.
+- **What a deployer remembers.** Some deployers need to know what they did
+  to an environment before: whether one-time setup (loading data) already
+  ran, or what was deployed last, so `Retrieve` brings back only what
+  changed since. They return it in `Deployment.State`; the engine merges it
+  into `Environment.State` and keeps it with the environment, so later runs
+  that get the same environment back from `Ensure` (same ID) see it too. An
+  environment that was torn down, or recreated under the same name, starts
+  empty.
 - **Stages are the tracker's to show.** The engine reports three abstract
   stages (in progress, in review, blocked), and reads a fourth, done, which
   only people set (`tracker.DoneChecker`, for [teardown](#teardown)). How a team shows them varies

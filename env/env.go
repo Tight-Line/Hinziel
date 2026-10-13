@@ -38,7 +38,11 @@ type Environment struct {
 	// the SPA URL for CORS). Set by the Provisioner and/or by the factory's Endpoints.
 	Endpoints map[string]string `json:"endpoints,omitempty"`
 	Hosts     []Host            `json:"hosts,omitempty"`
-	State     map[string]string `json:"state,omitempty"` // opaque provider data (port, vhost path, dns record id)
+	// State is opaque provider data (port, vhost path, dns record id), plus
+	// what deployers keep about the environment (deploy.Deployment.State).
+	// The engine carries the deployers' keys over to later runs that get
+	// the same environment (same ID) back from Ensure.
+	State map[string]string `json:"state,omitempty"`
 	// Actions are things a human must do for this environment that the
 	// provider can't, such as approving a lease. The factory may add its own.
 	Actions []Action `json:"actions,omitempty"`

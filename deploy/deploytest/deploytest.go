@@ -25,12 +25,14 @@ type Deployed struct {
 	Branch  string
 	Commit  string
 	Workdir string
+	State   map[string]string // the environment's State the deployer was given
 }
 
 // Fake is an in-memory deploy.Deployer. It checks that Source.Workdir exists
 // and that a commit was given, then records the call.
 type Fake struct {
-	URL string // returned as Deployment.URL
+	URL   string            // returned as Deployment.URL
+	State map[string]string // returned as Deployment.State
 
 	mu       sync.Mutex
 	deployed []Deployed
@@ -52,8 +54,8 @@ func (f *Fake) Deploy(_ context.Context, e *env.Environment, src *deploy.Source)
 	if _, err := os.Stat(src.Workdir); err != nil {
 		return nil, fmt.Errorf("workdir: %w", err)
 	}
-	f.deployed = append(f.deployed, Deployed{Env: e.Name, Repo: src.Repo, Branch: src.Branch, Commit: src.Commit, Workdir: src.Workdir})
-	return &deploy.Deployment{URL: f.URL, Commit: src.Commit, At: time.Now()}, nil
+	f.deployed = append(f.deployed, Deployed{Env: e.Name, Repo: src.Repo, Branch: src.Branch, Commit: src.Commit, Workdir: src.Workdir, State: maps.Clone(e.State)})
+	return &deploy.Deployment{URL: f.URL, Commit: src.Commit, At: time.Now(), State: maps.Clone(f.State)}, nil
 }
 
 // Deployed returns every successful Deploy call, in order.

@@ -5,6 +5,8 @@ package envtest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"testing"
@@ -14,12 +16,14 @@ import (
 )
 
 // Fake is an in-memory env.Provisioner and env.Lister. Every environment gets
-// one host, "main", at a documentation address.
+// one host, "main", at a documentation address, and a new ID each time it's
+// created, as a real provider's would.
 type Fake struct {
 	mu       sync.Mutex
 	envs     map[string]*env.Environment
 	ensures  int
 	destroys int
+	created  int
 
 	EnsureErrs []error // returned by the next Ensure calls, in order
 }
@@ -40,10 +44,11 @@ func (f *Fake) Ensure(_ context.Context, spec env.Spec) (*env.Environment, error
 	}
 	e, ok := f.envs[spec.Name]
 	if !ok {
+		f.created++
 		e = &env.Environment{
 			Name:     spec.Name,
 			Provider: "fake",
-			ID:       "fake-" + spec.Name,
+			ID:       fmt.Sprintf("fake-%s-%d", spec.Name, f.created),
 			Hosts:    []env.Host{{Name: "main", Address: "203.0.113.10"}},
 		}
 		f.envs[spec.Name] = e
@@ -79,6 +84,7 @@ func (f *Fake) Ensures() int {
 func clone(e *env.Environment) *env.Environment {
 	c := *e
 	c.Hosts = slices.Clone(e.Hosts)
+	c.State = maps.Clone(e.State)
 	return &c
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/Tight-Line/hinziel/internal/names"
 	"github.com/Tight-Line/hinziel/internal/sandbox"
 	"github.com/Tight-Line/hinziel/internal/workspace"
+	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
 )
 
@@ -226,6 +227,9 @@ func (x *execution) provisionEnvironment(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := x.carryState(ctx, e); err != nil {
+		return err
+	}
 	if e.Endpoints == nil {
 		e.Endpoints = map[string]string{}
 	}
@@ -258,6 +262,55 @@ func (x *execution) provisionEnvironment(ctx context.Context) error {
 	}
 	x.logf(StepProvisionEnvironment, "environment %s ready", e.Name)
 	return x.announceActions(ctx)
+}
+
+// carryState adds to e the State the deployers kept about it in earlier
+// runs (deploy.Deployment.State): from the run that last changed it, if that
+// run's environment is the same one (same ID) and wasn't torn down. What
+// Ensure returned wins over what is carried.
+func (x *execution) carryState(ctx context.Context, e *env.Environment) error {
+	runs, err := x.e.store.List(ctx, run.Filter{Factory: x.p.Name})
+	if err != nil {
+		return err
+	}
+	var prev *run.Snapshot
+	for i := range runs {
+		s := &runs[i]
+		if s.Environment == nil || s.Environment.Name != e.Name || s.Environment.ID != e.ID || !s.EnvironmentDestroyed.IsZero() {
+			continue
+		}
+		if prev == nil || s.UpdatedAt.After(prev.UpdatedAt) {
+			prev = s
+		}
+	}
+	if prev == nil {
+		return nil
+	}
+	for k, v := range prev.Environment.State {
+		if _, ok := e.State[k]; ok {
+			continue
+		}
+		if e.State == nil {
+			e.State = map[string]string{}
+		}
+		e.State[k] = v
+	}
+	return nil
+}
+
+// mergeState applies a deployment's State to the environment: an empty
+// value deletes the key.
+func mergeState(e *env.Environment, state map[string]string) {
+	for k, v := range state {
+		if v == "" {
+			delete(e.State, k)
+			continue
+		}
+		if e.State == nil {
+			e.State = map[string]string{}
+		}
+		e.State[k] = v
+	}
 }
 
 // deployAll runs every deployer on its repo's current HEAD, which must be
@@ -302,6 +355,7 @@ func (x *execution) deployAll(ctx context.Context, skipDeployed bool) ([]string,
 		if dep.Commit == "" {
 			dep.Commit = head
 		}
+		mergeState(x.r.Environment, dep.State)
 		if x.r.Deployments == nil {
 			x.r.Deployments = map[string]*deploy.Deployment{}
 		}

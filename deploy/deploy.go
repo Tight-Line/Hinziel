@@ -49,4 +49,12 @@ type Deployment struct {
 	Commit string            `json:"commit"`
 	At     time.Time         `json:"at"`
 	Info   map[string]string `json:"info,omitempty"`
+	// State is what the deployer remembers about the environment between
+	// deploys, such as whether one-time setup ran or what was deployed last.
+	// The engine merges it into the environment's State, where the next
+	// Deploy, Retrieve and Destroy find it, in this run and in later runs
+	// that get the same environment back from Ensure (same ID). An empty
+	// value deletes the key. Keys are shared with the provisioner and the
+	// other deployers, so prefix them with the component's name.
+	State map[string]string `json:"state,omitempty"`
 }
