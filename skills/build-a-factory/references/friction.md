@@ -30,6 +30,18 @@ and what BlankTracker showed.
 - **BlankTracker:** post-deploy commands lived in `deploy-vibe.sh` only; the
   factory now runs them in the script's order.
 
+## A preview can't be a new environment
+
+- **Look for:** a licensed product with one test instance, an appliance
+  or a mainframe, a partner integration that allows one host, data too
+  large or sensitive to copy, and a staging the team deploys branches to
+  by hand.
+- **Ask:** how they try a change today, who else deploys to that
+  environment, and how they coordinate. Offer their staging as the
+  preview (README, scenario E) and say what it gives up.
+- **BlankTracker:** not applicable: a droplet per ticket was cheap, and
+  everything the app needs could be created per preview.
+
 ## Where preview data comes from
 
 - **Look for:** seeders, fixtures, dump scripts, what the dump excludes.

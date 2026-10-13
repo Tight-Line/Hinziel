@@ -9,7 +9,7 @@ recorded with the reason and who made them.
 | Date | Decision | Why | By |
 |---|---|---|---|
 | | Factory lives in <dedicated repo / `hinziel/` in the monorepo> | | |
-| | Previews copy <environment> | | |
+| | A preview is <the team's staging / a light copy / a full environment per ticket>, copying <environment> | | |
 | | Runs start from <CLI / comment trigger / …> | | |
 | | The agent's sandbox: <none / base image / Docker, tools> | | |
 | | The factory runs on <host>, <N> runs at once | | |

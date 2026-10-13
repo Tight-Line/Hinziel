@@ -3,7 +3,7 @@
 This directory is <app>'s software factory, built with
 [Hinziel](https://github.com/Tight-Line/hinziel). It takes a ticket from
 <tracker>, has <agent> implement it on a `hinziel/*` branch, deploys the
-branch to a preview of its own and opens a merge request into
+branch to <a preview of its own | staging> and opens a merge request into
 <target branch>.
 
 How the app is deployed, and how a preview differs: `ENVIRONMENT.md`.
@@ -37,13 +37,13 @@ The agent works <in the factory's container | in a sandbox per run: its contents
 
 ## What a run creates
 
-- <host per preview, size and cost>
+- <host per preview, size and cost; or: nothing, it deploys to staging>
 - <DNS records>
-- <preview deployments>
+- <preview deployments; on staging: the run branch replaces what staging ran>
 - a branch `hinziel/<ticket>-…`, a merge request, comments on the ticket
 
 <When previews are torn down: on `env destroy`, a "teardown" comment, or
-once the ticket is done.>
+once the ticket is done. On staging: never; the next deploy replaces it.>
 
 ## Human actions
 

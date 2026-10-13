@@ -1,14 +1,17 @@
 ---
 name: build-a-factory
-description: Build, prove and hand over a Hinziel software factory for a team's app, so that a ticket becomes a branch, a preview environment and a merge request. Use when someone wants to install Hinziel on their project, set up a factory, get a preview environment per ticket, or "make the agent implement tickets". Also use to resume a factory installation that is under way (look for a hinziel/ directory or a factory repository with SETUP.md).
+description: Build, prove and hand over a Hinziel software factory for a team's app, so that a ticket becomes a branch, a change deployed where the team can try it, and a merge request. Use when someone wants to install Hinziel on their project, set up a factory, get a preview environment per ticket, have tickets deployed to their staging, or "make the agent implement tickets". Also use to resume a factory installation that is under way (look for a hinziel/ directory or a factory repository with SETUP.md).
 ---
 
 # Build a factory
 
 You are installing Hinziel for a team. At the end they have a factory: a
 small Go program that takes a ticket, has an agent implement it on a branch,
-deploys the branch to an environment of its own and opens a merge request.
-They also get the first written description of how their app is deployed.
+deploys the branch where the team can try it and opens a merge request.
+Where that is, you work out with them: an environment of its own per
+ticket, a slot on shared infrastructure, or simply the staging they already
+have. They also get the first written description of how their app is
+deployed.
 
 The library is in https://github.com/Tight-Line/hinziel. Its README is the
 reference for the concepts (§2), the interfaces (§3), how to write a factory
@@ -92,20 +95,28 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    person at a keyboard ("push to `vibe`", "ask before every git
    operation"): Hinziel's agent prompt overrides git, MR and confirmation
    rules, but the rest still applies.
-3. **How the app is deployed.** This is the hard part and most of the
-   value. Follow `references/environment.md`: dig through the evidence
-   layer by layer, compare environments, and write `ENVIRONMENT.md`. Go
+3. **How the app is deployed.** Follow `references/environment.md`: dig
+   through the evidence layer by layer and compare environments. Go
    through every category in `references/friction.md` and record what you
    found for each, including "not applicable".
-4. **What the team's agents can reach.** Ask what their agents use today:
+4. **What a preview is, for this team.** This is the hard part and most of
+   the value. Don't assume an environment per ticket: work out with the
+   person where a reviewer will try a change nobody wrote by hand
+   (`references/environment.md`, "Decide with the team what a preview
+   is"). Start from how they try changes today, what a reviewer must
+   check, whether an environment can be created at all, and what one per
+   ticket would cost. Recommend a shape (their staging, a light copy, or
+   a full environment per ticket), say what each gives up, and let them
+   choose. Then write `ENVIRONMENT.md`, with the details for that shape.
+5. **What the team's agents can reach.** Ask what their agents use today:
    a read-only replica of production data, internal APIs, MCP servers,
    skills in the repository and the access those assume. A developer's
    agent finds these through the developer's own SSH config and
    credentials. The factory's agent gets only what the factory gives it,
    so decide each one on purpose: wire it in, or leave it out.
-5. **Choose components** from the README's package map. Name any that must
+6. **Choose components** from the README's package map. Name any that must
    be written, and say why none of the existing ones fits.
-6. **Does the agent need a sandbox, and what goes in it.** Each level asks
+7. **Does the agent need a sandbox, and what goes in it.** Each level asks
    more of the host (README, "The agent's sandbox"): no sandbox needs
    nothing, `&Sandbox{}` needs Docker, `&Sandbox{Docker: true}` needs
    Sysbox too. Choose the least that's safe. Find what the team's "before
@@ -114,7 +125,7 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    factory alone and one run at a time (a pod in the team's cluster); one
    that starts anything, or shares its host with other runs or other work,
    needs one, so what it started dies with it. Decide this together with
-   step 7: where the factory runs limits which levels are possible. Hinziel's base image has git, ssh, Node
+   step 8: where the factory runs limits which levels are possible. Hinziel's base image has git, ssh, Node
    22 and Claude Code. A dev stack in Docker Compose means
    `&Sandbox{Docker: true}`; other tools (PHP, Python, a database client)
    go in `Sandbox.Dockerfile` lines. Run the checks once yourself in a
@@ -125,7 +136,7 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    the team publish its dev images to a registry so a sandbox pulls them
    instead of building them. That's the team's change to make, not the
    factory's.
-7. **Where the factory runs: start from how the team runs things today.**
+8. **Where the factory runs: start from how the team runs things today.**
    Look first: Kubernetes manifests or Helm charts, Terraform, ECS task
    definitions, a compose file on a server, CI runners. Then ask how they
    run internal tools and what they'd rather not add. Fit the factory to
@@ -153,22 +164,23 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    clusters can't either. Ask how many runs may execute at once
    (`--runs`): each holds its own agent, sandbox and dev stack, so size
    the host for that many.
-8. **Triggers and notifications.** How will people start a run? The CLI
+9. **Triggers and notifications.** How will people start a run? The CLI
    always works. A comment trigger (`trigger/trellocomments`: a comment
    that @mentions the factory's member and says "implement") polls, so it
    needs no public URL and runs anywhere, a laptop included. Webhooks
    need a public HTTPS address and an always-on host. Who should
    hear about what? Problems and human actions can go on the ticket alone.
-9. **List what's needed from people**: every credential, one-time setup and
+10. **List what's needed from people**: every credential, one-time setup and
    human action, each with what it is, why, the least access, and where it
    goes. Sources: each component's Credentials section, the app's
    `.env.example` and deploy scripts, and the environment model's human
    actions.
-10. **Confirm the plan** in one message: components, the sandbox and where
-   the factory runs, the environment model
-   and how a preview differs from staging, how runs start, who's notified,
-   what you'll need from them, what runs will cost (a droplet per ticket,
-   say), and what you'll create where. Then ask: shall I build?
+11. **Confirm the plan** in one message: components, the sandbox and where
+   the factory runs, the environment model, what a preview is and what it
+   gives up, how runs start, who's notified, what you'll need from them,
+   what runs will cost (a droplet per ticket, say, or nothing on their
+   staging), and what you'll create or change where. Then ask: shall I
+   build?
 
 Write `SETUP.md` and `ENVIRONMENT.md` before asking, so the person can
 review them as files.
@@ -186,15 +198,17 @@ review them as files.
 3. **Collect credentials one at a time** with the loop in
    `references/credentials.md`. Verify each before the next. Then run the
    full `check`.
-4. **Bring up an environment** for the target branch alone (`env up`, or
-   the first run's `deploy_base`). Check parity against the environment it
-   copies (`references/environment.md`), not just that it answers.
+4. **Bring up the preview** for the target branch alone (`env up`, or the
+   first run's `deploy_base`). For a new environment, check parity against
+   the one it copies (`references/environment.md`), not just that it
+   answers. On the team's staging, agree the moment with the person first,
+   and check the factory's deploy leaves staging as their own would.
 5. **Prove the whole flow** with a real ticket: `references/first-run.md`.
    Watch it, report each step to the person as it finishes, and fix what
    fails. Expect the first run to find problems; each is either the
    factory's or Hinziel's.
 6. **Install it where it runs.** On the team's container platform, apply
-   the image and manifest from Phase 1 step 7 with their usual tooling,
+   the image and manifest from Phase 1 step 8 with their usual tooling,
    after showing them what it creates. On a server, use `<factory> host
    install-daemon --env-file <file> --binary <linux build> <host>` (after the
    first run, or for it, if the sandbox needs Docker and this machine
@@ -220,8 +234,8 @@ without its source means the source must be rewritten; a binary's strings
 
 ## References
 
-- `references/environment.md`: learning how the app is deployed, the
-  environment model, parity.
+- `references/environment.md`: learning how the app is deployed, deciding
+  with the team what a preview is, the environment model, parity.
 - `references/friction.md`: every category of friction met so far, with the
   evidence to look for and the question to ask.
 - `references/credentials.md`: the one-at-a-time loop, and notes per service.

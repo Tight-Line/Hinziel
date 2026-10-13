@@ -15,7 +15,9 @@ for a few rounds of fix and resume.
   existing records needs records).
 - **Say what the run will create**: a host (with its hourly and monthly
   price), DNS records, a preview deployment, a branch and an MR, and
-  comments on the ticket, which the team will see. Get a yes.
+  comments on the ticket, which the team will see. On the team's staging,
+  say instead that the run replaces what staging runs, and agree the
+  moment, so nobody is reviewing something else there. Get a yes.
 - **What the agent needs**: `check` passes its `sandbox` line, if it has
   a sandbox (the runtime is there and the sandbox's image builds), and its
   `agent` line (a Claude token in the env file, which the agent needs even
@@ -74,7 +76,9 @@ When the run succeeds, check with the person:
 
 ## Afterwards
 
-- **Teardown.** A preview keeps running and costing money until it's torn
+- **Teardown.** On the team's staging there's nothing to tear down: say
+  what staging runs now, and how it gets back to the target branch. A
+  preview of its own keeps running and costing money until it's torn
   down: by `env destroy <ticket>`, by a "teardown" comment, or by the
   daemon once the ticket is done (`Factory.Teardown`). Say which applies,
   with the cost, and list the human actions to undo by hand (redirect

@@ -11,7 +11,7 @@ next to each fact (`infra`, `script`, `live`, or the person who said so).
 |---|---|---|---|---|
 | production | | | | |
 | staging | | | | |
-| preview (Hinziel) | | | the factory | |
+| preview (Hinziel) | <its own, or staging> | | the factory | |
 
 ## Services
 
@@ -48,6 +48,7 @@ One line each, "not applicable" included (see the skill's
 |---|---|
 | The team's rules for agents and changes | |
 | Deploy knowledge spread around | |
+| A preview can't be a new environment | |
 | Where preview data comes from | |
 | Side effects a preview must not cause | |
 | Resources shared between environments | |
@@ -61,10 +62,12 @@ One line each, "not applicable" included (see the skill's
 
 ## A preview
 
-What a preview is, and how and why it differs from the environment it
-copies.
+What a preview is for this team, decided with <person>, and how and why it
+differs from the environment it copies.
 
-- **Copies:** <environment>
+- **Shape:** <the team's staging | a light copy: folder and vhost, namespace | a full environment per ticket>, because <reason>
+- **Gives up:** <what this shape gives up, as agreed>
+- **Copies:** <environment, or "is" staging itself>
 - **Runs on:** <host type and size, cost per hour and month>
 - **Hostnames:** <pattern>
 - **Data:** <source, and what it does and doesn't contain>
