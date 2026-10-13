@@ -185,6 +185,58 @@ scope until we choose to revisit it.
   ([The agent's sandbox](#the-agents-sandbox)). It sees only its run's
   checkouts, and is removed with everything in it when `implement` ends.
 
+### Architecture
+
+```mermaid
+flowchart TB
+    person(["A person: run, resume, approve"])
+
+    subgraph host ["Host"]
+        kinds["a server, a Kubernetes pod,<br/>a VM or a laptop"]:::note
+        subgraph factory ["Factory binary"]
+            direction TB
+            triggers["Triggers"] --> queue["Queue<br/>up to N runs at once"]
+            queue --> engine["Engine<br/>pipeline steps, gates, teardown"]
+            engine <--> store[("Run store<br/>run.json, logs, checkouts")]
+            engine --> components["Components<br/>tracker, forge, environment,<br/>DNS, deployers, notifiers"]
+        end
+        subgraph sandbox ["Sandbox, optional"]
+            agent["Agent<br/>Claude Code"]
+        end
+    end
+
+    subgraph outside ["Outside"]
+        direction LR
+        tracker[("Tracker<br/>Trello, Jira")]
+        forge[("Forge<br/>GitLab, GitHub")]
+        env[("Environment<br/>a droplet, a namespace,<br/>or the team's staging")]
+        chat[("Chat<br/>Slack")]
+    end
+
+    person --> engine
+    engine -->|starts one per run| agent
+    agent -->|deploy, over the socket| engine
+    components -->|API calls| outside
+    tracker -.->|comments, webhooks| triggers
+    agent -->|git push| forge
+    agent -->|tests| env
+
+    style sandbox stroke-dasharray: 5 5
+    classDef note fill:none,stroke:none,font-style:italic
+```
+
+One process does the work: the factory binary, running as the
+[daemon](#the-daemon) or as a single CLI command. Its engine runs each
+run's pipeline and calls the components, which talk to the tracker, the
+forges, the environment's provider, DNS and chat. For `implement` it
+starts the agent, in a [sandbox](#the-agents-sandbox) if the factory asks
+for one (dashed) or as a plain process on the host if not. The agent works
+on the run's checkouts, pushes the run branch itself, and asks the engine
+to deploy over a Unix socket; it never holds the factory's credentials.
+The host is wherever the binary runs: a server set up by
+[`host install-daemon`](#hosting-a-factory), a pod in the team's cluster,
+a VM or a laptop.
+
 ### Pipeline
 
 ```mermaid
