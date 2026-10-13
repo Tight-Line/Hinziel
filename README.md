@@ -613,7 +613,9 @@ These rules keep the interfaces from fighting each other:
 - **Forge.** Branch creation and pushing go through `internal/workspace` (git
   CLI), not the forge API. `git push` works the same on every host, so only MR
   operations need per-forge code. `OpenChangeRequest` returns the existing
-  open CR for the branch if there is one.
+  open CR for the branch if there is one. `forge/local` is a bare repository
+  on the factory's host with merge requests kept as files, for trying a
+  factory before it's connected to the team's forge.
 - **Agent.** It commits and pushes to the run branch, and deploys with the
   `deploy` command ([Agent loop](#agent-loop)). The engine commits whatever is
   left over. Anything it couldn't do goes in `Outcome.ManualSteps`. Browser
