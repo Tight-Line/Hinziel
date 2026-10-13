@@ -155,7 +155,8 @@ scope until we choose to revisit it.
   with [`host install`](#hosting-a-factory), a pod, or a laptop running
   `run`. It runs the engine and each run's agent, directly or in a
   sandbox. What it needs grows with the sandbox: nothing, Docker, or
-  Docker and Sysbox.
+  Docker and Sysbox; `host install` needs Docker in any case, as it runs
+  the factory itself as a container.
 - **Daemon.** The factory's binary running continuously
   (`<factory> daemon`, [The daemon](#the-daemon)). It runs the triggers,
   executes the runs they start, up to `--runs N` at once, and tears down
@@ -1189,14 +1190,22 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 On a server, installing it is the same everywhere; only routing traffic to
 it differs, and only when a trigger receives HTTP.
 
-**The host needs Docker, and Sysbox for a sandbox with Docker inside.** The
-factory ships as a container image holding the binary, every tool its own
-steps need (git, ssh, Node for `deploy/cfworkers`) and what Hinziel's
-sandbox base image gives an agent (Claude Code, …). Without a
-[sandbox](#the-agents-sandbox), each run's agent works in the factory's
-container, so its project needs nothing more than that image; one that
-does, such as PHP or a dev stack, asks for a sandbox. With one, each run's
-agent works in a second container, run with the
+**What the host needs depends on how the factory runs there**, not only on
+the [sandbox](#the-agents-sandbox):
+
+| The factory runs | The host needs |
+|---|---|
+| as a plain binary (`run`, or `daemon` on a laptop or VM) | what the sandbox needs: nothing beyond the agent's tools without one, Docker for one, Docker and Sysbox for Docker inside |
+| as a container set up by `host install` | Docker always, because the factory itself is a container; Sysbox only for a sandbox with Docker inside |
+| as a container on the team's own platform | nothing on the nodes: no sandbox, so no Docker socket and no privileges |
+
+With `host install`, the factory ships as a container image holding the
+binary, every tool its own steps need (git, ssh, Node for
+`deploy/cfworkers`) and what Hinziel's sandbox base image gives an agent
+(Claude Code, …). Without a sandbox, each run's agent works in the
+factory's container, so its project needs nothing more than that image; one
+that does, such as PHP or a dev stack, asks for a sandbox. With one, each
+run's agent works in a second container, run with the
 [Sysbox](https://github.com/nestybox/sysbox) runtime if it has Docker
 inside. Ubuntu 22.04 and 24.04 are the reference, but any Linux that Docker
 (and Sysbox) supports works.
@@ -1294,6 +1303,9 @@ each level asks more of the host:
 | nil (the default) | on the factory's host, as the factory's user | only the agent's tools: Claude Code and what the project needs |
 | `&hinziel.Sandbox{}` | in a container of its own per run, Hinziel's base image plus the factory's `Dockerfile` lines | Docker |
 | `&hinziel.Sandbox{Docker: true}` | the same, with a Docker daemon of its own inside, for the app's dev stack | Docker and [Sysbox](https://github.com/nestybox/sysbox) |
+
+That's what the sandbox asks; how the factory itself runs may ask more
+(`host install` always needs Docker; see [Hosting a factory](#hosting-a-factory)).
 
 **Without a sandbox** the host is the sandbox. That fits a host that holds
 the factory alone and one run at a time, such as a pod in a cluster the team
