@@ -159,6 +159,20 @@ func (x *execution) repoConfig(name string) (Repo, error) {
 }
 
 func (x *execution) prepareWorkspace(ctx context.Context) error {
+	if envUp(x.r) {
+		// No ticket, no branch of its own: the target branches as they are.
+		for _, cfg := range x.p.Repos {
+			ws, err := x.repo(ctx, cfg.Name)
+			if err != nil {
+				return err
+			}
+			if err := ws.CheckoutBranch(ctx, cfg.TargetBranch, "origin/"+cfg.TargetBranch); err != nil {
+				return fmt.Errorf("repo %s: %w", cfg.Name, err)
+			}
+			x.logf(StepPrepareWorkspace, "%s: %s", cfg.Name, cfg.TargetBranch)
+		}
+		return nil
+	}
 	if x.r.Branch == "" {
 		if f := x.p.Settings.BranchName; f != nil {
 			x.r.Branch = f(x.r.Ticket)
@@ -191,16 +205,21 @@ func (x *execution) prepareWorkspace(ctx context.Context) error {
 }
 
 func (x *execution) provisionEnvironment(ctx context.Context) error {
-	name := names.Env(x.p.Name, x.r.Ticket.Key)
+	// `env up` names its environment as a ticket with its key would be.
+	t, label := x.r.Ticket, "hinziel-ticket"
+	if envUp(x.r) {
+		t, label = &tracker.Ticket{Key: x.r.Request.EnvKey}, "hinziel-env-up"
+	}
+	name := names.Env(x.p.Name, t.Key)
 	if f := x.p.Settings.EnvName; f != nil {
-		name = f(x.r.Ticket)
+		name = f(t)
 	}
 	if err := x.e.tearingDownErr(x.p.Name, name); err != nil {
 		return err
 	}
 	spec := env.Spec{Name: name, Labels: map[string]string{
 		"hinziel-factory": x.p.Name,
-		"hinziel-ticket":  x.r.Ticket.Key,
+		label:             t.Key,
 		"hinziel-run":     string(x.r.ID),
 	}}
 	e, err := x.p.Provisioner.Ensure(ctx, spec)
@@ -303,6 +322,10 @@ func (x *execution) deployAll(ctx context.Context, skipDeployed bool) ([]string,
 // remoteBranch is the branch a repo's HEAD is deployed from: the run branch
 // once it has been pushed, else the target branch it started from.
 func (x *execution) remoteBranch(ctx context.Context, ws *workspace.Repo, repo string) (string, error) {
+	if x.r.Branch == "" { // env up
+		cfg, err := x.repoConfig(repo)
+		return cfg.TargetBranch, err
+	}
 	pushed, err := ws.RemoteBranchExists(ctx, x.r.Branch)
 	if err != nil || pushed {
 		return x.r.Branch, err

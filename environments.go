@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"text/tabwriter"
 	"time"
+
+	"github.com/Tight-Line/hinziel/run"
 )
 
-// environments runs `env list` and `env destroy`.
+// environments runs `env up`, `env list` and `env destroy`.
 func (c *cli) environments(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: env list [--all] | env destroy [--factory F] <run-id | env-name | ticket>")
+		return errors.New("usage: env up [--factory F] [key] | env list [--all] | env destroy [--factory F] <run-id | env-name | ticket>")
 	}
 	switch args[0] {
 	case "list":
@@ -19,9 +21,46 @@ func (c *cli) environments(ctx context.Context, args []string) error {
 	case "destroy":
 		return c.envDestroy(ctx, args[1:])
 	case "up":
-		return errors.New("env up: not implemented yet (milestone M2)")
+		return c.envUp(ctx, args[1:])
 	}
-	return fmt.Errorf("unknown env command %q (list or destroy)", args[0])
+	return fmt.Errorf("unknown env command %q (up, list or destroy)", args[0])
+}
+
+// envUpKey is the key `env up` uses when none is given.
+const envUpKey = "base"
+
+// envUp provisions an environment and deploys the target branches to it,
+// with no ticket: a run that only does that. Running it again for the same
+// key deploys the target branches' latest commits to the same environment.
+func (c *cli) envUp(ctx context.Context, args []string) error {
+	fs := c.flags("env up")
+	factory := fs.String("factory", "", "factory to use (needed when the binary has several)")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) > 1 {
+		return errors.New("usage: env up [--factory F] [key]")
+	}
+	key := envUpKey
+	if len(pos) == 1 {
+		key = pos[0]
+	}
+	name, err := c.pickFactory(*factory)
+	if err != nil {
+		return err
+	}
+	r, err := c.eng.Submit(ctx, run.Request{Factory: name, EnvKey: key, RequestedBy: "cli:" + username()})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "run %s\n", r.ID)
+	err = c.eng.Execute(ctx, r.ID)
+	if err == nil {
+		err = c.follow(ctx, r.ID)
+	}
+	c.report(ctx, r.ID)
+	return err
 }
 
 func (c *cli) envList(ctx context.Context, args []string) error {
@@ -44,6 +83,7 @@ func (c *cli) envList(ctx context.Context, args []string) error {
 	for _, en := range envs {
 		ticket, latest, state, since := "", "", "exists", ""
 		if s := en.Latest; s != nil {
+			ticket = "-" // env up
 			if s.Ticket != nil {
 				ticket = s.Ticket.Key
 			}

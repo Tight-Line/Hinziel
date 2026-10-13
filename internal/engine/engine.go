@@ -83,22 +83,30 @@ func (e *Engine) Store() *store.FS { return e.store }
 // unfinished statuses block a new run for the same ticket.
 var unfinished = []run.Status{run.StatusQueued, run.StatusRunning, run.StatusAwaitingApproval, run.StatusNeedsInput, run.StatusWaiting, run.StatusFailed}
 
-// Submit records a new queued run. It refuses if the ticket already has an
-// unfinished run, because both would fight over the same branch and environment.
+// Submit records a new queued run. It refuses if the ticket, or for `env up`
+// the key, already has an unfinished run, because both would fight over the
+// same branch and environment.
 func (e *Engine) Submit(ctx context.Context, req run.Request) (*run.Run, error) {
 	if _, ok := e.projects[req.Factory]; !ok {
 		return nil, fmt.Errorf("unknown factory %q", req.Factory)
 	}
-	if req.Ticket.ID == "" {
+	filter := run.Filter{Factory: req.Factory, Ticket: &req.Ticket, Status: unfinished, Limit: 1}
+	what := "ticket " + req.Ticket.ID
+	switch {
+	case req.Ticket.ID != "" && req.EnvKey != "":
+		return nil, errors.New("a run is for a ticket or for `env up`, not both")
+	case req.EnvKey != "":
+		filter.EnvKey, what = req.EnvKey, "env up "+req.EnvKey
+	case req.Ticket.ID == "":
 		return nil, errors.New("no ticket given")
 	}
-	existing, err := e.store.List(ctx, run.Filter{Factory: req.Factory, Ticket: &req.Ticket, Status: unfinished, Limit: 1})
+	existing, err := e.store.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 	if len(existing) > 0 {
-		return nil, fmt.Errorf("ticket %s already has run %s (%s); resume or cancel it first",
-			req.Ticket.ID, existing[0].ID, existing[0].Status)
+		return nil, fmt.Errorf("%s already has run %s (%s); resume or cancel it first",
+			what, existing[0].ID, existing[0].Status)
 	}
 	now := e.opts.Now()
 	r := &run.Run{Request: req}
@@ -141,7 +149,11 @@ func (e *Engine) Execute(ctx context.Context, id run.ID) error {
 		if err := x.save(ctx); err != nil {
 			return err
 		}
-		x.logf("", "run %s started for ticket %s", r.ID, r.Request.Ticket.ID)
+		if envUp(r) {
+			x.logf("", "run %s started for env up %s", r.ID, r.Request.EnvKey)
+		} else {
+			x.logf("", "run %s started for ticket %s", r.ID, r.Request.Ticket.ID)
+		}
 		x.emit(ctx, notify.EventRunStarted)
 	case run.StatusRunning:
 		x.logf("", "run %s continuing", r.ID)
@@ -532,7 +544,16 @@ func (x *execution) wait(ctx context.Context, rec *run.StepRecord, w *core.WaitE
 	return nil
 }
 
+// envUp reports whether r is a run of `env up`, which has no ticket.
+func envUp(r *run.Run) bool { return r.Request.EnvKey != "" }
+
+// envUpSteps are the steps a run of `env up` executes.
+var envUpSteps = []string{StepPrepareWorkspace, StepProvisionEnvironment, StepDeployBase}
+
 func (x *execution) skipReason(name string) string {
+	if envUp(x.r) && !slices.Contains(envUpSteps, name) {
+		return "env up"
+	}
 	if slices.Contains(x.p.Settings.DisabledSteps, name) {
 		return "disabled"
 	}
@@ -565,10 +586,18 @@ func (x *execution) gated(name string) bool {
 // emit sends an event to every notifier subscribed to it. Notifier failures
 // are logged, never fatal.
 func (x *execution) emit(ctx context.Context, typ notify.EventType) {
+	if envUp(x.r) { // see emitEvent; its messages assume a ticket
+		return
+	}
 	x.emitEvent(ctx, &notify.Event{Type: typ, Run: x.r.Snapshot, Message: eventMessage(x.r, typ)})
 }
 
+// A run of `env up` notifies nobody: it has no ticket to comment on, and
+// whoever started it follows it in the terminal.
 func (x *execution) emitEvent(ctx context.Context, ev *notify.Event) {
+	if envUp(x.r) {
+		return
+	}
 	for _, n := range x.p.Notifiers {
 		if len(n.On) > 0 && !slices.Contains(n.On, ev.Type) {
 			continue
@@ -589,6 +618,9 @@ func (x *execution) ticketID() string {
 
 // ticketComment posts on the ticket; failures are logged.
 func (x *execution) ticketComment(ctx context.Context, msg core.Message) {
+	if envUp(x.r) {
+		return
+	}
 	if err := x.p.Tracker.Comment(ctx, x.ticketID(), msg); err != nil {
 		x.logf("", "commenting on the ticket failed: %v", err)
 	}
@@ -597,7 +629,7 @@ func (x *execution) ticketComment(ctx context.Context, msg core.Message) {
 // moveTicket moves the ticket if the tracker supports it; failures are logged.
 func (x *execution) moveTicket(ctx context.Context, stage tracker.Stage) {
 	m, ok := x.p.Tracker.(tracker.StageMover)
-	if !ok {
+	if !ok || envUp(x.r) {
 		return
 	}
 	if err := m.MoveTo(ctx, x.ticketID(), stage); err != nil {

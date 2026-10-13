@@ -172,6 +172,8 @@ Commands:
   host install-daemon --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
                                  install or update the factory on a server: Docker, Sysbox if needed, the
                                  config and the binary, and daemon in a container
+  env up [--factory F] [key]     provision an environment and deploy the target branches to it, without
+                                 a ticket; named as a ticket with this key would be (default "base")
   env list [--all]               list environments, and orphans the provisioners still have
   env destroy [--factory F] <run-id | env-name | ticket>
                                  tear down an environment (not while a run may still use it)

@@ -222,8 +222,11 @@ func eventMessage(r *run.Run, typ notify.EventType) core.Message {
 // subject names a run in notification titles: "<factory> <ticket key>".
 func subject(r *run.Run) string {
 	key := r.Request.Ticket.ID
-	if r.Ticket != nil {
+	switch {
+	case r.Ticket != nil:
 		key = r.Ticket.Key
+	case envUp(r):
+		key = "env up " + r.Request.EnvKey
 	}
 	return r.Factory + " " + key
 }

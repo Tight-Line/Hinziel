@@ -190,6 +190,9 @@ func (c *cli) status(ctx context.Context, args []string) error {
 	fmt.Fprintln(w, "RUN\tFACTORY\tTICKET\tSTATUS\tSTEP\tUPDATED")
 	for _, s := range runs {
 		ticket := ""
+		if s.Ticket == nil && s.Environment != nil {
+			ticket = "-" // env up
+		}
 		if s.Ticket != nil {
 			ticket = s.Ticket.Key
 		}
@@ -202,9 +205,12 @@ func (c *cli) detail(r *run.Run) {
 	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Run\t%s\n", r.ID)
 	fmt.Fprintf(w, "Factory\t%s\n", r.Factory)
-	if r.Ticket != nil {
+	switch {
+	case r.Ticket != nil:
 		fmt.Fprintf(w, "Ticket\t%s: %s %s\n", r.Ticket.Key, r.Ticket.Title, r.Ticket.URL)
-	} else {
+	case r.Request.EnvKey != "":
+		fmt.Fprintf(w, "Env up\t%s\n", r.Request.EnvKey)
+	default:
 		fmt.Fprintf(w, "Ticket\t%s\n", r.Request.Ticket.ID)
 	}
 	fmt.Fprintf(w, "Status\t%s\n", r.Status)

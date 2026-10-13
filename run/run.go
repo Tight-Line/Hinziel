@@ -20,6 +20,10 @@ type Request struct {
 	Ticket      tracker.TicketRef `json:"ticket"`
 	RequestedBy string            `json:"requested_by"`    // free-form: "cli:lpapez", "trello:<memberId>"
 	Gates       []string          `json:"gates,omitempty"` // step names; override the factory's gates for this run
+	// EnvKey is set by `env up` instead of Ticket: the run has no ticket. It
+	// provisions the environment the factory would name for a ticket with
+	// this key and deploys the target branches to it, and does nothing else.
+	EnvKey string `json:"env_key,omitempty"`
 }
 
 type Status string
@@ -98,6 +102,7 @@ type Store interface {
 type Filter struct {
 	Factory string
 	Ticket  *tracker.TicketRef
+	EnvKey  string // runs of `env up` with this key
 	Status  []Status
 	Limit   int
 }

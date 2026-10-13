@@ -146,6 +146,9 @@ func matches(r *run.Run, f run.Filter) bool {
 			return false
 		}
 	}
+	if f.EnvKey != "" && r.Request.EnvKey != f.EnvKey {
+		return false
+	}
 	if len(f.Status) > 0 && !slices.Contains(f.Status, r.Status) {
 		return false
 	}

@@ -545,7 +545,7 @@ third-party module) follow the same interfaces and are used the same way.
 | [`core/remote`](./core/remote) | SSH exec, file writes and directory upload through the system `ssh`; `remotetest.LocalSSH` runs them locally in tests. Public, because components outside this repository need it too |
 | [`internal/apiclient`](./internal/apiclient) | the JSON-over-HTTP client the components here share; 429 and 5xx become `core.RetryableError` |
 
-There is no `trigger/triggertest` yet; it comes with `daemon` (M2).
+There is no `trigger/triggertest` yet.
 
 ### Design rules
 
@@ -1166,7 +1166,7 @@ learns from.
                                        # tear down environments by the factories' Teardown
 <factory> host install-daemon --env-file F [--binary B] [--runs N] [--ssh-key K] [--force] <[user@]host[:port]>
                                        # install or update the factory on a server
-<factory> env up [--factory F]         # provision + deploy the target branches, without a ticket (M2)
+<factory> env up [--factory F] [key]   # provision + deploy the target branches, without a ticket
 <factory> env list [--all]             # environments the runs know (--all: destroyed ones too), and orphans
 <factory> env destroy [--factory F] <run-id | env-name | ticket>   # tear one down
 
@@ -1182,6 +1182,13 @@ next check and beyond. A run executing in one process is
 locked; `resume` and `cancel` refuse it until that process stops (Ctrl-C
 leaves the run `failed`, ready to resume, or still `waiting` if it was). A run whose process died is not
 locked and resumes normally. Running in the background arrives with [`daemon`](#the-daemon).
+
+`env up` brings up an environment with no ticket and no agent: a run that
+checks out the target branches, provisions the environment a ticket with
+`key` (default `base`) would get, so the factory's naming and DNS limits
+apply, and deploys to it. Running it again for the same key deploys the
+target branches' latest commits to the same environment. It notifies nobody;
+`status`, `logs`, `resume`, `env list` and `env destroy` work as for any run.
 
 [`examples/demo`](./examples/demo) is a factory built entirely from fakes, to
 try the CLI without any accounts.
@@ -1233,10 +1240,10 @@ command at a time. It:
   `@<member> implement` on a card), which need no inbound traffic at all,
   so the daemon can run on a laptop;
 - **executes runs in the background**, up to `--runs N` at once (default
-  1; *planned for M2*, together with the [sandbox](#the-agents-sandbox),
-  which is what makes parallel runs safe: each agent has its own container,
-  ports and Docker. Without one, parallel agents share the host, which is
-  safe only for agents that start nothing). Size N to the host: every run
+  1). The [sandbox](#the-agents-sandbox) is what makes parallel runs safe:
+  each agent has its own container, ports and Docker. Without one, parallel
+  agents share the host, which is safe only for agents that start nothing.
+  Size N to the host: every run
   in progress holds a sandbox, often with the app's whole dev stack inside,
   and an environment in the cloud. Parallel agents also share the agent's subscription limits,
   if it has them. Two runs for the same ticket never run together; the
@@ -1284,7 +1291,8 @@ Three things tear one down:
   (`tracker.DoneChecker`; for Trello, the card is in `tracker.StageDone`'s
   list or has its label, or is archived or deleted). `After` destroys it a
   while after the ticket's latest run last changed, a backstop for tickets
-  that never get done.
+  that never get done. Environments from `env up` have no ticket, so only
+  `After` applies to them.
 
 None of them destroys an environment while its ticket has an unfinished run,
 other than a failed one: cancel the run first. A run that reaches
@@ -1295,7 +1303,7 @@ environment's [human actions](#human-actions) as a reminder to undo them.
 
 ### Hosting a factory
 
-*Planned for M2.* The daemon needs an always-on host: a server that
+The daemon needs an always-on host: a server that
 `host install-daemon` prepares, or a container platform the team already runs.
 On a server, installing it is the same everywhere; only routing traffic to
 it differs, and only when a trigger receives HTTP.
@@ -1457,7 +1465,7 @@ A factory whose triggers only poll, such as BlankTracker's
 
 ### The agent's sandbox
 
-*Planned for M2.* A factory chooses how much isolation its agent gets, and
+A factory chooses how much isolation its agent gets, and
 each level asks more of the host:
 
 | `Factory.Sandbox` | The agent runs | The host needs |
@@ -1556,7 +1564,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install-daemon`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; [per-environment certificates](#per-environment-certificates) ✅ (`cert.Issuer`, `cert/cloudflare`); `env up` |
+| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install-daemon`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; [per-environment certificates](#per-environment-certificates) ✅ (`cert.Issuer`, `cert/cloudflare`); `env up` ✅ |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |

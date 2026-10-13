@@ -214,3 +214,31 @@ func TestCLIEnvListAndDestroy(t *testing.T) {
 		t.Error("destroying it again must fail")
 	}
 }
+
+func TestCLIEnvUp(t *testing.T) {
+	t.Setenv("HINZIEL_STATE_DIR", t.TempDir())
+	f := cliFactory(t, func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		t.Error("env up must not start the agent")
+		return nil, nil
+	})
+	out, err := runCLI(t, f, "env", "up")
+	if err != nil || !strings.Contains(out, "succeeded") || !strings.Contains(out, "web: https://hz-demo-base.preview.test") {
+		t.Fatalf("env up: %v\n%s", err, out)
+	}
+	if out, err := runCLI(t, f, "env", "up", "staging"); err != nil || !strings.Contains(out, "hz-demo-staging.preview.test") {
+		t.Fatalf("env up staging: %v\n%s", err, out)
+	}
+	out, err = runCLI(t, f, "env", "list")
+	if err != nil || !regexp.MustCompile(`hz-demo-base\s+demo\s+-\s+\S+ \(succeeded\)\s+exists`).MatchString(out) {
+		t.Fatalf("env list: %v\n%s", err, out)
+	}
+	if out, err := runCLI(t, f, "status"); err != nil || strings.Count(out, "succeeded") != 2 {
+		t.Errorf("status: %v\n%s", err, out)
+	}
+	if out, err := runCLI(t, f, "env", "destroy", "hz-demo-base"); err != nil {
+		t.Fatalf("env destroy: %v\n%s", err, out)
+	}
+	if _, err := runCLI(t, f, "env", "up", "a", "b"); err == nil {
+		t.Error("env up takes one key at most")
+	}
+}
