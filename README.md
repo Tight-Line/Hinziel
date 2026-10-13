@@ -303,11 +303,32 @@ the run in `HINZIEL_RUN_ID` and the engine's socket in `HINZIEL_SOCKET`:
   (e.g. Salesforce clicks) into the working tree, for the agent to review,
   commit and push.
 
-Both commands send their request to the running engine over a Unix socket
-(in the system temp directory, because socket paths are limited to about 108
-bytes). They don't call the components themselves, so the engine
-records every deployment in the run state and only one process ever writes
-`run.json`.
+Both commands send their request to the running engine, which listens only
+while `implement` runs. They don't call the components themselves, so the
+agent never holds the factory's credentials, the engine enforces the deploy
+rules above whatever the agent's prompt says, it records every deployment in
+the run state, and only one process ever writes `run.json`.
+
+**Why a Unix socket.** It's an ordinary HTTP API (`POST /deploy`,
+`POST /retrieve`, JSON replies) served on a socket file in the run's agent
+directory instead of a TCP port:
+
+- **Access is who can reach the file:** the factory's user, and the run's
+  own sandbox, which has that directory mounted. A port on localhost would
+  be open to every process on the host, other runs' agents included, and
+  need a token per run.
+- **No ports to allocate:** parallel runs and the agent's dev stack can't
+  collide with it.
+- **Nothing on the network,** where a published port can end up open to the
+  internet (§10, question 5).
+- **The same in and out of the sandbox:** a bind-mounted file needs no
+  network path from the container to the host.
+- **It lives as long as `implement`:** the engine removes it afterwards.
+
+The cost: engine and agent must share a machine, and socket paths are
+limited to about 108 bytes, so a long one falls back to the system temp
+directory. An agent on another machine would need TCP with a per-run token
+(open question 14); the handlers wouldn't change.
 
 Notifications are **events**, not a step. The engine emits `run.started`,
 `run.succeeded`, `run.failed`, `run.needs_input`, `run.awaiting_approval` and
@@ -1625,6 +1646,16 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
     status, see [Run status](#run-status)). CI pipelines, app-store builds,
     environment bookings and change approvals take minutes to days (D4,
     12.5, 12.7). Still open: the daemon's scheduling of the checks (M2).
+14. **An agent on a machine of its own.** Today the agent runs next to its
+    engine, on the host or in a sandbox there, and reaches it over a Unix
+    socket ([Agent loop](#agent-loop)). Teams on Kubernetes will want a pod
+    per agent, or per run: the agent's resources sized and limited on their
+    own, and many runs spread over a cluster. That needs the engine's API
+    over TCP with a token per run, the run's checkouts on the agent's side
+    (cloned there, or a shared volume), and, for a pod per run, run state
+    outside the pod (a shared `run.Store`, see
+    [Hosting a factory](#hosting-a-factory)). The socket is enough until a
+    team asks.
 
 ### Per-environment certificates
 
