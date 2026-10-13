@@ -334,7 +334,7 @@ func TestEnsureCreatesTheOrgOnceAndInstallsThePackages(t *testing.T) {
 	if again.ID != e.ID || e.ID != "00D000000000001" {
 		t.Errorf("IDs %s, %s", e.ID, again.ID)
 	}
-	if e.State[StateUsername] != "test-1@example.com" || e.State[StateInstanceURL] != "https://test-1.scratch.my.salesforce.com" {
+	if e.State[StateUsername] != "test-1@example.com" || e.State[StateInstanceURL] != "https://test-1.scratch.my.salesforce.com" || e.Endpoints["org"] != e.State[StateInstanceURL] {
 		t.Errorf("state %v", e.State)
 	}
 	creates := f.calls("org create scratch")

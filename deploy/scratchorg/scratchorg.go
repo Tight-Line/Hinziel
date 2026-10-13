@@ -7,7 +7,8 @@
 // from the team's own scratch org definition, and each one's Dev Hub record
 // (ScratchOrgInfo) carries "hinziel:<environment name>" as its description,
 // so Ensure finds an org again from any run, and Destroy and List never touch
-// an org Hinziel didn't create.
+// an org Hinziel didn't create. On the host, the org's sf alias is the
+// environment's name, and its URL is the environment's "org" endpoint.
 //
 // Deploy deploys the project's package directories, assigns the permission
 // sets, runs Setup once per org (loading data isn't safe to repeat) and then
@@ -190,10 +191,11 @@ func (o *Org) Ensure(ctx context.Context, spec env.Spec) (*env.Environment, erro
 		return nil, err
 	}
 	return &env.Environment{
-		Name:     spec.Name,
-		Provider: "scratchorg",
-		ID:       info.ScratchOrg,
-		State:    map[string]string{StateUsername: info.SignupUsername, StateInstanceURL: org.InstanceURL},
+		Name:      spec.Name,
+		Provider:  "scratchorg",
+		ID:        info.ScratchOrg,
+		Endpoints: map[string]string{"org": org.InstanceURL},
+		State:     map[string]string{StateUsername: info.SignupUsername, StateInstanceURL: org.InstanceURL},
 	}, nil
 }
 
