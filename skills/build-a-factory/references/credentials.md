@@ -110,15 +110,25 @@ Verify with the calls given; all are read-only.
   also gives the **account ID**: fill it in), `GET
   /zones/<id>/dns_records` (count, naming patterns).
 
-### Cloudflare Origin CA (deploy/dockercompose TLS)
+### Cloudflare Origin CA (cert/cloudflare)
 
-- The zone → SSL/TLS → Origin Server → Create Certificate; defaults are
-  right (RSA 2048, `*.zone` and the apex, 15 years). The person saves the
-  certificate and the key to two files; the key is shown once.
-- Creating one changes nothing for existing servers or zone settings; only
-  revoking a certificate or changing the SSL mode would.
-- Verify: `openssl x509 -noout -subject -dates -ext subjectAltName`, and
-  that the key's public key matches the certificate's. `chmod 600` both.
+- Token: My Profile → API Tokens → Create Custom Token: Zone → SSL and
+  Certificates → Edit and Zone → Zone → Read, limited to the one zone. The
+  DNS token can carry these permissions too; a separate token keeps each
+  one's reach small. It can issue and revoke every Origin CA certificate of
+  the zone, production's too: say so, and set `AllowedNames` to the
+  previews' prefix.
+- Verify: `GET /zones?name=<zone>`, then `GET /certificates?zone_id=<id>`
+  (the zone's existing Origin CA certificates: note which ones production
+  uses, and that none of their hostname sets is exactly a preview's).
+- Fallback, for a team that won't grant the token: one shared certificate
+  (`TLS.CertFile`, `TLS.KeyFile`). The zone → SSL/TLS → Origin Server →
+  Create Certificate; the person saves the certificate and the key to two
+  files, and the key is shown once. Every preview then gets a copy of the
+  key, and a wildcard for the zone is valid for production's hostnames too:
+  tell the team, and prefer the token. Verify with `openssl x509 -noout
+  -subject -dates -ext subjectAltName`, check that the key matches, and
+  `chmod 600` both.
 
 ### Cloudflare Workers (deploy/cfworkers)
 

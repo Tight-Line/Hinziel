@@ -129,8 +129,10 @@ the person, each of:
   restrict the DNS component to that prefix (`AllowedNames: "hz-*"`) when
   the zone also serves production.
 - **TLS.** Proxied DNS in Full (strict) mode needs a certificate the proxy
-  trusts on the host (a Cloudflare Origin CA certificate for the zone's
-  wildcard, for example).
+  trusts on the host. Prefer one per environment from an issuer
+  (`dockercompose.TLS.Issuer` with `cert/cloudflare`): every preview runs
+  unreviewed code, and a shared key, worse a wildcard for the production
+  zone, is exposed on all of them.
 - **Data.** Where a preview's database comes from: migrations and seeds, a
   sanitised dump the team already maintains, a copy of staging. Check what
   the dump actually holds: BlankTracker's vibe dump had reference data

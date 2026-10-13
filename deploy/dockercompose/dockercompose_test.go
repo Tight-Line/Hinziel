@@ -2,11 +2,15 @@ package dockercompose
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Tight-Line/hinziel/cert"
+	"github.com/Tight-Line/hinziel/cert/certtest"
 	"github.com/Tight-Line/hinziel/core/remote/remotetest"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/deploytest"
@@ -123,6 +127,65 @@ func TestDeploy(t *testing.T) {
 	}
 }
 
+func TestDeployIssuesACertificatePerEnvironment(t *testing.T) {
+	e, src, _ := setup(t)
+	e.Endpoints["nova"] = "https://hz-abc-nova.example.com/nova"
+	ca := certtest.NewFake()
+	names := []string{"hz-abc-api.example.com", "hz-abc-nova.example.com"}
+	d, base := newTestDeployer(t, Options{TLS: &TLS{Issuer: ca, Hostnames: EndpointHosts("api", "nova", "missing"), Upstream: "nginx:80"}})
+	tlsDir := filepath.Join(base, "hinziel", "tls")
+	pair := func() (string, string) {
+		return readFile(t, filepath.Join(tlsDir, "cert.pem")), readFile(t, filepath.Join(tlsDir, "key.pem"))
+	}
+	ctx := context.Background()
+
+	if _, err := d.Deploy(ctx, e, src); err != nil {
+		t.Fatal(err)
+	}
+	crt, key := pair()
+	if !cert.Current([]byte(crt), []byte(key), names, time.Now()) {
+		t.Fatalf("the certificate on the host isn't for %v", names)
+	}
+
+	// A redeploy reuses the key and certificate.
+	if _, err := d.Deploy(ctx, e, src); err != nil {
+		t.Fatal(err)
+	}
+	if c, k := pair(); c != crt || k != key || ca.Revoked() != 0 {
+		t.Error("a redeploy must reuse a current certificate")
+	}
+
+	// A host without its key (a recreated droplet) gets a new key, and the
+	// old certificate is revoked.
+	os.Remove(filepath.Join(tlsDir, "key.pem"))
+	if _, err := d.Deploy(ctx, e, src); err != nil {
+		t.Fatal(err)
+	}
+	if _, k := pair(); k == key || ca.Revoked() != 1 || ca.Current(names) != 1 {
+		t.Errorf("a lost key must be replaced: revoked %d, current %d", ca.Revoked(), ca.Current(names))
+	}
+
+	if err := d.Destroy(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	if ca.Current(names) != 0 {
+		t.Error("teardown must revoke the certificate")
+	}
+
+	ca.IssueErrs = []error{errors.New("CA down")}
+	os.Remove(filepath.Join(tlsDir, "key.pem"))
+	if _, err := d.Deploy(ctx, e, src); err == nil || !strings.Contains(err.Error(), "CA down") {
+		t.Errorf("a failed issue must fail the deploy: %v", err)
+	}
+}
+
+func TestDestroyWithoutIssuer(t *testing.T) {
+	e, _, _ := setup(t)
+	if err := New(Options{}).Destroy(context.Background(), e); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestDeployFailureCarriesOutput(t *testing.T) {
 	e, src, _ := setup(t)
 	bin := t.TempDir()
@@ -145,6 +208,14 @@ func TestCheck(t *testing.T) {
 	}
 	if err := New(Options{}).Check(context.Background()); err != nil {
 		t.Error(err)
+	}
+	both := New(Options{TLS: &TLS{Issuer: certtest.NewFake(), CertFile: "/nope/cert.pem", Upstream: "nginx:80"}})
+	if err := both.Check(context.Background()); err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Errorf("an Issuer and CertFile together must fail the check: %v", err)
+	}
+	issued := New(Options{TLS: &TLS{Issuer: certtest.NewFake(), Upstream: "nginx:80"}})
+	if err := issued.Check(context.Background()); err != nil {
+		t.Errorf("an Issuer needs no files: %v", err)
 	}
 }
 

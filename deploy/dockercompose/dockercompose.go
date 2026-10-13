@@ -14,11 +14,13 @@
 // # Credentials
 //
 // It reaches the host with the environment's SSH access, so it needs no
-// credentials of its own. With TLS, it needs the certificate and key files:
-// for Cloudflare's "Full (strict)" mode, a Cloudflare Origin CA certificate
-// (the zone → SSL/TLS → Origin Server → "Create Certificate"; the key is
-// shown only once). Whatever the app itself needs to run (API keys, OAuth
-// clients) goes into EnvFile or Env; list it from the app's .env.example.
+// credentials of its own. With TLS, it needs either an Issuer, with the
+// credentials that issuer documents (cert/cloudflare for Cloudflare's
+// "Full (strict)" mode), or one certificate and key shared by every
+// environment: for Cloudflare, an Origin CA certificate (the zone → SSL/TLS
+// → Origin Server → "Create Certificate"; the key is shown only once).
+// Whatever the app itself needs to run (API keys, OAuth clients) goes into
+// EnvFile or Env; list it from the app's .env.example.
 package dockercompose
 
 import (
@@ -27,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -34,6 +37,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tight-Line/hinziel/cert"
 	"github.com/Tight-Line/hinziel/core"
 	"github.com/Tight-Line/hinziel/core/remote"
 	"github.com/Tight-Line/hinziel/deploy"
@@ -76,10 +80,21 @@ type Options struct {
 // TLS terminates HTTPS on the host and proxies to a service of the stack.
 // With Cloudflare proxying in "Full (strict)" mode, a Cloudflare Origin CA
 // certificate is enough.
+//
+// The certificate comes from Issuer, or from CertFile and KeyFile. With an
+// Issuer, each environment gets a key of its own, generated here and kept
+// only on the environment's host, and a certificate for exactly its
+// Hostnames. Later deploys reuse them until a third of the certificate's
+// lifetime is left, and teardown revokes it. With CertFile and KeyFile,
+// every environment gets a copy of the same key.
 type TLS struct {
-	CertFile string // PEM certificate (chain) on the Hinziel host
-	KeyFile  string // PEM private key on the Hinziel host
-	Upstream string // "service:port" of the stack to proxy to, e.g. "nginx:80"
+	Issuer cert.Issuer
+	// Hostnames the certificate is for; nil = the hosts of every endpoint.
+	// See EndpointHosts.
+	Hostnames func(e *env.Environment) []string
+	CertFile  string // PEM certificate (chain) on the Hinziel host
+	KeyFile   string // PEM private key on the Hinziel host
+	Upstream  string // "service:port" of the stack to proxy to, e.g. "nginx:80"
 	// Network is the compose network Upstream is on; "" = the project's
 	// default network.
 	Network string
@@ -100,6 +115,19 @@ type ReturnCookie struct {
 	Paths  []string // exact paths that start a login, e.g. "/auth/google"
 }
 
+// EndpointHosts returns the hosts of the named endpoints, for TLS.Hostnames.
+func EndpointHosts(names ...string) func(e *env.Environment) []string {
+	return func(e *env.Environment) []string {
+		var hosts []string
+		for _, n := range names {
+			if u, err := url.Parse(e.Endpoints[n]); err == nil && u.Hostname() != "" {
+				hosts = append(hosts, u.Hostname())
+			}
+		}
+		return hosts
+	}
+}
+
 // Exec is a command run with `docker compose exec` in a running service.
 type Exec struct {
 	Service string
@@ -113,8 +141,9 @@ type Deployer struct {
 }
 
 var (
-	_ deploy.Deployer = (*Deployer)(nil)
-	_ core.Checker    = (*Deployer)(nil)
+	_ deploy.Deployer  = (*Deployer)(nil)
+	_ deploy.Destroyer = (*Deployer)(nil)
+	_ core.Checker     = (*Deployer)(nil)
 )
 
 // New returns a compose deployer.
@@ -153,7 +182,7 @@ func (d *Deployer) Deploy(ctx context.Context, e *env.Environment, src *deploy.S
 		files = append(files, f)
 	}
 	if d.opts.TLS != nil {
-		f, err := d.writeTLS(ctx, h, genDir)
+		f, err := d.writeTLS(ctx, h, e, genDir)
 		if err != nil {
 			return nil, err
 		}
@@ -230,24 +259,80 @@ func (d *Deployer) project(e *env.Environment, repo string) string {
 	return strings.Trim(projectUnsafe.ReplaceAllString(strings.ToLower(e.Name+"-"+repo), "-"), "-")
 }
 
-func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, genDir string) (string, error) {
+func (d *Deployer) writeTLS(ctx context.Context, h *remote.Host, e *env.Environment, genDir string) (string, error) {
 	t := d.opts.TLS
-	cert, err := os.ReadFile(t.CertFile)
-	if err != nil {
-		return "", fmt.Errorf("TLS certificate: %w", err)
-	}
-	key, err := os.ReadFile(t.KeyFile)
-	if err != nil {
-		return "", fmt.Errorf("TLS key: %w", err)
-	}
 	dir := genDir + "/tls"
-	for name, data := range map[string][]byte{"cert.pem": cert, "key.pem": key, "nginx.conf": []byte(tlsConf(t))} {
+	crt, key, err := d.certificate(ctx, h, e, dir)
+	if err != nil {
+		return "", err
+	}
+	for name, data := range map[string][]byte{"cert.pem": crt, "key.pem": key, "nginx.conf": []byte(tlsConf(t))} {
 		if err := h.WriteFile(ctx, dir+"/"+name, data, 0o600); err != nil {
 			return "", err
 		}
 	}
 	f := genDir + "/tls.yaml"
 	return f, h.WriteFile(ctx, f, []byte(tlsCompose(t, dir)), 0o644)
+}
+
+// certificate returns the certificate and key for e: the shared files, or
+// with an Issuer, the ones already on the host if they're current, or else
+// a new key and certificate.
+func (d *Deployer) certificate(ctx context.Context, h *remote.Host, e *env.Environment, dir string) (crt, key []byte, err error) {
+	t := d.opts.TLS
+	if t.Issuer == nil {
+		if crt, err = os.ReadFile(t.CertFile); err != nil {
+			return nil, nil, fmt.Errorf("TLS certificate: %w", err)
+		}
+		if key, err = os.ReadFile(t.KeyFile); err != nil {
+			return nil, nil, fmt.Errorf("TLS key: %w", err)
+		}
+		return crt, key, nil
+	}
+	names := d.hostnames(e)
+	if len(names) == 0 {
+		return nil, nil, fmt.Errorf("environment %s has no hostnames for a TLS certificate", e.Name)
+	}
+	// A missing file reads as empty, which is never current.
+	read := func(f string) []byte {
+		out, _ := h.Output(ctx, "cat "+remote.Quote(dir+"/"+f)+" 2>/dev/null || true")
+		return []byte(out)
+	}
+	if crt, key = read("cert.pem"), read("key.pem"); cert.Current(crt, key, names, time.Now()) {
+		return crt, key, nil
+	}
+	key, csr, err := cert.NewRequest(names)
+	if err != nil {
+		return nil, nil, err
+	}
+	if crt, err = t.Issuer.Issue(ctx, names, csr); err != nil {
+		return nil, nil, fmt.Errorf("TLS certificate: %w", err)
+	}
+	return crt, key, nil
+}
+
+func (d *Deployer) hostnames(e *env.Environment) []string {
+	if d.opts.TLS.Hostnames != nil {
+		return d.opts.TLS.Hostnames(e)
+	}
+	return EndpointHosts(slices.Sorted(maps.Keys(e.Endpoints))...)(e)
+}
+
+// Destroy revokes the environment's certificate, if an Issuer issued it.
+// The files on the host go with the environment.
+func (d *Deployer) Destroy(ctx context.Context, e *env.Environment) error {
+	t := d.opts.TLS
+	if t == nil || t.Issuer == nil {
+		return nil
+	}
+	names := d.hostnames(e)
+	if len(names) == 0 {
+		return nil
+	}
+	if err := t.Issuer.Revoke(ctx, names); err != nil {
+		return fmt.Errorf("revoking the TLS certificate: %w", err)
+	}
+	return nil
 }
 
 // tlsConf proxies HTTPS to t.Upstream. The upstream is resolved per request
@@ -307,9 +392,10 @@ func tlsCompose(t *TLS, dir string) string {
 	return b.String()
 }
 
-// Check verifies the options, that the TLS files are readable and that ssh
-// is installed. Docker itself runs on the environment's host, not here.
-func (d *Deployer) Check(context.Context) error {
+// Check verifies the options, that the TLS files are readable or the Issuer
+// works, and that ssh is installed. Docker itself runs on the environment's
+// host, not here.
+func (d *Deployer) Check(ctx context.Context) error {
 	ssh := "ssh"
 	if len(d.ssh) > 0 {
 		ssh = d.ssh[0]
@@ -334,9 +420,20 @@ func (d *Deployer) Check(context.Context) error {
 				}
 			}
 		}
-		for _, f := range []string{t.CertFile, t.KeyFile} {
-			if _, err := os.Stat(f); err != nil {
-				errs = append(errs, fmt.Errorf("TLS: %w", err))
+		switch {
+		case t.Issuer != nil && (t.CertFile != "" || t.KeyFile != ""):
+			errs = append(errs, errors.New("TLS takes an Issuer or CertFile and KeyFile, not both"))
+		case t.Issuer != nil:
+			if c, ok := t.Issuer.(core.Checker); ok {
+				if err := c.Check(ctx); err != nil {
+					errs = append(errs, fmt.Errorf("TLS: %w", err))
+				}
+			}
+		default:
+			for _, f := range []string{t.CertFile, t.KeyFile} {
+				if _, err := os.Stat(f); err != nil {
+					errs = append(errs, fmt.Errorf("TLS: %w", err))
+				}
 			}
 		}
 	}

@@ -495,6 +495,7 @@ and the plain data types around it.
 | [`agent`](./agent/agent.go) | `Agent`; `Task`, `Checkout`, `Outcome`, `Usage` | tracker, env |
 | [`env`](./env/env.go) | `Provisioner` + optional `Lister`; `Spec`, `Environment` (with `Endpoints`, `Actions`), `Host`, `SSHAccess`, `Action` | — |
 | [`dns`](./dns/dns.go) | `Provider`; `Record` | — |
+| [`cert`](./cert/cert.go) | `Issuer`; `NewRequest`, `Current` | — |
 | [`deploy`](./deploy/deploy.go) | `Deployer` + optional `Retriever`, `Destroyer`; `Source`, `Deployment` | env, tracker |
 | [`run`](./run/run.go) | `ID`, `Request`, `Status`, `Snapshot`, `Run`, `StepRecord`, `Store`, `Filter` | tracker, forge, env, deploy, agent |
 | [`notify`](./notify/notify.go) | `Notifier`; `Event`, `EventType`, the `Finished` / `Problems` event sets | core, run |
@@ -535,7 +536,7 @@ third-party module) follow the same interfaces and are used the same way.
 
 | Package | Purpose |
 |---|---|
-| [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§8) |
+| [`tracker/trackertest`](./tracker/trackertest), [`forge/forgetest`](./forge/forgetest), [`env/envtest`](./env/envtest), [`dns/dnstest`](./dns/dnstest), [`cert/certtest`](./cert/certtest), [`deploy/deploytest`](./deploy/deploytest), [`notify/notifytest`](./notify/notifytest) | public: an in-memory `Fake` and a conformance suite `Run(t, …)` per interface (§8) |
 | [`agent/agenttest`](./agent/agenttest) | public: a scriptable fake agent. No conformance suite; agents are tested end to end |
 | [`internal/engine`](./internal/engine) | pipeline, steps, run state machine, gates, retries, the agent's Unix socket |
 | [`internal/store`](./internal/store) | `run.Store` on the filesystem, plus the per-run lock |
@@ -715,6 +716,7 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent/claudecode"
+	originca "github.com/Tight-Line/hinziel/cert/cloudflare"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/cfworkers"
 	"github.com/Tight-Line/hinziel/deploy/dockercompose"
@@ -826,11 +828,17 @@ func main() {
 						"GOOGLE_CLIENT_SECRET": googleSecret,
 					}
 				},
-				TLS: &dockercompose.TLS{ // Cloudflare Origin CA certificate for *.blanktracker.com
-					CertFile: hinziel.Env("ORIGIN_CERT_FILE"),
-					KeyFile:  hinziel.Env("ORIGIN_KEY_FILE"),
-					Upstream: "nginx:80",
-					Network:  "blanktracker", // the network vibe.docker-compose.yaml puts nginx on
+				TLS: &dockercompose.TLS{
+					// A Cloudflare Origin CA certificate per preview, for its
+					// own hostnames, revoked on teardown.
+					Issuer: originca.New(originca.Options{
+						Token:        hinziel.Env("CLOUDFLARE_CERT_TOKEN"),
+						Zone:         zone,
+						AllowedNames: "hz-*", // never production's certificates
+					}),
+					Hostnames: dockercompose.EndpointHosts("api", "nova"), // web is on workers.dev
+					Upstream:  "nginx:80",
+					Network:   "blanktracker", // the network vibe.docker-compose.yaml puts nginx on
 					// Names the preview a login started on, for the relay, on the
 					// paths where Nova's and the SPA's Google logins start.
 					ReturnCookie: &dockercompose.ReturnCookie{
@@ -1548,7 +1556,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 |---|---|
 | M0 ✅ | interface packages and the root `hinziel` package; conformance suites and fakes; engine (multi-repo), file store, git workspace; `run` / `status` / `logs` / `resume` / `approve` / `cancel` / `check`; the agent's `deploy` / `retrieve`; `examples/demo` |
 | M1 ✅ | Components and human actions, each passing its conformance suite against a fake of its API, and a real end-to-end run from BlankTracker's repository. Scenario A end to end from the CLI: `tracker/trello`, `forge/gitlab`, `agent/claudecode`, `env/digitalocean`, `dns/cloudflare`, `deploy/dockercompose`, `deploy/cfworkers`, `notify/ticket`, `notify/slack`, [human actions](#human-actions). The BlankTracker factory itself lives in BlankTracker's repository (`hinziel/`), not here |
-| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install-daemon`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; `env up`; [per-environment certificates](#per-environment-certificates) |
+| M2 | [`daemon`](#the-daemon) ✅ (with `trigger/trellocomments`); [teardown](#teardown) ✅ (`deploy.Destroyer`, `env list` / `env destroy`, `Factory.Teardown`, `teardown` comments); the factory as a container image and [`host install-daemon`](#hosting-a-factory) ✅ (Cloudflare Tunnel routing deferred: polling triggers don't need it); the [agent's sandbox](#the-agents-sandbox) ✅ (optional: a container per run, with Docker inside when the factory asks) and parallel runs (`daemon --runs N`) ✅; [per-environment certificates](#per-environment-certificates) ✅ (`cert.Issuer`, `cert/cloudflare`); `env up` |
 | M3 | Build-a-factory guide + Claude skill, and the conformance suites it relies on. Accepted when an agent rebuilds BlankTracker's factory from scratch with it |
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
@@ -1659,24 +1667,32 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 
 ### Per-environment certificates
 
-*Planned for M2.* Today Scenario A copies one wildcard Origin CA key to every
-droplet. Instead, `deploy/dockercompose`'s TLS option will be able to get a
-certificate for each environment from Cloudflare's Origin CA API:
+A TLS certificate shared by every environment puts the same key on every
+host that runs unreviewed code, and when it's a wildcard for the
+production zone, the key is valid for production's hostnames too. So
+`deploy/dockercompose` can get a certificate per environment from a
+`cert.Issuer` instead (`TLS.Issuer`); `cert/cloudflare` is one, for
+Cloudflare's Origin CA:
 
-- **Issue.** On the first deploy to an environment, generate a key on the
-  factory's host, send a CSR for exactly that environment's hostnames (taken
-  from `e.Endpoints`) and install the issued certificate. A leaked key then
+- **Issue.** On a deploy, the deployer generates a key, sends a CSR for exactly
+  the environment's hostnames (`TLS.Hostnames`, by default the hosts of
+  every endpoint) and writes the key and certificate to the environment's
+  host. The key never leaves the deployer and that host. A leaked key
   exposes one preview, for as long as it exists.
-- **Reuse.** Keep the key and certificate in the factory's state directory, per
-  environment, so later deploys reuse them. If they're lost, issue a new
-  certificate and revoke the old one, found by its hostnames, so no state is
-  needed to clean up.
-- **Revoke.** Teardown revokes the certificate, through `deploy.Destroyer`,
-  which runs before the provisioner's `Destroy`. `deploy/cfworkers` can use the same hook for its aliases (open
-  question 10).
-- **Credentials.** A Cloudflare token with SSL and Certificates:Edit on the
-  zone, in place of the certificate files. The shared certificate stays
-  available as an option for teams without one.
+- **Reuse.** Later deploys reuse the key and certificate on the host while
+  they match the hostnames and more than a third of the certificate's
+  lifetime is left (Origin CA certificates last 90 days by default). If
+  they're lost, as with a recreated droplet, the issuer revokes the old
+  certificate, found by its hostnames, and issues a new one. Nothing is
+  kept on the factory's host.
+- **Revoke.** Teardown revokes the certificate through `deploy.Destroyer`,
+  which runs before the provisioner's `Destroy`. `deploy/cfworkers` can use
+  the same hook for its aliases (open question 10).
+- **Credentials.** A Cloudflare token with Zone → SSL and Certificates → Edit
+  on the zone, in place of the certificate files. `AllowedNames` keeps the
+  issuer away from production's certificates, as it keeps `dns/cloudflare`
+  away from production's records. The shared certificate (`CertFile`,
+  `KeyFile`) stays available for teams without such a token.
 
 ---
 
@@ -1731,13 +1747,14 @@ on a droplet. A preview environment looks like this:
   `dns/cloudflare` refuses any name outside `hz-*`: a bug must not be able to
   rewrite `api.blanktracker.com`.
 - **TLS to the droplet.** The zone is in Full (strict) mode with proxied
-  records, so the droplet needs a certificate Cloudflare trusts. One
-  Cloudflare Origin CA certificate for `*.blanktracker.com` is kept on the
-  factory's host, and `deploy/dockercompose` adds a TLS proxy in front of the
-  stack's own nginx. Every droplet gets the same key, and each runs
-  unreviewed code, so one leak exposes them all. That's acceptable for the
-  first runs only: certificates per environment are planned for M2 (see
-  [Per-environment certificates](#per-environment-certificates)).
+  records, so the droplet needs a certificate Cloudflare trusts.
+  `deploy/dockercompose` adds a TLS proxy in front of the stack's own nginx,
+  with a Cloudflare Origin CA certificate for exactly the preview's two
+  hostnames and a key generated for it (see
+  [Per-environment certificates](#per-environment-certificates)). Each
+  droplet runs unreviewed code, so a key that leaks from one exposes that
+  preview only, and only until its teardown. The first runs copied one
+  certificate for `*.blanktracker.com` to every droplet instead.
 - **Previews are cheap and quiet.** The compose stack reads `.env`, which the
   deployer writes from a template in the factory: no third-party API keys,
   `ONSOCIAL_DISABLED` and `SCRAPECREATORS_DISABLED` set, mail to the log. An

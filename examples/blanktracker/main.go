@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tight-Line/hinziel"
 	"github.com/Tight-Line/hinziel/agent/claudecode"
+	originca "github.com/Tight-Line/hinziel/cert/cloudflare"
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/cfworkers"
 	"github.com/Tight-Line/hinziel/deploy/dockercompose"
@@ -80,8 +81,11 @@ func main() {
 					}
 				},
 				TLS: &dockercompose.TLS{
-					CertFile: hinziel.Env("ORIGIN_CERT_FILE"), KeyFile: hinziel.Env("ORIGIN_KEY_FILE"),
-					Upstream: "nginx:80", Network: "blanktracker",
+					Issuer: originca.New(originca.Options{
+						Token: hinziel.Env("CLOUDFLARE_CERT_TOKEN"), Zone: zone, AllowedNames: "hz-*",
+					}),
+					Hostnames: dockercompose.EndpointHosts("api", "nova"),
+					Upstream:  "nginx:80", Network: "blanktracker",
 					ReturnCookie: &dockercompose.ReturnCookie{Domain: "." + zone, Paths: []string{"/auth/google", "/api/auth/google"}},
 				},
 				PostDeploy: []dockercompose.Exec{{Service: "app", Command: "php artisan migrate --force"}},
