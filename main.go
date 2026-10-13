@@ -17,6 +17,7 @@ import (
 	"github.com/Tight-Line/hinziel/core"
 	"github.com/Tight-Line/hinziel/internal/engine"
 	"github.com/Tight-Line/hinziel/internal/envcheck"
+	"github.com/Tight-Line/hinziel/internal/protect"
 	"github.com/Tight-Line/hinziel/internal/sandbox"
 	"github.com/Tight-Line/hinziel/internal/store"
 )
@@ -24,7 +25,7 @@ import (
 // Main is the entry point of a factory binary. It validates the factories,
 // runs the command given on the command line and exits.
 func Main(factories ...Factory) {
-	protectEnvironment()
+	protect.Environment()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	err := Run(ctx, os.Args[1:], os.Stdout, factories...)
 	stop()
