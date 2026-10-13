@@ -124,7 +124,7 @@ scope until we choose to revisit it.
 - Multi-tenant/public SaaS deployment.
 - Production rollout. A factory's work ends at reviewed MRs and a working
   preview. Merging, canaries, feature flags and production deploys stay the
-  team's own pipeline (Scenario D).
+  team's own pipeline ([Scenario D](#11-reference-scenarios)).
 
 ---
 
@@ -605,7 +605,8 @@ whoever owns how the system is built and run. That works for one repo or
 fifty, keeps Hinziel's code and dependencies out of the apps, and gives the
 factory its own review and history. **The exception is a monorepo:** there
 the factory lives in a directory of it (e.g. `hinziel/`), next to the app it
-builds, as in Scenario A.
+builds, as in Scenario A. The examples below follow the
+[reference scenarios](#11-reference-scenarios).
 
 Secrets come from the environment through `hinziel.Env`. A missing variable
 doesn't fail on the spot: `Main` lists every missing one at once and exits
