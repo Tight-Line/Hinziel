@@ -133,7 +133,22 @@ and what BlankTracker showed.
   first check in an empty sandbox built the dev image for 15 minutes,
   longer than one command of the agent may take, so the factory's
   instructions tell it to run the check in the background. The lasting fix
-  is the team's: publish the dev image to a registry so a sandbox pulls it.
+  was the team's: the compiled PHP runtime became BuildKit cache in their
+  GitLab registry, written by CI and read by every compose file through
+  `cache_from`, rather than a separately published base image, so the
+  Dockerfile stayed the runtime's only definition and no tag needs
+  bumping. A missing or unreachable cache only warns and compiles. The
+  factory's part was the login: one `read_registry` deploy token, passed
+  to the sandbox through `AgentEnv` (the team's `./toolkit` logs in with
+  it) and to preview droplets through DigitalOcean `UserData`. With the
+  PHP extensions no longer compiled there, previews went from
+  `s-2vcpu-4gb` to `s-1vcpu-2gb`.
+- **Watch for:** a first-boot login runs in cloud-init, which may start
+  before dockerd answers, and fails without failing the run: the build
+  just compiles, slowly, on a droplet now sized for a cached build. Wait
+  for `docker info` before `docker login`. User data is readable from
+  the droplet's metadata and the provider's API, so give it a read-only
+  token.
 
 ## The agent inherits the host's access
 

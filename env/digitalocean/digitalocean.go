@@ -57,7 +57,10 @@ type Options struct {
 	SSHKeyPath string
 	SSHUser    string // "" = "root"
 	// UserData is a cloud-init script run on first boot. Ensure waits for
-	// cloud-init to finish before it returns.
+	// cloud-init to finish before it returns, but ignores its failures. It
+	// may start before the image's services (dockerd) answer, so wait for
+	// them in the script. Anyone on the droplet or with the API token can
+	// read it: keep the secrets in it read-only.
 	UserData string
 	Tags     []string // extra tags
 	VPC      string   // VPC UUID; "" = the region's default

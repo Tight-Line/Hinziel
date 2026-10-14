@@ -36,8 +36,8 @@ laptop, `/var/lib/hinziel/<factory>/state` on a host from `host
 install-daemon`); summarise it when asked, and point out anything the person
 should know, such as data sources the agent reached. The agent's sandbox,
 if it has one, is the container `hinziel-<factory>-<run id>` while it works. Its first
-check may take long while it builds the dev images; that's expected, not
-a hang.
+check may take long while it builds the dev images, unless the team shares
+them through a registry; that's expected, not a hang.
 
 Human actions are announced right after provisioning. Pass them on as soon
 as they appear, with exact values, so the person can do them while the

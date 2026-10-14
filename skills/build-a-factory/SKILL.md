@@ -133,9 +133,12 @@ Goal: the person confirms a plan and knows everything they'll be asked for.
    from nothing, and BlankTracker's took 15 minutes. If it's long, say it
    in the factory's `Instructions` (run the check in the background: a
    single command of the agent is stopped after 10 minutes), and suggest
-   the team publish its dev images to a registry so a sandbox pulls them
+   the team share its builds through a registry so a sandbox pulls them
    instead of building them. That's the team's change to make, not the
-   factory's.
+   factory's; the factory only passes a read-only registry token to
+   wherever images get built (`AgentEnv` for the sandbox, the
+   environment's first-boot script for previews). See
+   `references/friction.md`.
 8. **Where the factory runs: start from how the team runs things today.**
    Look first: Kubernetes manifests or Helm charts, Terraform, ECS task
    definitions, a compose file on a server, CI runners. Then ask how they
