@@ -1,8 +1,8 @@
 # Proving the flow with a first run
 
 The first real run proves the factory end to end, and it will find
-problems: in the factory, in the environment model, and in Hinziel. Plan
-for a few rounds of fix and resume.
+problems: in the factory, in Hinziel, and in what `ENVIRONMENT.md` says
+about how the team tries changes. Plan for a few rounds of fix and resume.
 
 ## Before starting
 

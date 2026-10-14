@@ -30,17 +30,20 @@ and what BlankTracker showed.
 - **BlankTracker:** post-deploy commands lived in `deploy-vibe.sh` only; the
   factory now runs them in the script's order.
 
-## A preview can't be a new environment
+## What a preview can be
 
-- **Look for:** a licensed product with one test instance, an appliance
-  or a mainframe, a partner integration that allows one host, data too
-  large or sensitive to copy, and a staging the team deploys branches to
-  by hand.
-- **Ask:** how they try a change today, who else deploys to that
-  environment, and how they coordinate. Offer their staging as the
-  preview (README, scenario E) and say what it gives up.
-- **BlankTracker:** not applicable: a droplet per ticket was cheap, and
-  everything the app needs could be created per preview.
+- **Look for:** how changes get tried today (a staging the team deploys
+  branches to by hand, review apps, scratch orgs, only locally), and what
+  rules a new environment out: a licensed product with one test
+  instance, an appliance or a mainframe, a partner integration that
+  allows one host, data too large or sensitive to copy.
+- **Ask:** how they try a change today, who tries it and what they must
+  check, who else deploys to that environment and how they coordinate.
+  Offer the smallest shape that's as useful as today's, their staging
+  (README, scenario E) included, and say what each gives up
+  (`references/preview.md`).
+- **BlankTracker:** a full environment per ticket: a droplet per ticket
+  was cheap, and everything the app needs could be created per preview.
 
 ## Where preview data comes from
 
@@ -155,7 +158,7 @@ and what BlankTracker showed.
 - **Look for:** SSH config entries, cloud CLIs logged in, MCP servers,
   repo skills that reach production replicas or internal APIs.
 - **Ask:** which of these the team means its agents to use, and which the
-  factory's agent should get on purpose (see SKILL.md, Phase 1 step 4).
+  factory's agent should get on purpose (see SKILL.md, Phase 2 step 1).
 - **BlankTracker:** the agent answered a ticket's question about real data
   from the production read-only replica, through the repo's
   `manager-reports` skill over the developer's SSH access. The team keeps

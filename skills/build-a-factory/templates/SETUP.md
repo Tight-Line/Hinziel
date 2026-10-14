@@ -15,24 +15,30 @@ recorded with the reason and who made them.
 | | The factory runs on <host>, <N> runs at once | | |
 | | Commits: <who branches, commits and pushes> | | |
 
-## Phase 1: plan
+## Phase 1: find out what a preview takes
 
-- [ ] Repositories and the team's process
-- [ ] Environment model (`ENVIRONMENT.md`) reviewed by <person>
+- [ ] Repositories and the team's process as written
+- [ ] How changes get tried today
+- [ ] How the app is deployed, from the evidence
 - [ ] Friction categories gone through (see `ENVIRONMENT.md`)
+- [ ] What a preview is, decided
+- [ ] `ENVIRONMENT.md` reviewed by <person>
+
+## Phase 2: plan the factory
+
 - [ ] What the agent may reach, decided
 - [ ] Components chosen
 - [ ] Triggers and notifications chosen
 - [ ] Plan confirmed
 
-## Phase 2: build and prove
+## Phase 3: build and prove
 
 - [ ] Factory written, builds
 - [ ] Env file written: `~/.config/hinziel/<factory>.env`
 - [ ] Credentials, each verified:
   - [ ] <component>: <what> (<verified facts: owner, scopes, expiry>)
 - [ ] Full `check` passes
-- [ ] Environment for the target branch up, parity checked
+- [ ] Preview of the target branch up, checked it's faithful
 - [ ] First run: ticket <id>, run <run id>, MR <link>
 - [ ] Installed on <host> with `host install-daemon`; check passes there
 - [ ] Handover README written
