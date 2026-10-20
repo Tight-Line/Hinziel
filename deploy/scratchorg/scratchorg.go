@@ -464,7 +464,7 @@ func (o *Org) Check(ctx context.Context) error {
 	}
 	if errs[0] == nil {
 		if _, err := o.active(ctx); needsLogin(err) {
-			errs = append(errs, fmt.Errorf("Dev Hub %s isn't logged in on this host: the first run will ask for a login on its ticket, or log in with `sf org login web --alias %s` (%w)", o.opts.DevHub, o.opts.DevHub, err))
+			errs = append(errs, fmt.Errorf("Dev Hub %s isn't logged in on this host: the first run will ask for a login on its ticket, or log it in now with the factory's login command (%w)", o.opts.DevHub, err))
 		} else if err != nil {
 			errs = append(errs, fmt.Errorf("%w (is %s logged in on this host, with Dev Hub turned on?)", err, o.opts.DevHub))
 		}
