@@ -241,6 +241,85 @@ func TestResume(t *testing.T) {
 	}
 }
 
+// fakeOpener logs in to any environment but "gone".
+type fakeOpener struct{}
+
+func (fakeOpener) OpenURL(_ context.Context, e *env.Environment) (string, error) {
+	if e.Name == "gone" {
+		return "", errors.New("org expired")
+	}
+	return "https://" + e.Name + ".test/frontdoor?sid=secret", nil
+}
+
+func TestOpen(t *testing.T) {
+	tickets := &fakeTickets{tickets: []tracker.Ticket{ticket("1", "Building"), ticket("2", "In review"), ticket("3", "Torn down"), ticket("4", "Expired"), ticket("5", "No run")}}
+	d := &fakeDispatcher{latest: map[string]*run.Snapshot{
+		"1": {ID: "r1", Status: run.StatusRunning, Environment: &env.Environment{Name: "hz-1"}},
+		"2": {ID: "r2", Status: run.StatusSucceeded, Environment: &env.Environment{Name: "hz-2"}},
+		"3": {ID: "r3", Status: run.StatusSucceeded, Environment: &env.Environment{Name: "hz-3"}, EnvironmentDestroyed: now},
+		"4": {ID: "r4", Status: run.StatusSucceeded, Environment: &env.Environment{Name: "gone"}},
+	}}
+	b := New(Options{Tickets: tickets, Open: fakeOpener{}})
+	mux := http.NewServeMux()
+	if err := b.Start(context.Background(), d, mux); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	page := get(t, srv.URL+"/")
+	if strings.Contains(page, "sid=") {
+		t.Error("the page must not carry a login link")
+	}
+	if n := strings.Count(page, ">Log in<"); n != 3 {
+		t.Errorf("%d Log in buttons, want 3 (the live environments):\n%s", n, page)
+	}
+	if strings.Contains(column(t, page, "review"), `value="3"><button>Log in`) {
+		t.Error("a torn down environment has no Log in")
+	}
+
+	for _, c := range []struct{ ticket, location string }{
+		{"1", "https://hz-1.test/frontdoor?sid=secret"},
+		{"2", "https://hz-2.test/frontdoor?sid=secret"},
+		{"3", "./?error=%233+has+no+environment+to+log+in+to"},
+		{"4", "./?error=%234%3A+logging+in+to+gone%3A+org+expired"},
+		{"5", "./?error=%235+has+no+environment+to+log+in+to"},
+	} {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/open", strings.NewReader("ticket="+c.ticket))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != c.location {
+			t.Errorf("open %s: %s to %q, want %q", c.ticket, resp.Status, resp.Header.Get("Location"), c.location)
+		}
+		if strings.Contains(c.location, "sid=") && (resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("Referrer-Policy") != "no-referrer") {
+			t.Errorf("open %s: the login link may be cached or leak in a referrer", c.ticket)
+		}
+	}
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/open", strings.NewReader("ticket=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("open from another site: %s, want 403", resp.Status)
+	}
+}
+
+func TestNoOpenerNoLogIn(t *testing.T) {
+	srv, _, _ := newTest(t)
+	if page := get(t, srv.URL+"/"); strings.Contains(page, ">Log in<") {
+		t.Error("Log in shown without an Opener")
+	}
+}
+
 func TestImplementRefusesOtherSites(t *testing.T) {
 	srv, _, d := newTest(t)
 	for _, h := range []http.Header{

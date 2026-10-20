@@ -48,6 +48,9 @@ h2 { margin: 2px 4px 12px; font-size: 13px; font-weight: 600; text-transform: up
 .review .card { border-left: 3px solid var(--done); }
 .building .card { border-left: 3px solid var(--busy); }
 form { margin-top: 10px; }
+.actions { margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.actions form { margin: 0; }
+.actions .links { margin: 0; }
 button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 7px; border: 0;
   background: var(--accent); color: var(--accent-text); cursor: pointer; }
 button:hover { filter: brightness(1.08); }
@@ -83,7 +86,7 @@ button:disabled { opacity: .55; cursor: default; }
     <div class="card">
       <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
       <div class="note"><span class="dot"></span>{{.Note}}{{with .Since}} · started {{.}}{{end}}</div>
-      {{if .Links}}<div class="links">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{end}}</div>{{end}}
+      {{template "actions" .}}
     </div>
     {{else}}<div class="empty">Nothing is being built.</div>{{end}}
   </section>
@@ -93,10 +96,15 @@ button:disabled { opacity: .55; cursor: default; }
     <div class="card">
       <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
       {{with .Since}}<div class="note">built {{.}}</div>{{end}}
-      {{if .Links}}<div class="links">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{end}}</div>{{end}}
+      {{template "actions" .}}
     </div>
     {{else}}<div class="empty">Nothing waits for review.</div>{{end}}
   </section>
 </main>
 </body>
 </html>
+{{define "actions"}}{{if or .Open .Links}}
+      <div class="actions">
+        {{if .Open}}<form method="post" action="open" target="_blank"><input type="hidden" name="ticket" value="{{.Ticket.Ref.ID}}"><button>Log in</button></form>{{end}}
+        {{if .Links}}<div class="links">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{end}}</div>{{end}}
+      </div>{{end}}{{end}}

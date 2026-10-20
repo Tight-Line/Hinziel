@@ -179,6 +179,12 @@ func fakeCommand(st *fakeState, cwd string, args []string) (any, error) {
 			return nil, fmt.Errorf("no authorization information found for %s", target)
 		}
 		return map[string]string{"id": o.OrgID + "AAA", "username": o.Username, "instanceUrl": "https://" + strings.TrimSuffix(o.Username, "@example.com") + ".scratch.my.salesforce.com"}, nil
+	case strings.HasPrefix(cmd, "org open "):
+		o := st.org(target)
+		if o == nil || !o.LoggedIn {
+			return nil, fmt.Errorf("no authorization information found for %s", target)
+		}
+		return map[string]string{"url": "https://" + strings.TrimSuffix(o.Username, "@example.com") + ".scratch.my.salesforce.com/secur/frontdoor.jsp?sid=fake", "username": o.Username}, nil
 	case strings.HasPrefix(cmd, "org logout "):
 		for _, o := range st.Orgs {
 			if o.Username == target {
@@ -338,6 +344,24 @@ func (f *fixture) deploy(e *env.Environment, src *deploy.Source) *deploy.Deploym
 	}
 	maps.Copy(e.State, dep.State)
 	return dep
+}
+
+func TestOpenURL(t *testing.T) {
+	f := newFixture(t)
+	e, err := f.org.Ensure(f.ctx, env.Spec{Name: "hz-sf-open"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := f.org.OpenURL(f.ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(u, e.Endpoints["org"]+"/secur/frontdoor.jsp?sid=") {
+		t.Errorf("OpenURL = %q, want the org's frontdoor link", u)
+	}
+	if _, err := f.org.OpenURL(f.ctx, &env.Environment{Name: "hz-sf-none"}); err == nil {
+		t.Error("OpenURL of an environment with no org user must fail")
+	}
 }
 
 func TestConformance(t *testing.T) {

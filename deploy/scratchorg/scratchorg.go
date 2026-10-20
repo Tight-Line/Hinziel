@@ -119,6 +119,7 @@ type Org struct {
 var (
 	_ env.Provisioner  = (*Org)(nil)
 	_ env.Lister       = (*Org)(nil)
+	_ env.Opener       = (*Org)(nil)
 	_ deploy.Deployer  = (*Org)(nil)
 	_ deploy.Retriever = (*Org)(nil)
 	_ core.Checker     = (*Org)(nil)
@@ -211,6 +212,26 @@ func (o *Org) Ensure(ctx context.Context, spec env.Spec) (*env.Environment, erro
 		Endpoints: map[string]string{"org": org.InstanceURL},
 		State:     map[string]string{StateUsername: info.SignupUsername, StateInstanceURL: org.InstanceURL},
 	}, nil
+}
+
+// OpenURL returns a link that opens the org logged in as its admin user, the
+// one the permission sets were assigned to: sf org open --url-only, so it
+// carries a live session.
+func (o *Org) OpenURL(ctx context.Context, e *env.Environment) (string, error) {
+	user := e.State[StateUsername]
+	if user == "" {
+		return "", fmt.Errorf("environment %s has no scratch org user", e.Name)
+	}
+	var res struct {
+		URL string `json:"url"`
+	}
+	if err := o.sf(ctx, "", &res, "org", "open", "--url-only", "--target-org", user); err != nil {
+		return "", err
+	}
+	if res.URL == "" {
+		return "", fmt.Errorf("sf org open gave no link for %s", user)
+	}
+	return res.URL, nil
 }
 
 func (o *Org) create(ctx context.Context, name string) error {

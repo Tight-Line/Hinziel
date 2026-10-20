@@ -21,6 +21,14 @@ type Lister interface {
 	List(ctx context.Context) ([]Environment, error)
 }
 
+// Opener is optional: a link that opens the environment logged in, such as
+// a Salesforce org's frontdoor link, for a person trying the change
+// (trigger/board's Log in). The link carries a session: hand it out when
+// asked, never store it or show it where others can see it.
+type Opener interface {
+	OpenURL(ctx context.Context, e *Environment) (string, error)
+}
+
 type Spec struct {
 	Name   string            // DNS-label-safe slug (≤63 chars), unique per factory+ticket
 	Labels map[string]string // factory, ticket, run id; for tagging cloud resources

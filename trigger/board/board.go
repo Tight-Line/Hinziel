@@ -8,6 +8,12 @@
 // and won't start another for its ticket. Closed tickets leave the board, as
 // the tracker no longer lists them.
 //
+// With Options.Open (the factory's environment, when it implements
+// env.Opener, as deploy/scratchorg does), cards whose environment exists get
+// a Log in button: it opens the environment in a new tab, logged in. The link
+// carries a session, so it's made when the button is clicked and never put
+// in the page.
+//
 // The page is served by `daemon --listen` at /triggers/<factory>/<trigger>/
 // and refreshes itself. With Options.BasicAuth, the browser asks for a user
 // name and password; without it, anyone who can reach the address can start
@@ -41,6 +47,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tight-Line/hinziel/env"
 	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
 	"github.com/Tight-Line/hinziel/trigger"
@@ -56,6 +63,8 @@ type Options struct {
 	Refresh time.Duration
 	// BasicAuth is "user:password" in base64; "" = no login.
 	BasicAuth string
+	// Open logs people in to a run's environment; nil = no Log in button.
+	Open env.Opener
 }
 
 // Board is the trigger.
@@ -93,6 +102,7 @@ func (b *Board) Start(_ context.Context, d trigger.Dispatcher, mux *http.ServeMu
 	csrf := http.NewCrossOriginProtection()
 	mux.Handle("POST /implement", b.login(csrf.Handler(http.HandlerFunc(b.implement))))
 	mux.Handle("POST /resume", b.login(csrf.Handler(http.HandlerFunc(b.resume))))
+	mux.Handle("POST /open", b.login(csrf.Handler(http.HandlerFunc(b.open))))
 	return nil
 }
 
@@ -117,6 +127,7 @@ type card struct {
 	Ticket tracker.Ticket
 	Run    *run.Snapshot
 	Failed bool   // the latest run failed, and can be resumed
+	Open   bool   // the run's environment exists and can be opened logged in
 	Note   string // what the run is doing, or why the last one stopped
 	Since  string // how long ago the run started or finished
 	Links  []link // pull requests and the environment's URLs
@@ -153,6 +164,7 @@ func (b *Board) page(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		c.Run = latest
+		c.Open = b.opts.Open != nil && live(latest)
 		switch {
 		case latest == nil:
 			v.Open = append(v.Open, c)
@@ -216,6 +228,51 @@ func (b *Board) act(w http.ResponseWriter, r *http.Request, done string, do func
 		return
 	}
 	b.back(w, r, "message", fmt.Sprintf("%s run %s for %s.", done, rid, tk.Key))
+}
+
+// open sends the browser to a link that logs it in to the environment of an
+// open ticket's latest run.
+func (b *Board) open(w http.ResponseWriter, r *http.Request) {
+	if b.opts.Open == nil {
+		http.NotFound(w, r)
+		return
+	}
+	id := r.FormValue("ticket")
+	tickets, err := b.opts.Tickets.List(r.Context())
+	if err != nil {
+		b.back(w, r, "error", err.Error())
+		return
+	}
+	i := slices.IndexFunc(tickets, func(tk tracker.Ticket) bool { return tk.Ref.ID == id })
+	if i < 0 {
+		b.back(w, r, "error", fmt.Sprintf("ticket %q isn't open", id))
+		return
+	}
+	tk := tickets[i]
+	latest, err := b.d.Latest(r.Context(), tk.Ref)
+	if err != nil {
+		b.back(w, r, "error", fmt.Sprintf("%s: %v", tk.Key, err))
+		return
+	}
+	if !live(latest) {
+		b.back(w, r, "error", tk.Key+" has no environment to log in to")
+		return
+	}
+	u, err := b.opts.Open.OpenURL(r.Context(), latest.Environment)
+	if err != nil {
+		b.back(w, r, "error", fmt.Sprintf("%s: logging in to %s: %v", tk.Key, latest.Environment.Name, err))
+		return
+	}
+	// The link carries a session: keep it out of caches and other sites' logs.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Location", u)
+	w.WriteHeader(http.StatusSeeOther)
+}
+
+// live reports whether the run has an environment that hasn't been torn down.
+func live(s *run.Snapshot) bool {
+	return s != nil && s.Environment != nil && s.EnvironmentDestroyed.IsZero()
 }
 
 // back sends the browser back to the board, with a message to show. The
