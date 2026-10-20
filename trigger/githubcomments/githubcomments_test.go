@@ -16,6 +16,7 @@ import (
 	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
 	ghtracker "github.com/Tight-Line/hinziel/tracker/github"
+	"github.com/Tight-Line/hinziel/trigger"
 )
 
 // fakeGitHub serves one repository's issue comments and records replies.
@@ -107,6 +108,8 @@ type fakeDispatcher struct {
 	reqs      []run.Request
 	envs      map[string]bool
 	teardowns []string
+	asking    map[string]bool
+	answers   []string
 }
 
 func (d *fakeDispatcher) Teardown(_ context.Context, ticket tracker.TicketRef, requestedBy string) (string, error) {
@@ -133,6 +136,17 @@ func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, err
 }
 
 func (d *fakeDispatcher) Get(context.Context, run.ID) (*run.Snapshot, error) { return nil, nil }
+
+// Answer takes answers for the tickets in asking.
+func (d *fakeDispatcher) Answer(_ context.Context, ticket tracker.TicketRef, text, by string) (run.ID, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.asking[ticket.ID] {
+		return "", trigger.ErrNoQuestion
+	}
+	d.answers = append(d.answers, ticket.ID+": "+text+" by "+by)
+	return "r7", nil
+}
 func (d *fakeDispatcher) Latest(context.Context, tracker.TicketRef) (*run.Snapshot, error) {
 	return nil, nil
 }
@@ -281,5 +295,33 @@ func TestCheck(t *testing.T) {
 	bad := New(Options{Repo: "acme/app", Token: "wrong", BaseURL: tr.api.BaseURL})
 	if err := bad.Check(context.Background()); err == nil {
 		t.Error("a bad token must fail the check")
+	}
+}
+
+func TestCommentsAnswer(t *testing.T) {
+	tr, f := newTest(t, Options{})
+	d := &fakeDispatcher{asking: map[string]bool{"1": true}}
+	start(t, tr, d)
+
+	url := "http://localhost:1717/OauthRedirect?code=abc%3D&state=42"
+	f.comment("ante", "1", "@hinziel "+url)
+	f.comment("ante", "2", "@hinziel thanks for the help!") // nothing asked: only talk
+	f.comment("ante", "1", "here it is: "+url)              // no mention
+
+	eventually(t, "a reply on #1", func() bool { return len(f.repliesTo("1")) == 1 })
+	f.comment("ante", "3", "@hinziel implement") // handled after the others
+	eventually(t, "a reply on #3", func() bool { return len(f.repliesTo("3")) == 1 })
+
+	d.mu.Lock()
+	answers := slices.Clone(d.answers)
+	d.mu.Unlock()
+	if want := []string{"1: " + url + " by github:ante"}; !slices.Equal(answers, want) {
+		t.Errorf("answers: %q, want %q", answers, want)
+	}
+	if r := f.repliesTo("1"); !strings.HasPrefix(r[0], "Thanks, @ante: run `r7` continues.") {
+		t.Errorf("reply on #1: %q", r)
+	}
+	if r := f.repliesTo("2"); len(r) > 0 {
+		t.Errorf("a mention with nothing asked gets no reply: %q", r)
 	}
 }

@@ -626,3 +626,75 @@ func TestAgentGetsOnlyDeclaredEnvironment(t *testing.T) {
 		}
 	}
 }
+
+// askingProvisioner needs the answer "good" to the question "login" before
+// it provisions anything, as deploy/scratchorg does with a Dev Hub login.
+type askingProvisioner struct {
+	*envtest.Fake
+	heard []string
+}
+
+func (p *askingProvisioner) Ensure(ctx context.Context, spec env.Spec) (*env.Environment, error) {
+	a, ok := core.Answer(ctx, "login")
+	if ok {
+		p.heard = append(p.heard, a)
+	}
+	if a != "good" {
+		return nil, &core.NeedsInputError{ID: "login", Question: "Log in at https://login.test, then paste the address."}
+	}
+	return p.Fake.Ensure(ctx, spec)
+}
+
+func TestAnswerGoesToTheStepThatAsked(t *testing.T) {
+	f := newFixture(t)
+	p := &askingProvisioner{Fake: f.env}
+	f.project.Provisioner = p
+	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		if _, ok := core.Answer(ctx, "login"); ok {
+			t.Error("an answer must only reach the step that asked")
+		}
+		commitAndPush(t, checkout(task, "api"), "export.go", "package main\n")
+		return nil, nil
+	}
+
+	r, err := f.start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Status != run.StatusNeedsInput || r.Question == nil || *r.Question != (run.Question{ID: "login", Step: StepProvisionEnvironment}) {
+		t.Fatalf("status %s, question %+v", r.Status, r.Question)
+	}
+	if c := f.tracker.Comments("T-1"); len(c) != 1 || !strings.Contains(c[0].Body, "https://login.test") || !strings.Contains(c[0].Body, "answer "+string(r.ID)) {
+		t.Fatalf("question not posted: %+v", c)
+	}
+
+	// A bad answer gets the question again, and is forgotten.
+	if err := f.eng.Answer(f.ctx, r.ID, "bad", "cli:ana"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.eng.Execute(f.ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r = f.load(r.ID); r.Status != run.StatusNeedsInput || r.Question == nil || len(r.Answers) != 0 {
+		t.Fatalf("after a bad answer: %s, question %+v, answers %+v", r.Status, r.Question, r.Answers)
+	}
+
+	if err := f.eng.Answer(f.ctx, r.ID, "good", "cli:ana"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.eng.Execute(f.ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r = f.load(r.ID); r.Status != run.StatusSucceeded || r.Answers != nil {
+		t.Fatalf("after a good answer: %s %s, answers %+v", r.Status, r.Error, r.Answers)
+	}
+	if !slices.Equal(p.heard, []string{"bad", "good"}) {
+		t.Errorf("the provisioner heard %q", p.heard)
+	}
+	if f.tracker.Fetches() != 1 {
+		t.Errorf("an answer to a component's question needn't fetch the ticket again (fetches: %d)", f.tracker.Fetches())
+	}
+	if err := f.eng.Answer(f.ctx, r.ID, "late", "cli:ana"); err == nil {
+		t.Error("a run that doesn't wait for an answer must refuse one")
+	}
+}

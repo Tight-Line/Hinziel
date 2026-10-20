@@ -16,6 +16,7 @@ import (
 
 	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/trigger"
 )
 
 // fakeTrello serves one board's comments and records replies.
@@ -113,6 +114,9 @@ func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, err
 }
 
 func (d *fakeDispatcher) Get(context.Context, run.ID) (*run.Snapshot, error) { return nil, nil }
+func (d *fakeDispatcher) Answer(context.Context, tracker.TicketRef, string, string) (run.ID, error) {
+	return "", trigger.ErrNoQuestion
+}
 func (d *fakeDispatcher) Latest(context.Context, tracker.TicketRef) (*run.Snapshot, error) {
 	return nil, nil
 }

@@ -83,6 +83,8 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 		return c.withRun(ctx, args, c.eng.Resume)
 	case "approve":
 		return c.withRun(ctx, args, c.eng.Approve)
+	case "answer":
+		return c.answer(ctx, args)
 	case "cancel":
 		return c.withRun(ctx, args, c.eng.Cancel)
 	case "daemon":
@@ -161,6 +163,7 @@ Commands:
   status [run-id]                list runs or show one
   logs [-f] <run-id>             print a run's log (-f: follow it)
   resume <run-id>                continue a failed, needs_input, waiting or interrupted run
+  answer <run-id> <answer>...    answer the question a needs_input run asked, and continue it
   approve <run-id>               confirm a run's human actions (any time, also while it runs);
                                  at a gate, pass it and continue
   cancel <run-id>                cancel a run that isn't executing

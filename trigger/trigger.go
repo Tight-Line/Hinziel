@@ -5,6 +5,7 @@ package trigger
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/Tight-Line/hinziel/run"
@@ -20,6 +21,10 @@ type Trigger interface {
 	Start(ctx context.Context, d Dispatcher, mux *http.ServeMux) error
 }
 
+// ErrNoQuestion is Dispatcher.Answer's error when the ticket has no run
+// waiting for an answer.
+var ErrNoQuestion = errors.New("no run of this ticket is waiting for an answer")
+
 // Dispatcher is the engine as seen by one factory's triggers. Run requests it
 // receives are always for that factory.
 type Dispatcher interface {
@@ -27,6 +32,10 @@ type Dispatcher interface {
 	Get(ctx context.Context, id run.ID) (*run.Snapshot, error)
 	// Latest returns the most recent run for a ticket, or nil.
 	Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error)
+	// Answer gives text as the answer to the question the ticket's latest
+	// run waits on (status needs_input), by whoever by is, and continues the
+	// run. With no such run it returns trigger.ErrNoQuestion.
+	Answer(ctx context.Context, ticket tracker.TicketRef, text, by string) (run.ID, error)
 	// Teardown destroys the ticket's environment and returns its name. It
 	// refuses while the ticket has an unfinished run (failed runs aside).
 	// Its success is announced like a run's progress, by an

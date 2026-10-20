@@ -168,29 +168,77 @@ func (e *Engine) Execute(ctx context.Context, id run.ID) error {
 // agent sees the answer to its question. A waiting run checks its step again
 // right away, whatever its next check time.
 func (e *Engine) Resume(ctx context.Context, id run.ID) error {
-	if err := e.prepare(ctx, id, func(r *run.Run) error {
-		switch r.Status {
-		case run.StatusFailed, run.StatusRunning, run.StatusWaiting:
-		case run.StatusNeedsInput:
-			resetStep(r, StepFetchTicket)
-		default:
-			return fmt.Errorf("run %s is %s; only failed, needs_input, waiting or interrupted runs can be resumed", r.ID, r.Status)
-		}
-		for i := range r.Steps {
-			if s := r.Steps[i].Status; s == stepFailed || s == stepRunning || s == stepWaiting {
-				r.Steps[i].Status = stepPending
-			}
-		}
-		if !r.EnvironmentDestroyed.IsZero() {
-			reprovision(r)
-		}
-		r.Status = run.StatusRunning
-		r.Error = ""
-		return nil
-	}); err != nil {
+	if err := e.prepare(ctx, id, resumable); err != nil {
 		return err
 	}
 	return e.Execute(ctx, id)
+}
+
+func resumable(r *run.Run) error {
+	switch r.Status {
+	case run.StatusFailed, run.StatusRunning, run.StatusWaiting:
+	case run.StatusNeedsInput:
+		// The step that asked with an ID gets its answer itself.
+		if r.Question == nil {
+			resetStep(r, StepFetchTicket)
+		}
+	default:
+		return fmt.Errorf("run %s is %s; only failed, needs_input, waiting or interrupted runs can be resumed", r.ID, r.Status)
+	}
+	for i := range r.Steps {
+		if s := r.Steps[i].Status; s == stepFailed || s == stepRunning || s == stepWaiting {
+			r.Steps[i].Status = stepPending
+		}
+	}
+	if !r.EnvironmentDestroyed.IsZero() {
+		reprovision(r)
+	}
+	r.Status = run.StatusRunning
+	r.Error = ""
+	return nil
+}
+
+// Answer records the answer to the question a needs_input run waits on and
+// makes the run runnable again; executing it is up to the caller (Execute).
+// A question a component asked with an ID gets text as its answer; the
+// agent's questions are answered on the ticket, so there text is only a
+// go-ahead, and by tells who gave it.
+func (e *Engine) Answer(ctx context.Context, id run.ID, text, by string) error {
+	return e.prepare(ctx, id, func(r *run.Run) error {
+		if r.Status != run.StatusNeedsInput {
+			return fmt.Errorf("run %s is %s, not waiting for an answer", r.ID, r.Status)
+		}
+		if q := r.Question; q != nil {
+			if r.Answers == nil {
+				r.Answers = map[string]run.Answer{}
+			}
+			r.Answers[q.ID] = run.Answer{Step: q.Step, Text: text, By: by, At: e.opts.Now()}
+		}
+		return resumable(r)
+	})
+}
+
+// answers returns the answers for step, by question ID.
+func (x *execution) answers(step string) map[string]string {
+	out := map[string]string{}
+	for id, a := range x.r.Answers {
+		if a.Step == step {
+			out[id] = a.Text
+		}
+	}
+	return out
+}
+
+// dropAnswers forgets the answers given to step, once it has passed.
+func (x *execution) dropAnswers(step string) {
+	for id, a := range x.r.Answers {
+		if a.Step == step {
+			delete(x.r.Answers, id)
+		}
+	}
+	if len(x.r.Answers) == 0 {
+		x.r.Answers = nil
+	}
 }
 
 // Approve passes the gate a run is waiting at and executes the rest of it.
@@ -440,6 +488,7 @@ func (x *execution) pipeline(ctx context.Context) error {
 		}
 		rec.Status = stepDone
 		x.r.WaitingFor, x.r.WaitUntil = "", time.Time{}
+		x.dropAnswers(name)
 		if err := x.save(ctx); err != nil {
 			return err
 		}
@@ -468,6 +517,7 @@ func (x *execution) timeout(step string) time.Duration {
 // exponential backoff.
 func (x *execution) attempt(ctx context.Context, name string) error {
 	delay := x.e.opts.RetryDelay
+	ctx = core.WithAnswers(ctx, x.answers(name))
 	for n := 1; ; n++ {
 		stepCtx, cancel := context.WithTimeout(ctx, x.timeout(name))
 		err := x.runStep(stepCtx, name)
@@ -509,6 +559,12 @@ func (x *execution) fail(ctx context.Context, rec *run.StepRecord, err error) er
 	var needs *core.NeedsInputError
 	if errors.As(err, &needs) {
 		x.r.Status = run.StatusNeedsInput
+		x.r.Question = nil
+		if needs.ID != "" {
+			// An answer that got the same question again was no good.
+			delete(x.r.Answers, needs.ID)
+			x.r.Question = &run.Question{ID: needs.ID, Step: rec.Name}
+		}
 		if serr := x.save(ctx); serr != nil {
 			return serr
 		}

@@ -171,6 +171,28 @@ func (d *dispatcher) Teardown(ctx context.Context, ticket tracker.TicketRef, req
 	return en.Environment.Name, nil
 }
 
+// Answer gives the ticket's latest run, which must need input, the answer
+// and queues it to continue.
+func (d *dispatcher) Answer(ctx context.Context, ticket tracker.TicketRef, text, by string) (run.ID, error) {
+	latest, err := d.Latest(ctx, ticket)
+	if err != nil {
+		return "", err
+	}
+	if latest == nil || latest.Status != run.StatusNeedsInput {
+		return "", trigger.ErrNoQuestion
+	}
+	if err := d.cli.eng.Answer(ctx, latest.ID, text, by); err != nil {
+		return "", err
+	}
+	select {
+	case d.queue <- latest.ID:
+	default:
+		return latest.ID, fmt.Errorf("run %s is queued behind too many others; continue it with `resume %s`", latest.ID, latest.ID)
+	}
+	fmt.Fprintf(d.cli.out, "run %s answered by %s, queued to continue\n", latest.ID, by)
+	return latest.ID, nil
+}
+
 func (d *dispatcher) Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error) {
 	runs, err := d.cli.eng.Store().List(ctx, run.Filter{Factory: d.factory, Ticket: &ticket, Limit: 1})
 	if err != nil || len(runs) == 0 {

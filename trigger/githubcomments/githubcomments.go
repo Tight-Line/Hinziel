@@ -2,7 +2,10 @@
 // asks for one in a comment on a GitHub issue: the comment @mentions the
 // factory's GitHub user and contains the word "implement", e.g.
 // "@hinziel implement". With the word "teardown" instead, it destroys the
-// issue's environment. The user is whoever the token belongs to, unless
+// issue's environment. With neither, on an issue whose run waits for an
+// answer (needs_input), the comment is the answer, without the mention:
+// to a component's question, such as a login, or a go-ahead after
+// answering the agent's question in the same comment. The user is whoever the token belongs to, unless
 // Options.Mention names another, so each installation answers to its own
 // name without configuration.
 //
@@ -26,6 +29,7 @@ package githubcomments
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -222,6 +226,8 @@ func (t *Trigger) poll(ctx context.Context, d trigger.Dispatcher, mention *regex
 			err = t.start(ctx, d, issue, c.User.Login)
 		case teardown:
 			err = t.tearDown(ctx, d, issue, c.User.Login)
+		default:
+			err = t.answer(ctx, d, issue, c.User.Login, strings.TrimSpace(mention.ReplaceAllString(c.Body, "$1$2")))
 		}
 		if err != nil {
 			return since, lastID, err
@@ -236,6 +242,20 @@ func (t *Trigger) start(ctx context.Context, d trigger.Dispatcher, issue, by str
 	reply := fmt.Sprintf("On it, @%s: started run `%s`.", by, id)
 	if err != nil {
 		reply = fmt.Sprintf("@%s, I couldn't start a run: %v", by, err)
+	}
+	return t.reply(ctx, issue, reply)
+}
+
+// answer passes the comment on to the issue's run as its answer. A mention
+// on an issue with no run waiting for one is only talk, and gets no reply.
+func (t *Trigger) answer(ctx context.Context, d trigger.Dispatcher, issue, by, text string) error {
+	id, err := d.Answer(ctx, tracker.TicketRef{ID: issue}, text, "github:"+by)
+	if errors.Is(err, trigger.ErrNoQuestion) {
+		return nil
+	}
+	reply := fmt.Sprintf("Thanks, @%s: run `%s` continues.", by, id)
+	if err != nil {
+		reply = fmt.Sprintf("@%s, I couldn't take that answer: %v", by, err)
 	}
 	return t.reply(ctx, issue, reply)
 }

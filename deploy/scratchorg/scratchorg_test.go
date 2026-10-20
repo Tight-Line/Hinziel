@@ -2,14 +2,23 @@ package scratchorg
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Tight-Line/hinziel/core"
 
 	"github.com/Tight-Line/hinziel/deploy"
 	"github.com/Tight-Line/hinziel/deploy/deploytest"
@@ -43,9 +52,16 @@ type click struct {
 }
 
 type fakeState struct {
-	Orgs  []*fakeOrg
-	Calls []string // "cwd|args"
+	Orgs         []*fakeOrg
+	Calls        []string // "cwd|args"
+	HubLoggedOut bool     // the Dev Hub needs logging in
+	HubLogins    []string // SFDX auth URLs and aliases it was logged in with
 }
+
+// namedError is an sf error with sf's name for it.
+type namedError struct{ name, msg string }
+
+func (e namedError) Error() string { return e.msg }
 
 const devHub = "hub"
 
@@ -59,7 +75,11 @@ func fakeSF(path string, args []string) int {
 	data, _ = json.Marshal(&st)
 	os.WriteFile(path, data, 0o644)
 	if err != nil {
-		json.NewEncoder(os.Stdout).Encode(map[string]any{"status": 1, "name": "FakeError", "message": err.Error(), "result": result})
+		name := "FakeError"
+		if ne, ok := err.(namedError); ok {
+			name = ne.name
+		}
+		json.NewEncoder(os.Stdout).Encode(map[string]any{"status": 1, "name": name, "message": err.Error(), "result": result})
 		return 1
 	}
 	json.NewEncoder(os.Stdout).Encode(map[string]any{"status": 0, "result": result})
@@ -107,6 +127,16 @@ func fakeCommand(st *fakeState, cwd string, args []string) (any, error) {
 			m = o.Revision
 		}
 		return map[string]any{"records": []map[string]any{{"m": m}}}, nil
+	case strings.HasPrefix(cmd, "org login sfdx-url "):
+		data, err := os.ReadFile(flagValue(args, "--sfdx-url-file"))
+		if err != nil {
+			return nil, err
+		}
+		st.HubLogins = append(st.HubLogins, string(data)+" as "+flagValue(args, "--alias"))
+		st.HubLoggedOut = false
+		return map[string]string{"username": "admin@hub.example.com"}, nil
+	case strings.HasPrefix(cmd, "data query") && target == devHub && st.HubLoggedOut:
+		return nil, namedError{"NamedOrgNotFoundError", "No authorization information found for " + devHub + "."}
 	case strings.HasPrefix(cmd, "data query"):
 		if target != devHub {
 			return nil, fmt.Errorf("%s is not a Dev Hub", target)
@@ -591,4 +621,88 @@ func TestIntegrationDeploy(t *testing.T) {
 			t.Errorf("only the click must come back, got %v", changed)
 		}
 	})
+}
+
+// fakeSalesforceLogin is Salesforce's token endpoint: it takes the code
+// "good-code" with the verifier that matches the challenge in the last link.
+type fakeSalesforceLogin struct {
+	challenge string
+}
+
+func (l *fakeSalesforceLogin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
+	if r.URL.Path != "/services/oauth2/token" || r.PostForm.Get("client_id") != "PlatformCLI" ||
+		r.PostForm.Get("code") != "good-code" || base64.RawURLEncoding.EncodeToString(sum[:]) != l.challenge {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"invalid_grant","error_description":"expired authorization code"}`))
+		return
+	}
+	w.Write([]byte(`{"access_token":"at","refresh_token":"rt-123","instance_url":"https://hub.my.salesforce.com"}`))
+}
+
+func TestEnsureAsksForADevHubLogin(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	login := &fakeSalesforceLogin{}
+	srv := httptest.NewServer(login)
+	defer srv.Close()
+	f.org.opts.LoginURL = srv.URL
+	f.save(&fakeState{HubLoggedOut: true})
+	spec := env.Spec{Name: "hz-t-1"}
+
+	// ask returns the login link Ensure asks with, and remembers its challenge.
+	ask := func(ctx context.Context, want string) url.Values {
+		t.Helper()
+		_, err := f.org.Ensure(ctx, spec)
+		var needs *core.NeedsInputError
+		if !errors.As(err, &needs) || needs.ID != "scratchorg.login.hub" || !strings.Contains(needs.Question, want) {
+			t.Fatalf("Ensure must ask for a login (%q): %v", want, err)
+		}
+		m := regexp.MustCompile(`\]\((http[^)]+)\)`).FindStringSubmatch(needs.Question)
+		u, _ := url.Parse(m[1])
+		q := u.Query()
+		if !strings.HasPrefix(m[1], srv.URL+"/services/oauth2/authorize?") || q.Get("client_id") != "PlatformCLI" ||
+			q.Get("redirect_uri") != "http://localhost:1717/OauthRedirect" || q.Get("code_challenge") == "" {
+			t.Fatalf("login link %s", m[1])
+		}
+		login.challenge = q.Get("code_challenge")
+		return q
+	}
+	answer := func(text string) context.Context {
+		return core.WithAnswers(f.ctx, map[string]string{"scratchorg.login.hub": text})
+	}
+	redirect := func(code, state string) string {
+		return "@hinziel http://localhost:1717/OauthRedirect?code=" + url.QueryEscape(code) + "&state=" + state + " thanks"
+	}
+
+	first := ask(f.ctx, "isn't logged in")
+	ask(answer("I logged in!"), "has no address")
+	second := ask(answer(redirect("good-code", first.Get("state"))), "older login link")
+	third := ask(answer(redirect("old-code", second.Get("state"))), "may have expired")
+	if len(f.fake().HubLogins) > 0 {
+		t.Fatal("no login may happen before a good answer")
+	}
+
+	e, err := f.org.Ensure(answer(redirect("good-code", third.Get("state"))), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"force://PlatformCLI::rt-123@hub.my.salesforce.com as hub"}; !slices.Equal(f.fake().HubLogins, want) {
+		t.Errorf("logins %q, want %q", f.fake().HubLogins, want)
+	}
+	if e.State[StateUsername] == "" || len(f.calls("org create scratch")) != 1 {
+		t.Errorf("after the login, the org must be created: %+v", e)
+	}
+	if path, _ := f.org.loginFile(); fileExists(path) {
+		t.Error("the pending login must be gone once used")
+	}
+	if left, _ := filepath.Glob(filepath.Join(os.TempDir(), "hinziel-sfdx-url-*")); len(left) > 0 {
+		t.Errorf("the refresh token must not be left on disk: %v", left)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

@@ -131,6 +131,28 @@ func (c *cli) withRun(ctx context.Context, args []string, action func(context.Co
 	return err
 }
 
+// answer gives a needs_input run the answer to its question and continues
+// it. The agent's questions are answered on the ticket instead.
+func (c *cli) answer(ctx context.Context, args []string) error {
+	if len(args) < 2 {
+		return errors.New("expected a run id and the answer")
+	}
+	id := run.ID(args[0])
+	r, err := c.eng.Store().Load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if r.Status == run.StatusNeedsInput && r.Question == nil {
+		return fmt.Errorf("run %s's question is the agent's: answer on the ticket, then: resume %s", id, id)
+	}
+	return c.withRun(ctx, args[:1], func(ctx context.Context, id run.ID) error {
+		if err := c.eng.Answer(ctx, id, strings.Join(args[1:], " "), "cli:"+username()); err != nil {
+			return err
+		}
+		return c.eng.Execute(ctx, id)
+	})
+}
+
 // report prints where a run ended up and what to do next.
 func (c *cli) report(ctx context.Context, id run.ID) {
 	r, err := c.eng.Store().Load(ctx, id)
@@ -149,7 +171,11 @@ func (c *cli) report(ctx context.Context, id run.ID) {
 			}
 		}
 	case run.StatusNeedsInput:
-		fmt.Fprintf(c.out, "  %s\n  Answer on the ticket, then: resume %s\n", r.Error, r.ID)
+		if r.Question != nil {
+			fmt.Fprintf(c.out, "  %s\n  Continue with: answer %s <answer>\n", r.Error, r.ID)
+		} else {
+			fmt.Fprintf(c.out, "  %s\n  Answer on the ticket, then: resume %s\n", r.Error, r.ID)
+		}
 	case run.StatusAwaitingApproval:
 		fmt.Fprintf(c.out, "  waiting before %s.\n", r.CurrentStep)
 		for _, a := range r.Actions {

@@ -171,7 +171,8 @@ func publishMessage(r *run.Run) core.Message {
 func questionMessage(r *run.Run, question string) core.Message {
 	return core.Message{
 		Title: "Hinziel needs input",
-		Body:  question + fmt.Sprintf("\n\n_Run `%s`. After answering, resume it with `resume %s`._\n", r.ID, r.ID),
+		Body: question + fmt.Sprintf("\n\n_Run `%s` waits for your answer: reply here, mentioning me, if this factory takes answers from comments; "+
+			"or run `answer %s <answer>`._\n", r.ID, r.ID),
 	}
 }
 

@@ -33,6 +33,10 @@
 //     The least access that works is a user with the "Salesforce DX" or
 //     "Dev Hub" permission set licence and object access to
 //     ScratchOrgInfo and ActiveScratchOrg (create, read, edit, delete).
+//   - Without a Dev Hub logged in (a fresh host, or a login that expired),
+//     Ensure asks for one through the run's ticket: a login link, and the
+//     address the browser ends on as the answer, from which it logs sf in
+//     as DevHub. That needs no connected app in the org; see login.go.
 //   - The Dev Hub's limits decide how many environments can exist: a free
 //     Developer Edition allows 3 active scratch orgs and 6 new ones a day.
 //   - Scratch orgs are logged in on the host when they're created, so they
@@ -90,6 +94,10 @@ type Options struct {
 	// Wait bounds creating an org, installing a package and deploying;
 	// 0 = 30 minutes.
 	Wait time.Duration
+	// LoginURL is where the Dev Hub's users log in, for the login Ensure
+	// asks a human for when the Dev Hub isn't logged in (see Credentials);
+	// "" = https://login.salesforce.com.
+	LoginURL string
 }
 
 // Keys in Environment.State.
@@ -164,9 +172,15 @@ func (o *Org) find(ctx context.Context, name string) (*scratchOrgInfo, error) {
 }
 
 // Ensure returns the active scratch org of the environment, or creates one,
-// then installs the packages it doesn't have yet.
+// then installs the packages it doesn't have yet. When the Dev Hub isn't
+// logged in, it asks a human for a login first (core.NeedsInputError).
 func (o *Org) Ensure(ctx context.Context, spec env.Spec) (*env.Environment, error) {
 	info, err := o.find(ctx, spec.Name)
+	if needsLogin(err) {
+		if err = o.devHubLogin(ctx, err); err == nil {
+			info, err = o.find(ctx, spec.Name)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +463,9 @@ func (o *Org) Check(ctx context.Context) error {
 		errs = append(errs, fmt.Errorf("scratch org definition: %w", err))
 	}
 	if errs[0] == nil {
-		if _, err := o.active(ctx); err != nil {
+		if _, err := o.active(ctx); needsLogin(err) {
+			errs = append(errs, fmt.Errorf("Dev Hub %s isn't logged in on this host: the first run will ask for a login on its ticket, or log in with `sf org login web --alias %s` (%w)", o.opts.DevHub, o.opts.DevHub, err))
+		} else if err != nil {
 			errs = append(errs, fmt.Errorf("%w (is %s logged in on this host, with Dev Hub turned on?)", err, o.opts.DevHub))
 		}
 	}
@@ -505,12 +521,23 @@ func (o *Org) sf(ctx context.Context, dir string, out any, args ...string) error
 		if msg == "" {
 			msg = tail(stderr.String())
 		}
-		if resp.Name != "" {
-			msg = resp.Name + ": " + msg
-		}
-		return fmt.Errorf("sf %s: %s", strings.Join(args[:min(3, len(args))], " "), msg)
+		return &sfError{Command: strings.Join(args[:min(3, len(args))], " "), Name: resp.Name, Message: msg}
 	}
 	return nil
+}
+
+// sfError is a command sf ran and reported as failed.
+type sfError struct {
+	Command string // its first words, e.g. "data query --target-org"
+	Name    string // sf's error name, e.g. "NamedOrgNotFoundError"
+	Message string
+}
+
+func (e *sfError) Error() string {
+	if e.Name != "" {
+		return fmt.Sprintf("sf %s: %s: %s", e.Command, e.Name, e.Message)
+	}
+	return fmt.Sprintf("sf %s: %s", e.Command, e.Message)
 }
 
 // shell runs commands in dir with SF_TARGET_ORG set to the org.

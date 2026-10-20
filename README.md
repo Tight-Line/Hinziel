@@ -393,7 +393,7 @@ stateDiagram-v2
     running --> waiting : wait
     waiting --> running : next check or resume
     failed --> running : resume
-    needs_input --> running : resume
+    needs_input --> running : resume or answer
     awaiting_approval --> running : approve
     succeeded --> [*]
 ```
@@ -407,6 +407,16 @@ the same name.
 from `needs_input` fetches the ticket again before re-running the step that
 stopped, so the agent sees the answer in the ticket's comments. Resuming from
 `failed` just re-runs the failed step.
+
+Any other component can ask too, for something only a human can give,
+such as a login: a `core.NeedsInputError` with an `ID`. The engine posts
+the question and keeps it on the run; the answer goes back to that
+component alone, as `core.Answer(ctx, ID)` when its step runs again, and is
+forgotten once the step passes or asks again. It's given with `answer
+<run-id> <answer>`, or by a trigger (`Dispatcher.Answer`): with
+`trigger/githubcomments`, a comment on the issue that mentions the factory.
+`deploy/scratchorg` asks this way for a Dev Hub login on a host that has
+none, so a factory in a client's infrastructure needs no connected app.
 
 `waiting` means a step is waiting on someone or something else: a CI
 pipeline building an image, a store build, an environment booking, an
@@ -685,7 +695,8 @@ These rules keep the interfaces from fighting each other:
   `Outcome.ManualSteps`, which arrive at the end of a run, actions are raised
   while the environment is set up, and can hold back a later step.
 - **Errors.** `core.NeedsInputError` makes the engine post the question on the
-  ticket, set the run to `needs_input` and emit `run.needs_input`.
+  ticket, set the run to `needs_input` and emit `run.needs_input`; with an
+  `ID`, the answer comes back to the component ([Run status](#run-status)).
   `core.RetryableError` makes the engine retry the step with backoff.
   `core.WaitError` parks the run in `waiting` until the step is checked
   again ([Run status](#run-status)). Any other error fails the step and the
@@ -1169,6 +1180,7 @@ learns from.
 <factory> status [run-id]              # list runs or show one
 <factory> logs [-f] <run-id>
 <factory> resume <run-id>              # continue a failed, needs_input or interrupted run
+<factory> answer <run-id> <answer>...  # answer the question a component asked (needs_input), and continue
 <factory> approve <run-id>             # confirm pending actions (any time, also mid-run); at a gate, pass it and continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
@@ -1581,7 +1593,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M6 | Gates/approve, hardening |
-| M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `trigger/githubcomments` ✅, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
+| M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `trigger/githubcomments` ✅ (with answers), the Dev Hub login asked for on the ticket ✅, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
 ---

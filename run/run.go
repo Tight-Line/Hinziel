@@ -73,8 +73,14 @@ type Run struct {
 	Commits map[string]string `json:"commits,omitempty"` // repo name -> pushed head
 	Outcome *agent.Outcome    `json:"outcome,omitempty"`
 	// Approved lists the gates (step names) this run has been approved past.
-	Approved []string     `json:"approved,omitempty"`
-	Steps    []StepRecord `json:"steps"`
+	Approved []string `json:"approved,omitempty"`
+	// Question is what a needs_input run waits to be told, when a component
+	// asked with an ID (core.NeedsInputError); nil for the agent's questions.
+	Question *Question `json:"question,omitempty"`
+	// Answers are given to the step that asked, by question ID, until it
+	// passes or asks again.
+	Answers map[string]Answer `json:"answers,omitempty"`
+	Steps   []StepRecord      `json:"steps"`
 }
 
 // Action is a human action of the run's environment (env.Action), with its progress.
@@ -82,6 +88,20 @@ type Action struct {
 	env.Action
 	Announced bool `json:"announced,omitempty"` // run.action_required was emitted
 	Done      bool `json:"done,omitempty"`      // someone confirmed it (approve)
+}
+
+// Question is a question a component asked with an ID.
+type Question struct {
+	ID   string `json:"id"`
+	Step string `json:"step"` // the step that asked, and gets the answer
+}
+
+// Answer is a human's answer to a Question.
+type Answer struct {
+	Step string    `json:"step"`
+	Text string    `json:"text"`
+	By   string    `json:"by,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 type StepRecord struct {
