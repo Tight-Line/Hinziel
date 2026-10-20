@@ -1264,7 +1264,10 @@ command at a time. It:
   mounted under `/triggers/<factory>/<trigger>/`, served on `--listen`.
   Others are pollers, such as `trigger/trellocomments` (a comment
   `@<member> implement` on a card), which need no inbound traffic at all,
-  so the daemon can run on a laptop;
+  so the daemon can run on a laptop. `trigger/board` serves a page of
+  the tracker's open tickets in three columns (open, being built, in
+  review), with an Implement button that starts a run; the tracker must
+  list its tickets (`tracker.Lister`, which `tracker/github` implements);
 - **executes runs in the background**, up to `--runs N` at once (default
   1). The [sandbox](#the-agents-sandbox) is what makes parallel runs safe:
   each agent has its own container, ports and Docker. Without one, parallel

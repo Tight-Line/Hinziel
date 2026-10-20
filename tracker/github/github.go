@@ -66,6 +66,7 @@ var (
 	_ tracker.Tracker     = (*Tracker)(nil)
 	_ tracker.StageMover  = (*Tracker)(nil)
 	_ tracker.DoneChecker = (*Tracker)(nil)
+	_ tracker.Lister      = (*Tracker)(nil)
 	_ core.Checker        = (*Tracker)(nil)
 )
 
@@ -149,11 +150,9 @@ func (t *Tracker) getIssue(ctx context.Context, id string) (string, *issue, erro
 	return n, &is, nil
 }
 
-func (t *Tracker) Fetch(ctx context.Context, id string) (*tracker.Ticket, error) {
-	n, is, err := t.getIssue(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+// ticket is the issue as a ticket, without its comments.
+func (is *issue) ticket() *tracker.Ticket {
+	n := strconv.Itoa(is.Number)
 	tk := &tracker.Ticket{
 		Ref:         tracker.TicketRef{ID: n},
 		Key:         "#" + n,
@@ -164,6 +163,35 @@ func (t *Tracker) Fetch(ctx context.Context, id string) (*tracker.Ticket, error)
 	for _, l := range is.Labels {
 		tk.Labels = append(tk.Labels, l.Name)
 	}
+	return tk
+}
+
+// List returns the open issues, newest first. Pull requests are left out.
+func (t *Tracker) List(ctx context.Context) ([]tracker.Ticket, error) {
+	var out []tracker.Ticket
+	for page := 1; ; page++ {
+		var is []issue
+		q := url.Values{"state": {"open"}, "per_page": {"100"}, "page": {strconv.Itoa(page)}}
+		if err := t.api.Do(ctx, http.MethodGet, t.repoPath()+"/issues", q, nil, &is); err != nil {
+			return nil, fmt.Errorf("issues of %s: %w", t.opts.Repo, err)
+		}
+		for i := range is {
+			if is[i].PullRequest == nil {
+				out = append(out, *is[i].ticket())
+			}
+		}
+		if len(is) < 100 {
+			return out, nil
+		}
+	}
+}
+
+func (t *Tracker) Fetch(ctx context.Context, id string) (*tracker.Ticket, error) {
+	n, is, err := t.getIssue(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	tk := is.ticket()
 	// Comments come oldest first, a page at a time.
 	for page := 1; ; page++ {
 		var cs []comment

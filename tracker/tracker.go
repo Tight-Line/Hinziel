@@ -30,6 +30,12 @@ type AttachmentFetcher interface {
 	FetchAttachment(ctx context.Context, ticketID string, a Attachment) (io.ReadCloser, error)
 }
 
+// Lister lists the tickets that are still open, for a board of them
+// (trigger/board). The tickets come without comments or attachments.
+type Lister interface {
+	List(ctx context.Context) ([]Ticket, error)
+}
+
 // DoneChecker lets the daemon tear down a ticket's environment once the
 // ticket is done (hinziel.Teardown). A ticket is done when people have put it
 // in StageDone, or when it no longer exists or has been archived.

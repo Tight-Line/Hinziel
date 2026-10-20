@@ -68,6 +68,14 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch path := r.URL.Path; {
 	case path == repo:
 		send(map[string]any{"has_issues": !f.noIssues})
+	case path == repo+"/issues" && r.Method == "GET":
+		var out []map[string]any
+		for n := len(f.issues) + 10; n > 0; n-- { // newest first
+			if is, ok := f.issues[n]; ok && is["state"] == r.URL.Query().Get("state") {
+				out = append(out, is)
+			}
+		}
+		send(page(out))
 	case path == repo+"/labels":
 		var out []map[string]any
 		for _, l := range f.labels {
@@ -162,6 +170,22 @@ func TestFetch(t *testing.T) {
 		if _, err := tr.Fetch(ctx, id); err == nil {
 			t.Errorf("Fetch(%q) must fail", id)
 		}
+	}
+}
+
+func TestList(t *testing.T) {
+	tr, f := newTestTracker(t, Options{})
+	for n := 4; n <= 104; n++ { // past one page
+		f.issues[n] = map[string]any{"number": n, "title": "Issue " + strconv.Itoa(n), "state": "open", "labels": []any{}}
+	}
+	tks, err := tr.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pull request (2) and the closed issue (3) are left out.
+	if len(tks) != 102 || tks[0].Key != "#104" || tks[101].Ref.ID != "1" || tks[101].Title != "Add CSV export" ||
+		!slices.Equal(tks[101].Labels, []string{"backend"}) || tks[101].Comments != nil {
+		t.Errorf("List = %d tickets, first %+v, last %+v", len(tks), tks[0], tks[len(tks)-1])
 	}
 }
 

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="{{.Refresh}}; url=./">
+<title>{{.Title}}</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #eceef2; --card: #ffffff; --text: #1d2330; --muted: #646b7a;
+  --line: #dde1e7; --accent: #2f5bd3; --accent-text: #ffffff;
+  --busy: #c27a00; --done: #1f8a4c; --bad: #c0392b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c; --panel: #1b1f26; --card: #232833; --text: #e6e9ef; --muted: #9aa3b2;
+    --line: #313846; --accent: #6c8ff0; --accent-text: #0e1220;
+    --busy: #e8a53a; --done: #4cc27f; --bad: #ef6b5b;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: baseline; gap: 12px; padding: 20px 24px 8px; }
+h1 { margin: 0; font-size: 20px; }
+header .hint { color: var(--muted); font-size: 13px; }
+.flash { margin: 8px 24px 0; padding: 10px 14px; border-radius: 8px; background: var(--card);
+  border-left: 4px solid var(--done); }
+.flash.error { border-left-color: var(--bad); }
+main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 24px 32px; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 24px; } header { padding: 16px 16px 4px; } .flash { margin: 8px 16px 0; } }
+section { background: var(--panel); border-radius: 12px; padding: 12px; min-height: 120px; }
+h2 { margin: 2px 4px 12px; font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); display: flex; justify-content: space-between; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.card .top { display: flex; gap: 8px; align-items: baseline; }
+.key { color: var(--muted); font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
+.key:hover { text-decoration: underline; }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.note { margin-top: 6px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.note.bad { color: var(--bad); }
+.note .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--busy);
+  margin-right: 6px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .note .dot { animation: none; } }
+.links { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
+.links a { color: var(--accent); }
+.review .card { border-left: 3px solid var(--done); }
+.building .card { border-left: 3px solid var(--busy); }
+form { margin-top: 10px; }
+button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 7px; border: 0;
+  background: var(--accent); color: var(--accent-text); cursor: pointer; }
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: .55; cursor: default; }
+.empty { color: var(--muted); font-size: 13px; padding: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{.Title}}</h1>
+  <span class="hint">refreshes every {{.Refresh}} s</span>
+</header>
+{{with .Message}}<div class="flash">{{.}}</div>{{end}}
+{{with .Error}}<div class="flash error">{{.}}</div>{{end}}
+{{with .ListError}}<div class="flash error">Can't list the tickets: {{.}}</div>{{end}}
+<main>
+  <section class="open">
+    <h2>Open <span>{{len .Open}}</span></h2>
+    {{range .Open}}
+    <div class="card">
+      <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
+      {{if .Note}}<div class="note bad">{{.Note}}{{with .Since}} · {{.}}{{end}}</div>{{end}}
+      <form method="post" action="implement" onsubmit="this.querySelector('button').disabled = true">
+        <input type="hidden" name="ticket" value="{{.Ticket.Ref.ID}}">
+        <button>{{if .Run}}Implement again{{else}}Implement{{end}}</button>
+      </form>
+    </div>
+    {{else}}<div class="empty">No open tickets.</div>{{end}}
+  </section>
+  <section class="building">
+    <h2>Building <span>{{len .Building}}</span></h2>
+    {{range .Building}}
+    <div class="card">
+      <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
+      <div class="note"><span class="dot"></span>{{.Note}}{{with .Since}} · started {{.}}{{end}}</div>
+      {{if .Links}}<div class="links">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{end}}</div>{{end}}
+    </div>
+    {{else}}<div class="empty">Nothing is being built.</div>{{end}}
+  </section>
+  <section class="review">
+    <h2>In review <span>{{len .Review}}</span></h2>
+    {{range .Review}}
+    <div class="card">
+      <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
+      {{with .Since}}<div class="note">built {{.}}</div>{{end}}
+      {{if .Links}}<div class="links">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{end}}</div>{{end}}
+    </div>
+    {{else}}<div class="empty">Nothing waits for review.</div>{{end}}
+  </section>
+</main>
+</body>
+</html>
