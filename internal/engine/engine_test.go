@@ -291,7 +291,9 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 func TestResumeAfterFailure(t *testing.T) {
 	f := newFixture(t)
 	f.env.EnsureErrs = []error{errors.New("droplet quota exceeded")}
+	var stageWhileWorking tracker.Stage
 	f.agent.Func = func(ctx context.Context, task *agent.Task) (*agent.Outcome, error) {
+		stageWhileWorking = f.tracker.Stage("T-1")
 		commitAndPush(t, checkout(task, "api"), "fix.go", "package main\n")
 		return nil, nil
 	}
@@ -319,6 +321,9 @@ func TestResumeAfterFailure(t *testing.T) {
 	}
 	if f.tracker.Fetches() != 1 {
 		t.Errorf("resuming a failed run must not fetch the ticket again (fetches: %d)", f.tracker.Fetches())
+	}
+	if stageWhileWorking != tracker.StageInProgress {
+		t.Errorf("ticket stage while the resumed run worked: %q, want it back in progress", stageWhileWorking)
 	}
 	if f.env.Ensures() != 2 {
 		t.Errorf("ensures: %d", f.env.Ensures())

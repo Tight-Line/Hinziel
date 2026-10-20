@@ -157,6 +157,11 @@ func (e *Engine) Execute(ctx context.Context, id run.ID) error {
 		x.emit(ctx, notify.EventRunStarted)
 	case run.StatusRunning:
 		x.logf("", "run %s continuing", r.ID)
+		// A resumed run was blocked, and fetch_ticket, which moves the ticket
+		// in progress, may be done already. publish moves it on to review.
+		if r.Ticket != nil {
+			x.moveTicket(ctx, tracker.StageInProgress)
+		}
 	default:
 		return fmt.Errorf("run %s is %s", id, r.Status)
 	}
