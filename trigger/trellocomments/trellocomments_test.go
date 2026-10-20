@@ -114,6 +114,10 @@ func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, err
 }
 
 func (d *fakeDispatcher) Get(context.Context, run.ID) (*run.Snapshot, error) { return nil, nil }
+
+func (d *fakeDispatcher) Resume(context.Context, tracker.TicketRef, string) (run.ID, error) {
+	return "", trigger.ErrNotFailed
+}
 func (d *fakeDispatcher) Answer(context.Context, tracker.TicketRef, string, string) (run.ID, error) {
 	return "", trigger.ErrNoQuestion
 }

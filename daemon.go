@@ -193,6 +193,28 @@ func (d *dispatcher) Answer(ctx context.Context, ticket tracker.TicketRef, text,
 	return latest.ID, nil
 }
 
+// Resume reopens the ticket's latest run, which must have failed, and
+// queues it to continue.
+func (d *dispatcher) Resume(ctx context.Context, ticket tracker.TicketRef, by string) (run.ID, error) {
+	latest, err := d.Latest(ctx, ticket)
+	if err != nil {
+		return "", err
+	}
+	if latest == nil || latest.Status != run.StatusFailed {
+		return "", trigger.ErrNotFailed
+	}
+	if err := d.cli.eng.Reopen(ctx, latest.ID); err != nil {
+		return "", err
+	}
+	select {
+	case d.queue <- latest.ID:
+	default:
+		return latest.ID, fmt.Errorf("run %s is queued behind too many others; continue it with `resume %s`", latest.ID, latest.ID)
+	}
+	fmt.Fprintf(d.cli.out, "run %s resumed by %s\n", latest.ID, by)
+	return latest.ID, nil
+}
+
 func (d *dispatcher) Latest(ctx context.Context, ticket tracker.TicketRef) (*run.Snapshot, error) {
 	runs, err := d.cli.eng.Store().List(ctx, run.Filter{Factory: d.factory, Ticket: &ticket, Limit: 1})
 	if err != nil || len(runs) == 0 {

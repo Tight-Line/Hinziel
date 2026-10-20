@@ -174,6 +174,12 @@ func (e *Engine) Resume(ctx context.Context, id run.ID) error {
 	return e.Execute(ctx, id)
 }
 
+// Reopen makes a run ready to execute again, as Resume does, without
+// executing it: for the daemon, which queues it.
+func (e *Engine) Reopen(ctx context.Context, id run.ID) error {
+	return e.prepare(ctx, id, resumable)
+}
+
 func resumable(r *run.Run) error {
 	switch r.Status {
 	case run.StatusFailed, run.StatusRunning, run.StatusWaiting:

@@ -3,8 +3,10 @@
 // that starts a run; the tickets being worked on; and the tickets whose run
 // finished and wait for review. A ticket's column comes from its latest run:
 // none, failed or cancelled is open; queued, running, waiting, needing input
-// or awaiting approval is being worked on; succeeded is in review. Closed
-// tickets leave the board, as the tracker no longer lists them.
+// or awaiting approval is being worked on; succeeded is in review. A failed
+// run gets a Resume button instead, as the engine keeps it to be resumed
+// and won't start another for its ticket. Closed tickets leave the board, as
+// the tracker no longer lists them.
 //
 // The page is served by `daemon --listen` at /triggers/<factory>/<trigger>/
 // and refreshes itself. With Options.BasicAuth, the browser asks for a user
@@ -88,7 +90,9 @@ func (b *Board) Start(_ context.Context, d trigger.Dispatcher, mux *http.ServeMu
 	}
 	b.d = d
 	mux.Handle("GET /{$}", b.login(http.HandlerFunc(b.page)))
-	mux.Handle("POST /implement", b.login(http.NewCrossOriginProtection().Handler(http.HandlerFunc(b.implement))))
+	csrf := http.NewCrossOriginProtection()
+	mux.Handle("POST /implement", b.login(csrf.Handler(http.HandlerFunc(b.implement))))
+	mux.Handle("POST /resume", b.login(csrf.Handler(http.HandlerFunc(b.resume))))
 	return nil
 }
 
@@ -112,6 +116,7 @@ func (b *Board) login(next http.Handler) http.Handler {
 type card struct {
 	Ticket tracker.Ticket
 	Run    *run.Snapshot
+	Failed bool   // the latest run failed, and can be resumed
 	Note   string // what the run is doing, or why the last one stopped
 	Since  string // how long ago the run started or finished
 	Links  []link // pull requests and the environment's URLs
@@ -157,6 +162,7 @@ func (b *Board) page(w http.ResponseWriter, r *http.Request) {
 				c.Note += ": " + latest.Error
 			}
 			c.Since = b.ago(latest.UpdatedAt)
+			c.Failed = latest.Status == run.StatusFailed
 			v.Open = append(v.Open, c)
 		case latest.Status == run.StatusSucceeded:
 			c.Since = b.ago(latest.UpdatedAt)
@@ -177,6 +183,21 @@ func (b *Board) page(w http.ResponseWriter, r *http.Request) {
 
 // implement starts a run for one of the open tickets.
 func (b *Board) implement(w http.ResponseWriter, r *http.Request) {
+	b.act(w, r, "Started", func(ctx context.Context, tk tracker.Ticket) (run.ID, error) {
+		return b.d.Submit(ctx, run.Request{Ticket: tk.Ref, RequestedBy: "board"})
+	})
+}
+
+// resume continues an open ticket's failed run.
+func (b *Board) resume(w http.ResponseWriter, r *http.Request) {
+	b.act(w, r, "Resumed", func(ctx context.Context, tk tracker.Ticket) (run.ID, error) {
+		return b.d.Resume(ctx, tk.Ref, "board")
+	})
+}
+
+// act does something to the open ticket the form names, and goes back to the
+// board saying how it went.
+func (b *Board) act(w http.ResponseWriter, r *http.Request, done string, do func(context.Context, tracker.Ticket) (run.ID, error)) {
 	id := r.FormValue("ticket")
 	tickets, err := b.opts.Tickets.List(r.Context())
 	if err != nil {
@@ -189,12 +210,12 @@ func (b *Board) implement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tk := tickets[i]
-	rid, err := b.d.Submit(r.Context(), run.Request{Ticket: tk.Ref, RequestedBy: "board"})
+	rid, err := do(r.Context(), tk)
 	if err != nil {
 		b.back(w, r, "error", fmt.Sprintf("%s: %v", tk.Key, err))
 		return
 	}
-	b.back(w, r, "message", fmt.Sprintf("Started run %s for %s.", rid, tk.Key))
+	b.back(w, r, "message", fmt.Sprintf("%s run %s for %s.", done, rid, tk.Key))
 }
 
 // back sends the browser back to the board, with a message to show. The

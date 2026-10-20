@@ -17,6 +17,7 @@ import (
 	"github.com/Tight-Line/hinziel/forge"
 	"github.com/Tight-Line/hinziel/run"
 	"github.com/Tight-Line/hinziel/tracker"
+	"github.com/Tight-Line/hinziel/trigger"
 )
 
 type fakeTickets struct {
@@ -33,9 +34,10 @@ func ticket(id, title string) tracker.Ticket {
 // fakeDispatcher has a latest run for the tickets in latest, and accepts
 // one run per ticket.
 type fakeDispatcher struct {
-	mu     sync.Mutex
-	latest map[string]*run.Snapshot
-	reqs   []run.Request
+	mu      sync.Mutex
+	latest  map[string]*run.Snapshot
+	reqs    []run.Request
+	resumed []string
 }
 
 func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, error) {
@@ -49,6 +51,17 @@ func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, err
 }
 
 func (d *fakeDispatcher) Get(context.Context, run.ID) (*run.Snapshot, error) { return nil, nil }
+
+func (d *fakeDispatcher) Resume(_ context.Context, ticket tracker.TicketRef, by string) (run.ID, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	s := d.latest[ticket.ID]
+	if s == nil || s.Status != run.StatusFailed {
+		return "", trigger.ErrNotFailed
+	}
+	d.resumed = append(d.resumed, ticket.ID+" by "+by)
+	return s.ID, nil
+}
 
 func (d *fakeDispatcher) Latest(_ context.Context, ticket tracker.TicketRef) (*run.Snapshot, error) {
 	d.mu.Lock()
@@ -73,6 +86,7 @@ func newTest(t *testing.T) (*httptest.Server, *fakeTickets, *fakeDispatcher) {
 		ticket("3", "Renewal date"),
 		ticket("4", "Churn on cancel"),
 		ticket("5", "Settings"),
+		ticket("6", "Dashboard"),
 	}}
 	d := &fakeDispatcher{latest: map[string]*run.Snapshot{
 		"2": {ID: "r2", Status: run.StatusFailed, Error: "deploy failed", UpdatedAt: now.Add(-5 * time.Minute)},
@@ -81,6 +95,7 @@ func newTest(t *testing.T) (*httptest.Server, *fakeTickets, *fakeDispatcher) {
 			ChangeRequests: map[string]*forge.ChangeRequest{"app": {URL: "https://github.test/acme/app/pull/12"}},
 			Environment:    &env.Environment{Endpoints: map[string]string{"org": "https://org.test/login"}}},
 		"5": {ID: "r5", Status: run.StatusNeedsInput, StartedAt: now.Add(-time.Minute)},
+		"6": {ID: "r6", Status: run.StatusCancelled, UpdatedAt: now.Add(-time.Hour)},
 	}}
 	b := New(Options{Tickets: tickets, Title: "sfplay"})
 	b.now = func() time.Time { return now }
@@ -124,7 +139,8 @@ func TestPage(t *testing.T) {
 
 	open := column(t, page, "open")
 	for _, want := range []string{"#1", "Add CSV export", ">Implement<", "#2", "Fix the &lt;blank&gt; card",
-		"last run failed: deploy failed · 5 min ago", ">Implement again<", `name="ticket" value="1"`} {
+		"last run failed: deploy failed · 5 min ago", `action="resume"`, ">Resume<", `name="ticket" value="1"`,
+		"last run cancelled · 1 h ago", ">Implement again<"} {
 		if !strings.Contains(open, want) {
 			t.Errorf("open column lacks %q:\n%s", want, open)
 		}
@@ -179,7 +195,7 @@ func TestImplement(t *testing.T) {
 		ticket, kind, text string
 	}{
 		{"1", "message", "Started run r9 for #1."},
-		{"2", "message", "Started run r9 for #2."}, // a failed ticket can be tried again
+		{"6", "message", "Started run r9 for #6."}, // a cancelled ticket can be tried again
 		{"3", "error", "#3: ticket already has run r3 (running)"},
 		{"99", "error", `ticket "99" isn't open`},
 	}
@@ -193,11 +209,35 @@ func TestImplement(t *testing.T) {
 			t.Errorf("implement %s: back to %s, want %s %q", c.ticket, loc, c.kind, c.text)
 		}
 	}
-	if len(d.reqs) != 2 || d.reqs[0].Ticket.ID != "1" || d.reqs[0].RequestedBy != "board" || d.reqs[1].Ticket.ID != "2" {
+	if len(d.reqs) != 2 || d.reqs[0].Ticket.ID != "1" || d.reqs[0].RequestedBy != "board" || d.reqs[1].Ticket.ID != "6" {
 		t.Errorf("submitted %+v", d.reqs)
 	}
 	if page := get(t, srv.URL+"/?message=Started+run+r9+for+%231."); !strings.Contains(page, `<div class="flash">Started run r9 for #1.</div>`) {
 		t.Errorf("the message isn't shown:\n%s", page)
+	}
+}
+
+func TestResume(t *testing.T) {
+	srv, _, d := newTest(t)
+	for _, c := range []struct{ ticket, kind, text string }{
+		{"2", "message", "Resumed run r2 for #2."},
+		{"1", "error", "#1: " + trigger.ErrNotFailed.Error()},
+	} {
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/resume", strings.NewReader("ticket="+c.ticket))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		loc, _ := url.Parse(resp.Header.Get("Location"))
+		if resp.StatusCode != http.StatusSeeOther || loc.Query().Get(c.kind) != c.text {
+			t.Errorf("resume %s: %s, back to %s, want %s %q", c.ticket, resp.Status, loc, c.kind, c.text)
+		}
+	}
+	if len(d.resumed) != 1 || d.resumed[0] != "2 by board" {
+		t.Errorf("resumed %v", d.resumed)
 	}
 }
 

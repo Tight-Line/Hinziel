@@ -25,6 +25,10 @@ type Trigger interface {
 // waiting for an answer.
 var ErrNoQuestion = errors.New("no run of this ticket is waiting for an answer")
 
+// ErrNotFailed is Dispatcher.Resume's error when the ticket's latest run
+// didn't fail.
+var ErrNotFailed = errors.New("the ticket's latest run didn't fail")
+
 // Dispatcher is the engine as seen by one factory's triggers. Run requests it
 // receives are always for that factory.
 type Dispatcher interface {
@@ -36,6 +40,11 @@ type Dispatcher interface {
 	// run waits on (status needs_input), by whoever by is, and continues the
 	// run. With no such run it returns trigger.ErrNoQuestion.
 	Answer(ctx context.Context, ticket tracker.TicketRef, text, by string) (run.ID, error)
+	// Resume continues the ticket's latest run, which must have failed, from
+	// the step that failed, as the resume command does. With no such run it
+	// returns trigger.ErrNotFailed. A failed run is unfinished, so Submit
+	// refuses a new run for its ticket until it's resumed or cancelled.
+	Resume(ctx context.Context, ticket tracker.TicketRef, by string) (run.ID, error)
 	// Teardown destroys the ticket's environment and returns its name. It
 	// refuses while the ticket has an unfinished run (failed runs aside).
 	// Its success is announced like a run's progress, by an

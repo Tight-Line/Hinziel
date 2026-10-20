@@ -70,9 +70,9 @@ button:disabled { opacity: .55; cursor: default; }
     <div class="card">
       <div class="top"><a class="key" href="{{.Ticket.URL}}" target="_blank" rel="noopener">{{.Ticket.Key}}</a><span class="title">{{.Ticket.Title}}</span></div>
       {{if .Note}}<div class="note bad">{{.Note}}{{with .Since}} · {{.}}{{end}}</div>{{end}}
-      <form method="post" action="implement" onsubmit="this.querySelector('button').disabled = true">
+      <form method="post" action="{{if .Failed}}resume{{else}}implement{{end}}" onsubmit="this.querySelector('button').disabled = true">
         <input type="hidden" name="ticket" value="{{.Ticket.Ref.ID}}">
-        <button>{{if .Run}}Implement again{{else}}Implement{{end}}</button>
+        <button>{{if .Failed}}Resume{{else if .Run}}Implement again{{else}}Implement{{end}}</button>
       </form>
     </div>
     {{else}}<div class="empty">No open tickets.</div>{{end}}

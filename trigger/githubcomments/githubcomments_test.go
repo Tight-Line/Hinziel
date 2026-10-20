@@ -137,6 +137,10 @@ func (d *fakeDispatcher) Submit(_ context.Context, req run.Request) (run.ID, err
 
 func (d *fakeDispatcher) Get(context.Context, run.ID) (*run.Snapshot, error) { return nil, nil }
 
+func (d *fakeDispatcher) Resume(context.Context, tracker.TicketRef, string) (run.ID, error) {
+	return "", trigger.ErrNotFailed
+}
+
 // Answer takes answers for the tickets in asking.
 func (d *fakeDispatcher) Answer(_ context.Context, ticket tracker.TicketRef, text, by string) (run.ID, error) {
 	d.mu.Lock()
