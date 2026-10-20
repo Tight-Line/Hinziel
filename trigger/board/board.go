@@ -7,23 +7,29 @@
 // tickets leave the board, as the tracker no longer lists them.
 //
 // The page is served by `daemon --listen` at /triggers/<factory>/<trigger>/
-// and refreshes itself. It has no login: anyone who can reach the address
-// can start runs, so keep it on a private network, or behind a proxy that
-// asks for one. Implement only accepts requests from the page's own origin
-// (http.CrossOriginProtection), so another site can't start runs through a
-// visitor's browser.
+// and refreshes itself. With Options.BasicAuth, the browser asks for a user
+// name and password; without it, anyone who can reach the address can start
+// runs, so keep it on a private network then. Basic auth sends the password
+// in every request, so serve the page over HTTPS (behind a proxy) anywhere
+// but a private network or an SSH tunnel. Implement only accepts requests
+// from the page's own origin (http.CrossOriginProtection), so another site
+// can't start runs through a visitor's browser.
 //
 // # Credentials
 //
-// None of its own: the tickets come from Options.Tickets, usually the
-// factory's tracker (it must implement tracker.Lister, as tracker/github
-// does).
+//   - BasicAuth, optional: "user:password" in base64, as in an Authorization
+//     header (`printf %s 'user:password' | base64`). In an env file for
+//     `docker run --env-file`, write it without quotes: Docker keeps them.
+//   - The tickets come from Options.Tickets, usually the factory's tracker
+//     (it must implement tracker.Lister, as tracker/github does).
 package board
 
 import (
 	"cmp"
 	"context"
+	"crypto/subtle"
 	_ "embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
@@ -46,6 +52,8 @@ type Options struct {
 	Title string
 	// Refresh is how often the page reloads itself; 0 = 10 seconds.
 	Refresh time.Duration
+	// BasicAuth is "user:password" in base64; "" = no login.
+	BasicAuth string
 }
 
 // Board is the trigger.
@@ -72,10 +80,32 @@ func (b *Board) Start(_ context.Context, d trigger.Dispatcher, mux *http.ServeMu
 	if b.opts.Tickets == nil {
 		return errors.New("board: Options.Tickets is required")
 	}
+	if b.opts.BasicAuth != "" {
+		raw, err := base64.StdEncoding.DecodeString(b.opts.BasicAuth)
+		if err != nil || !strings.Contains(string(raw), ":") {
+			return errors.New(`board: BasicAuth must be "user:password" in base64 (printf %s 'user:password' | base64), without quotes around it`)
+		}
+	}
 	b.d = d
-	mux.HandleFunc("GET /{$}", b.page)
-	mux.Handle("POST /implement", http.NewCrossOriginProtection().Handler(http.HandlerFunc(b.implement)))
+	mux.Handle("GET /{$}", b.login(http.HandlerFunc(b.page)))
+	mux.Handle("POST /implement", b.login(http.NewCrossOriginProtection().Handler(http.HandlerFunc(b.implement))))
 	return nil
+}
+
+// login asks for Options.BasicAuth's user name and password, if it's set.
+func (b *Board) login(next http.Handler) http.Handler {
+	if b.opts.BasicAuth == "" {
+		return next
+	}
+	want := []byte("Basic " + b.opts.BasicAuth)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="`+b.opts.Title+`", charset="UTF-8"`)
+			http.Error(w, "Log in to see the board.", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // card is one ticket on the board.

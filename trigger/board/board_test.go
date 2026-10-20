@@ -2,6 +2,7 @@ package board
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -212,6 +213,60 @@ func TestImplementRefusesOtherSites(t *testing.T) {
 	}
 	if len(d.reqs) != 0 {
 		t.Errorf("submitted %+v", d.reqs)
+	}
+}
+
+func TestBasicAuth(t *testing.T) {
+	d := &fakeDispatcher{}
+	b := New(Options{Tickets: &fakeTickets{tickets: []tracker.Ticket{ticket("1", "Add CSV export")}},
+		BasicAuth: base64.StdEncoding.EncodeToString([]byte("demo:s3cret"))})
+	mux := http.NewServeMux()
+	if err := b.Start(context.Background(), d, mux); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	for _, c := range []struct {
+		method, path string
+		user, pass   string
+		want         int
+	}{
+		{"GET", "/", "", "", http.StatusUnauthorized},
+		{"GET", "/", "demo", "wrong", http.StatusUnauthorized},
+		{"GET", "/", "demo", "s3cret", http.StatusOK},
+		{"POST", "/implement", "", "", http.StatusUnauthorized},
+		{"POST", "/implement", "demo", "s3cret", http.StatusSeeOther},
+	} {
+		req, _ := http.NewRequest(c.method, srv.URL+c.path, strings.NewReader("ticket=1"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if c.user != "" {
+			req.SetBasicAuth(c.user, c.pass)
+		}
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.want {
+			t.Errorf("%s %s as %q: %s, want %d", c.method, c.path, c.user, resp.Status, c.want)
+		}
+		if c.want == http.StatusUnauthorized && !strings.HasPrefix(resp.Header.Get("WWW-Authenticate"), "Basic ") {
+			t.Errorf("%s %s: no Basic challenge", c.method, c.path)
+		}
+	}
+	if len(d.reqs) != 1 {
+		t.Errorf("submitted %+v, want only the logged-in request", d.reqs)
+	}
+}
+
+func TestBasicAuthMustBeEncoded(t *testing.T) {
+	for _, bad := range []string{"demo:s3cret", "'ZGVtbzpzM2NyZXQ='", base64.StdEncoding.EncodeToString([]byte("nocolon"))} {
+		err := New(Options{Tickets: &fakeTickets{}, BasicAuth: bad}).Start(context.Background(), &fakeDispatcher{}, http.NewServeMux())
+		if err == nil {
+			t.Errorf("BasicAuth %q must be refused", bad)
+		}
 	}
 }
 
