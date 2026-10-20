@@ -613,7 +613,8 @@ These rules keep the interfaces from fighting each other:
 - **Forge.** Branch creation and pushing go through `internal/workspace` (git
   CLI), not the forge API. `git push` works the same on every host, so only MR
   operations need per-forge code. `OpenChangeRequest` returns the existing
-  open CR for the branch if there is one. `forge/local` is a bare repository
+  open CR for the branch if there is one. `forge/gitlab` and `forge/github`
+  push with the same token that opens the CR. `forge/local` is a bare repository
   on the factory's host with merge requests kept as files, for trying a
   factory before it's connected to the team's forge.
 - **Agent.** It commits and pushes to the run branch, and deploys with the
@@ -1560,8 +1561,8 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
   by an env var such as `HINZIEL_IT_GITLAB=1`. Without it, a component's
   tests run its suite against an `httptest` fake of its API, and remote
   commands run locally through `remotetest.LocalSSH`. The switches:
-  `HINZIEL_IT_TRELLO`, `HINZIEL_IT_GITLAB`, `HINZIEL_IT_CLOUDFLARE`,
-  `HINZIEL_IT_DIGITALOCEAN`, `HINZIEL_IT_SLACK` and `HINZIEL_IT_CLAUDECODE`;
+  `HINZIEL_IT_TRELLO`, `HINZIEL_IT_GITLAB`, `HINZIEL_IT_GITHUB`,
+  `HINZIEL_IT_CLOUDFLARE`, `HINZIEL_IT_DIGITALOCEAN`, `HINZIEL_IT_SLACK` and `HINZIEL_IT_CLAUDECODE`;
   each test's skip message names the credentials it needs. Components written by teams or
   agents run the same suites, which is what makes writing your own component
   safe (§5).
