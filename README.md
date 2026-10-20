@@ -1581,7 +1581,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 | M4 | [Iteration](#iteration): BlankTracker's factory takes feedback from comments on the Trello card and iterates on the same branch, environment and MRs, replying on the card. Feedback and own-comment detection in trackers, `Previous`/`Feedback`/`Session` for agents, `Outcome.Reply`, iteration requests in `trigger/trellocomments` |
 | M5 | Scenario B: `tracker/jira`, `forge/forgejo`, `deploy/sshnginx` |
 | M6 | Gates/approve, hardening |
-| M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
+| M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `trigger/githubcomments` ✅, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 
 ---

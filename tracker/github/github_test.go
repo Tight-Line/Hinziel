@@ -171,7 +171,7 @@ func TestCommentIsTruncated(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := fake.comments[3][0]["body"].(string)
-	if n := len([]rune(got)); n != maxComment || !strings.HasSuffix(got, "…(truncated)") {
+	if n := len([]rune(got)); n != maxComment || !strings.HasSuffix(got, "…(truncated)\n\n"+Signature) {
 		t.Errorf("comment of %d characters, ending %q", n, got[len(got)-20:])
 	}
 }

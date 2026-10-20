@@ -110,6 +110,11 @@ type comment struct {
 
 func (t *Tracker) repoPath() string { return "/repos/" + t.opts.Repo }
 
+// Signature ends every comment Hinziel posts on an issue, so that
+// trigger/githubcomments can tell them apart from people's, even when
+// Hinziel posts with a person's token.
+const Signature = "<!-- hinziel -->"
+
 // issueURLRE matches https://<host>/<owner>/<repo>/issues/<number>.
 var issueURLRE = regexp.MustCompile(`^https?://[^/]+/([^/]+/[^/]+)/issues/([0-9]+)`)
 
@@ -184,10 +189,11 @@ func (t *Tracker) Comment(ctx context.Context, id string, msg core.Message) erro
 		return err
 	}
 	text := msg.Markdown()
-	if utf8.RuneCountInString(text) > maxComment {
+	if room := maxComment - utf8.RuneCountInString("\n\n"+Signature); utf8.RuneCountInString(text) > room {
 		const cut = "\n\n…(truncated)"
-		text = string([]rune(text)[:maxComment-utf8.RuneCountInString(cut)]) + cut
+		text = string([]rune(text)[:room-utf8.RuneCountInString(cut)]) + cut
 	}
+	text += "\n\n" + Signature
 	return t.api.Do(ctx, http.MethodPost, t.repoPath()+"/issues/"+n+"/comments", nil, map[string]string{"body": text}, nil)
 }
 
