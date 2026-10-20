@@ -706,3 +706,32 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func TestLoginCommand(t *testing.T) {
+	f := newFixture(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	login := &fakeSalesforceLogin{}
+	srv := httptest.NewServer(login)
+	defer srv.Close()
+	f.org.opts.LoginURL = srv.URL
+	f.save(&fakeState{HubLoggedOut: true})
+
+	if in, err := f.org.LoggedIn(f.ctx); in || err != nil {
+		t.Fatalf("LoggedIn = %v, %v; want false", in, err)
+	}
+	how, err := f.org.StartLogin(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(regexp.MustCompile(`https?://\S+authorize\S+`).FindString(how))
+	if err != nil || u.Query().Get("state") == "" {
+		t.Fatalf("no login link in:\n%s", how)
+	}
+	login.challenge = u.Query().Get("code_challenge")
+	if err := f.org.FinishLogin(f.ctx, "http://localhost:1717/OauthRedirect?code=good-code&state="+u.Query().Get("state")+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := f.org.LoggedIn(f.ctx); !in || err != nil {
+		t.Errorf("after the login, LoggedIn = %v, %v", in, err)
+	}
+}

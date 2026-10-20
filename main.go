@@ -45,6 +45,9 @@ func Run(ctx context.Context, args []string, out io.Writer, factories ...Factory
 	if len(args) > 0 && args[0] == "check" {
 		return check(ctx, out, factories, args[1:])
 	}
+	if len(args) > 0 && args[0] == "login" {
+		return login(ctx, out, factories, args[1:])
+	}
 	if len(args) > 0 && args[0] == "host" {
 		return host(ctx, out, factories, args[1:])
 	}
@@ -167,6 +170,9 @@ Commands:
   approve <run-id>               confirm a run's human actions (any time, also while it runs);
                                  at a gate, pass it and continue
   cancel <run-id>                cancel a run that isn't executing
+  login [--factory F] [--force] [component]...
+                                 log this host in where a component logs in through a link (once, at setup):
+                                 prints the link and reads back what the browser ended on
   check [--factory F] [component]...
                                  test credentials and the tools this host needs;
                                  components as listed by check, e.g. tracker, repo, "deployer api"

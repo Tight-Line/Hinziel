@@ -1183,6 +1183,8 @@ learns from.
 <factory> answer <run-id> <answer>...  # answer the question a component asked (needs_input), and continue
 <factory> approve <run-id>             # confirm pending actions (any time, also mid-run); at a gate, pass it and continue
 <factory> cancel <run-id>              # cancel a run that isn't executing
+<factory> login [--force] [component]...  # log this host in where a component logs in through a link (deploy/scratchorg's
+                                       # Dev Hub): once, at setup; prints the link, reads back the address
 <factory> check [component]...         # test credentials and the tools this host needs (git, ssh, node, claude, …);
                                        # components: hinziel, tracker, agent, repo, environment, dns, deployer,
                                        # trigger, notifier, or one by name ("deployer api")

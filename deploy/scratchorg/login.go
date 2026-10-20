@@ -81,6 +81,8 @@ func (o *Org) loginFile() (string, error) {
 	return filepath.Join(dir, "hinziel", "scratchorg", name+"-login.json"), nil
 }
 
+var _ core.Login = (*Org)(nil)
+
 // devHubLogin is called when the Dev Hub needs logging in. With an answer to
 // an earlier request, it finishes that login; otherwise, or if that fails,
 // it asks a human for one (core.NeedsInputError).
@@ -105,6 +107,37 @@ func (o *Org) devHubLogin(ctx context.Context, cause error) error {
 
 The address holds a one-time code that only works together with a secret kept on the factory's host, so it's safe to post.`,
 		why, link, sfRedirectURI)}
+}
+
+// LoggedIn reports whether the Dev Hub is logged in, with a login that works.
+func (o *Org) LoggedIn(ctx context.Context) (bool, error) {
+	_, err := o.active(ctx)
+	if needsLogin(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// StartLogin begins a Dev Hub login for the `login` command.
+func (o *Org) StartLogin(ctx context.Context) (string, error) {
+	link, err := o.startLogin()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`Log in Dev Hub %s:
+
+1. Open this link, in any browser, and log in as a user of the Dev Hub's org with Dev Hub access:
+
+   %s
+
+2. Your browser then ends on a page at %s?code=… that doesn't load. That's expected.
+3. Copy that page's whole address and paste it below, within a few minutes: the code in it expires.`,
+		o.opts.DevHub, link, sfRedirectURI), nil
+}
+
+// FinishLogin completes the login StartLogin began.
+func (o *Org) FinishLogin(ctx context.Context, answer string) error {
+	return o.finishLogin(ctx, answer)
 }
 
 // startLogin saves a new PKCE verifier and state, and returns the login link.
