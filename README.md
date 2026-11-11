@@ -87,6 +87,48 @@ team never has to learn the library itself. A team whose previews are new
 environments, and that only wants those, can stop there: `env up` gives them
 a fresh one on demand, with no tickets or agents involved.
 
+### Who it's for
+
+Hinziel is aimed first at **individual developers and consultants, and small
+groups of them**. They work inside clients' systems they don't control, and
+can't count on the client's tooling. A company may adopt Hinziel too, to
+replace or supplement a DevOps platform it already has, but the design
+decisions favour the person doing the work.
+
+The typical case is an independent Salesforce consultant
+([12.8](#128-an-independent-salesforce-consultant)). Every few months there's a
+new client. Some have Gearset or Copado, and most won't give a contractor a
+seat in it; some don't even have sandboxes, so every change is made in
+production. With Hinziel the consultant brings their own setup: a scratch
+org from their own Dev Hub with a copy of the client's org, where they or an
+agent make the change and test it, and a safe way to bring the change back
+to production.
+
+### Open core
+
+Hinziel is open source. **The core is free:** the library, the pipeline, the
+build-a-factory skill and the ready-made integrations (GitHub, GitLab, Jira,
+Trello, …). Integrations stay free on purpose. Each one makes the core useful
+to more people, and the skill writes a missing one cheaply anyway.
+
+**Paid add-ons** are built on top of the core: things that are hard to build
+and expensive to get wrong.
+
+- **Converting an org into source quickly**, so a new client's org becomes a
+  repository and a working scratch org in hours, not days.
+- **Bringing changes back to production safely**: a validated deploy, the
+  tests production requires, a rollback plan, and step-by-step instructions
+  for what can't be deployed.
+- **Team features**: a shared Dev Hub and org pools, audit logs, single
+  sign-on.
+- **Realistic, anonymized data** in each environment, through our separate
+  anonymization product. Hinziel uses that product; it doesn't do the
+  anonymization itself.
+
+An add-on is a Go module like any other component, kept private and
+licensed: a factory imports it and wires it in. The core's licence is still
+to be chosen (§10, question 15).
+
 ---
 
 ## 1. Goals and non-goals
@@ -132,9 +174,12 @@ scope until we choose to revisit it.
 - Reacting to review comments on MRs. Iterating on feedback in the ticket is
   planned for M4 ([Iteration](#iteration)); comments on the MR may follow.
 - Multi-tenant/public SaaS deployment.
-- Production rollout. A factory's work ends at reviewed MRs and a working
-  preview. Merging, canaries, feature flags and production deploys stay the
-  team's own pipeline ([Scenario D](#11-reference-scenarios)).
+- Production rollout in the core. A factory's work ends at reviewed MRs and a
+  working preview. Merging, canaries, feature flags and production deploys
+  stay the team's own pipeline ([Scenario D](#11-reference-scenarios)). For
+  Salesforce, bringing a change back to production is a paid add-on
+  ([Open core](#open-core), [12.8](#128-an-independent-salesforce-consultant)),
+  for consultants whose clients have no pipeline at all.
 
 ---
 
@@ -1701,6 +1746,12 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
     outside the pod (a shared `run.Store`, see
     [Hosting a factory](#hosting-a-factory)). The socket is enough until a
     team asks.
+15. **The core's licence.** Permissive (MIT or Apache 2.0) is the easiest
+    to adopt, but lets anyone resell the core, for example as a hosted
+    service. AGPL or a source-available licence prevents that, at the cost
+    of some adoption. The choice also decides how easily someone else could
+    publish free copies of the paid add-ons ([Open core](#open-core)).
+    Needed before the first public release.
 
 ### Per-environment certificates
 
@@ -2298,6 +2349,61 @@ anything itself here, and the interfaces don't require it to.
   command logged. Same root as 12.6 (open question 11).
 
 **Verdict: fits structurally; mismatched on agent access.** Long waits were the other mismatch, now resolved by `core.WaitError`: a booking or a ServiceNow change is a deployer or provisioner returning "not yet" until ops has acted.
+
+### 12.8 An independent Salesforce consultant
+
+**The person.** An independent Salesforce consultant who changes clients
+every few months, alone or with one or two others. Some clients have
+Gearset or Copado, but won't give a contractor a seat. Some have no
+sandboxes, so changes are made straight in production. The consultant gets
+an admin login to the client's production org and little else.
+
+**What Hinziel gives them.** On a new project: the client's org in a
+repository, a scratch org that copies it (with data), a place to make and
+test the change, by hand or with an agent, and a safe way to bring it back
+to production. None of it needs anything from the client beyond the login.
+
+**How it maps.**
+
+| Piece | Implementation |
+|---|---|
+| Factory | one per client project, written by the build-a-factory skill |
+| Dev Hub | the consultant's own (a free Developer Edition: 3 active scratch orgs, 6 a day), not the client's |
+| Repository, forge | the consultant's own (`forge/github`), or the client's if it has one |
+| Tracker | the client's, or none: `env up` and working by hand need no tickets |
+| Environment, deployer | `deploy/scratchorg`, with the client's managed packages installed first |
+| Source | retrieved once from production, then pruned until a scratch org builds from it. Paid add-on: converting an org into source quickly |
+| Data | `Setup` seeds the scratch org. Paid add-on: a masked selection of production records, through the anonymization product |
+| Back to production | paid add-on: validate the deploy against production, run the tests it requires, deploy on the consultant's command, and write instructions for what can't be deployed |
+
+**What fits.** Everything up to the preview is Scenario C with a different
+Dev Hub: `scratchorg.Options.DevHub` is just an `sf` alias. Without tickets,
+`env up` gives the consultant a fresh copy of the client's org whenever
+they want one.
+
+**What doesn't.**
+
+- **Production is outside the pipeline.** A run ends at a reviewed change
+  request and a preview (§1). Bringing the change back is a separate,
+  explicit command the consultant runs after review. The agent never gets
+  production credentials, and the factory never deploys there on its own.
+- **Client data leaves the client.** Copying production records into
+  scratch orgs on the consultant's Dev Hub moves customer data out of the
+  client's control, which many contracts and GDPR forbid unless it's
+  anonymized. Scratch orgs also hold only 200 MB of data, so the copy is a
+  selection of records, not all of production.
+- **Paid managed packages** may not install in the consultant's scratch
+  orgs without a licence arrangement with the package's vendor.
+- **The first day on a project is the expensive one.** Converting an
+  unfamiliar org into source is where most problems appeared in the sfplay
+  trial (its `FRICTION.md`). It happens on every new client, so it has to
+  be fast.
+
+**Verdict: fits, with production as an add-on.** The pipeline and
+interfaces hold. The consultant's case adds the step every other case study
+leaves to the team, bringing a change back to production, and makes the
+one-time conversion of an org into source a repeated cost worth paying to
+make fast.
 
 ### What the case studies show together
 
