@@ -1240,6 +1240,7 @@ learns from.
 <factory> env up [--factory F] [key]   # provision + deploy the target branches, without a ticket
 <factory> env list [--all]             # environments the runs know (--all: destroyed ones too), and orphans
 <factory> env destroy [--factory F] <run-id | env-name | ticket>   # tear one down
+<factory> mcp                          # planned (M9): these commands as MCP tools, over stdio
 
 # used by the agent inside a run (engine found via $HINZIEL_SOCKET)
 $HINZIEL_BIN deploy                    # deploy every repo's pushed HEAD to the run's environment
@@ -1263,6 +1264,54 @@ target branches' latest commits to the same environment. It notifies nobody;
 
 [`examples/demo`](./examples/demo) is a factory built entirely from fakes, to
 try the CLI without any accounts.
+
+### MCP server and Claude plugin (planned)
+
+Someone who already works with Claude shouldn't have to learn the CLI. They
+should be able to say "take the Salesforce org I have open and copy it
+somewhere I can test" ([12.8](#128-an-independent-salesforce-consultant)).
+`<factory> mcp` serves the factory's commands as
+[MCP](https://modelcontextprotocol.io) tools to Claude Desktop, Claude Code or
+any other MCP client:
+
+| Tool | Does | Command |
+|---|---|---|
+| `login` | logs a component in through its link (for Salesforce, `sf org login web`, in the user's browser) | `login` |
+| `env_up` | a fresh environment, or the latest target branches deployed to an existing one | `env up` |
+| `env_list`, `env_destroy` | the environments, and tearing one down | `env list`, `env destroy` |
+| `retrieve` | changes made in an environment, pulled into a working tree, with the diff | new: today `retrieve` only runs inside a run |
+| `run`, `status`, `answer` | a ticket handed to the factory's agent, and following it | `run`, `status`, `answer` |
+
+Add-ons add their own tools, such as validating a change against
+production and deploying it there ([Open core](#open-core)). Tools that
+change anything outside the factory's own environments are marked as
+destructive, so the client asks the user before calling them.
+
+**The rules.**
+
+- **Local only.** The server runs on the user's machine over stdio, and the
+  logins stay there. A hosted server would hold tokens for many clients'
+  production orgs; that's out of scope.
+- **Never takes credentials from chat or the browser.** A login always goes
+  through the component's own link, where the user logs in themselves.
+  With a browser connected, Claude may read the org's address from the open
+  tab, to start the right login.
+- **One factory, one server.** A factory is made for one project. On a new
+  project, the plugin's skill first builds the factory for it (§5), then
+  uses that factory's tools.
+
+**The plugin.** A Claude Code plugin bundles the server with skills: the
+build-a-factory skill, what to do on a new project, the known traps of the
+platform (for Salesforce, the sfplay trial's `FRICTION.md`), and when to ask
+before acting.
+
+**What else exists.** Salesforce's DX MCP server already gives an agent tools
+to create scratch orgs, deploy and retrieve (its scratch org tools were
+pre-release in October 2026), and Hutte has an MCP server for its org pools.
+Hinziel's tools don't compete with those primitives; they add what Claude
+would otherwise improvise in every chat: an unfamiliar org turned into a
+copy that actually builds, the same steps every time, and production
+untouched until the user asks.
 
 ---
 
@@ -1645,6 +1694,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 | M6 | Gates/approve, hardening |
 | M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `trigger/githubcomments` ✅ (with answers), the Dev Hub login asked for on the ticket ✅, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
+| M9 | [MCP server and Claude plugin](#mcp-server-and-claude-plugin-planned): `<factory> mcp` with the tools above, `retrieve` outside a run, and a Claude Code plugin with the skills. Accepted when a consultant goes from "copy the org I have open" to a working scratch org from chat, on an org they haven't seen before |
 
 ---
 
@@ -2379,7 +2429,10 @@ to production. None of it needs anything from the client beyond the login.
 **What fits.** Everything up to the preview is Scenario C with a different
 Dev Hub: `scratchorg.Options.DevHub` is just an `sf` alias. Without tickets,
 `env up` gives the consultant a fresh copy of the client's org whenever
-they want one.
+they want one. A consultant who works with Claude does all of this from
+chat, through the factory's [MCP server](#mcp-server-and-claude-plugin-planned)
+(M9): "copy the org I have open", "what did I change in the copy?", "check
+it would deploy to production".
 
 **What doesn't.**
 
