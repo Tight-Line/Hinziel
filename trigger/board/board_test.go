@@ -394,3 +394,71 @@ func TestStartNeedsTickets(t *testing.T) {
 		t.Error("Start without Tickets must fail")
 	}
 }
+
+func TestLogInURL(t *testing.T) {
+	e := &env.Environment{Name: "hz-shop-#1"}
+	for _, base := range []string{"https://f.test/triggers/shop/board/", "https://f.test/triggers/shop/board"} {
+		if got, want := LogInURL(base)(e), "https://f.test/triggers/shop/board/open?env=hz-shop-%231"; got != want {
+			t.Errorf("LogInURL(%q) = %q, want %q", base, got, want)
+		}
+	}
+}
+
+func TestOpenLink(t *testing.T) {
+	tickets := &fakeTickets{tickets: []tracker.Ticket{ticket("2", "In review"), ticket("3", "Torn down")}}
+	d := &fakeDispatcher{latest: map[string]*run.Snapshot{
+		"2": {ID: "r2", Status: run.StatusSucceeded, Environment: &env.Environment{Name: "hz-2"}},
+		"3": {ID: "r3", Status: run.StatusSucceeded, Environment: &env.Environment{Name: "hz-3"}, EnvironmentDestroyed: now},
+	}}
+	auth := base64.StdEncoding.EncodeToString([]byte("tester:pw"))
+	b := New(Options{Tickets: tickets, Open: fakeOpener{}, BasicAuth: auth})
+	mux := http.NewServeMux()
+	if err := b.Start(context.Background(), d, mux); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	link := LogInURL(srv.URL + "/")
+
+	open := func(e, mode string, login bool) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, link(&env.Environment{Name: e}), nil)
+		if mode != "" {
+			req.Header.Set("Sec-Fetch-Mode", mode)
+			req.Header.Set("Sec-Fetch-Site", "cross-site") // a click on the merge request
+		}
+		if login {
+			req.Header.Set("Authorization", "Basic "+auth)
+		}
+		client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp
+	}
+
+	for _, c := range []struct {
+		env, mode string
+		login     bool
+		status    int
+		location  string
+	}{
+		{"hz-2", "navigate", true, http.StatusSeeOther, "https://hz-2.test/frontdoor?sid=secret"},
+		{"hz-2", "", true, http.StatusSeeOther, "https://hz-2.test/frontdoor?sid=secret"},
+		{"hz-2", "navigate", false, http.StatusUnauthorized, ""},
+		{"hz-2", "no-cors", true, http.StatusForbidden, ""}, // an <img> on another site
+		{"hz-2", "cors", true, http.StatusForbidden, ""},    // another site's fetch
+		{"hz-3", "navigate", true, http.StatusSeeOther, "./?error=hz-3+isn%27t+the+environment+of+an+open+ticket+any+more"},
+		{"hz-9", "navigate", true, http.StatusSeeOther, "./?error=hz-9+isn%27t+the+environment+of+an+open+ticket+any+more"},
+	} {
+		resp := open(c.env, c.mode, c.login)
+		if resp.StatusCode != c.status || resp.Header.Get("Location") != c.location {
+			t.Errorf("open %s (mode %q, login %v): %s to %q, want %d to %q", c.env, c.mode, c.login, resp.Status, resp.Header.Get("Location"), c.status, c.location)
+		}
+		if strings.Contains(c.location, "sid=") && (resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("Referrer-Policy") != "no-referrer") {
+			t.Errorf("open %s: the login link may be cached or leak in a referrer", c.env)
+		}
+	}
+}

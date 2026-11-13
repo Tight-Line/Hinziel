@@ -12,7 +12,12 @@
 // env.Opener, as deploy/scratchorg does), cards whose environment exists get
 // a Log in button: it opens the environment in a new tab, logged in. The link
 // carries a session, so it's made when the button is clicked and never put
-// in the page.
+// in the page. LogInURL gives a lasting link that does the same, for an
+// environment's endpoints (factory Endpoints), so it can be posted on the
+// ticket and the merge request: opened in a browser, it asks for the
+// board's login and sends the browser on, logged in. It only answers to a
+// page being opened (Sec-Fetch-Mode navigate): another site can send a
+// visitor there, as it can link anywhere, but can't load it unseen.
 //
 // The page is served by `daemon --listen` at /triggers/<factory>/<trigger>/
 // and refreshes itself. With Options.BasicAuth, the browser asks for a user
@@ -103,6 +108,7 @@ func (b *Board) Start(_ context.Context, d trigger.Dispatcher, mux *http.ServeMu
 	mux.Handle("POST /implement", b.login(csrf.Handler(http.HandlerFunc(b.implement))))
 	mux.Handle("POST /resume", b.login(csrf.Handler(http.HandlerFunc(b.resume))))
 	mux.Handle("POST /open", b.login(csrf.Handler(http.HandlerFunc(b.open))))
+	mux.Handle("GET /open", b.login(http.HandlerFunc(b.openEnv)))
 	return nil
 }
 
@@ -258,9 +264,57 @@ func (b *Board) open(w http.ResponseWriter, r *http.Request) {
 		b.back(w, r, "error", tk.Key+" has no environment to log in to")
 		return
 	}
-	u, err := b.opts.Open.OpenURL(r.Context(), latest.Environment)
+	b.redirectLoggedIn(w, r, tk, latest.Environment)
+}
+
+// LogInURL makes, for an environment, the lasting link that logs a browser
+// in to it through the board at boardURL, the board page's address (e.g.
+// "https://factory.example/triggers/shop/board/"). Use it as an Endpoint's
+// URL.
+func LogInURL(boardURL string) func(e *env.Environment) string {
+	if !strings.HasSuffix(boardURL, "/") {
+		boardURL += "/"
+	}
+	return func(e *env.Environment) string {
+		return boardURL + "open?env=" + url.QueryEscape(e.Name)
+	}
+}
+
+// openEnv is open for a link: it finds the open ticket whose latest run has
+// the environment named in the query.
+func (b *Board) openEnv(w http.ResponseWriter, r *http.Request) {
+	if b.opts.Open == nil {
+		http.NotFound(w, r)
+		return
+	}
+	// Browsers say how a request was made; without the header (curl, old
+	// browsers) there's nothing to check.
+	if mode := r.Header.Get("Sec-Fetch-Mode"); mode != "" && mode != "navigate" {
+		http.Error(w, "Open this link in the browser.", http.StatusForbidden)
+		return
+	}
+	name := r.URL.Query().Get("env")
+	tickets, err := b.opts.Tickets.List(r.Context())
 	if err != nil {
-		b.back(w, r, "error", fmt.Sprintf("%s: logging in to %s: %v", tk.Key, latest.Environment.Name, err))
+		b.back(w, r, "error", err.Error())
+		return
+	}
+	for _, tk := range tickets {
+		latest, err := b.d.Latest(r.Context(), tk.Ref)
+		if err != nil || !live(latest) || latest.Environment.Name != name {
+			continue
+		}
+		b.redirectLoggedIn(w, r, tk, latest.Environment)
+		return
+	}
+	b.back(w, r, "error", fmt.Sprintf("%s isn't the environment of an open ticket any more", name))
+}
+
+// redirectLoggedIn sends the browser to a link that logs it in to e.
+func (b *Board) redirectLoggedIn(w http.ResponseWriter, r *http.Request, tk tracker.Ticket, e *env.Environment) {
+	u, err := b.opts.Open.OpenURL(r.Context(), e)
+	if err != nil {
+		b.back(w, r, "error", fmt.Sprintf("%s: logging in to %s: %v", tk.Key, e.Name, err))
 		return
 	}
 	// The link carries a session: keep it out of caches and other sites' logs.

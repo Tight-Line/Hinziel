@@ -234,6 +234,9 @@ func TestAcceptanceTwoReposEndToEnd(t *testing.T) {
 
 	// Environment, endpoints and DNS.
 	wantURL := "https://hz-shop-t-1-api.preview.test"
+	if desc := f.api.Input(cr.ID).Description.Body; !strings.Contains(desc, wantURL) {
+		t.Errorf("the merge request must link the environment: %q", desc)
+	}
 	if r.Environment == nil || r.Environment.Endpoints["api"] != wantURL {
 		t.Fatalf("environment: %+v", r.Environment)
 	}

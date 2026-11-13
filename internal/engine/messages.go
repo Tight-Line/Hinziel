@@ -106,6 +106,18 @@ func noChangesQuestion(r *run.Run) string {
 }
 
 // changeRequestMessage is the description of one repo's change request.
+// writeEnvironment lists the run's environment's endpoints, for trying the
+// change: the reviewer of a merge request is a tester too.
+func writeEnvironment(b *strings.Builder, r *run.Run) {
+	if r.Environment == nil || len(r.Environment.Endpoints) == 0 {
+		return
+	}
+	b.WriteString("\n**Environment** `" + r.Environment.Name + "`\n")
+	for _, name := range sortedKeys(r.Environment.Endpoints) {
+		fmt.Fprintf(b, "- %s: %s\n", name, r.Environment.Endpoints[name])
+	}
+}
+
 func changeRequestMessage(r *run.Run) core.Message {
 	var b strings.Builder
 	if r.Ticket.URL != "" {
@@ -116,6 +128,7 @@ func changeRequestMessage(r *run.Run) core.Message {
 	if r.Outcome != nil && strings.TrimSpace(r.Outcome.Summary) != "" {
 		fmt.Fprintf(&b, "\n%s\n", strings.TrimSpace(r.Outcome.Summary))
 	}
+	writeEnvironment(&b, r)
 	writeManualSteps(&b, r)
 	writeActions(&b, r)
 	fmt.Fprintf(&b, "\n_Opened by Hinziel, run `%s`._\n", r.ID)
@@ -155,12 +168,10 @@ func publishMessage(r *run.Run) core.Message {
 			links = append(links, core.Link{Title: "Merge request: " + name, URL: cr.URL})
 		}
 	}
-	if r.Environment != nil && len(r.Environment.Endpoints) > 0 {
-		b.WriteString("\n**Environment** `" + r.Environment.Name + "`\n")
+	if r.Environment != nil {
+		writeEnvironment(&b, r)
 		for _, name := range sortedKeys(r.Environment.Endpoints) {
-			u := r.Environment.Endpoints[name]
-			fmt.Fprintf(&b, "- %s: %s\n", name, u)
-			links = append(links, core.Link{Title: "Preview: " + name, URL: u})
+			links = append(links, core.Link{Title: "Preview: " + name, URL: r.Environment.Endpoints[name]})
 		}
 	}
 	writeManualSteps(&b, r)
