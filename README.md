@@ -377,7 +377,11 @@ directory. An agent on another machine would need TCP with a per-run token
 
 Notifications are **events**, not a step. The engine emits `run.started`,
 `run.succeeded`, `run.failed`, `run.needs_input`, `run.awaiting_approval` and
-`run.action_required`. Each notifier is subscribed to a set of these.
+`run.action_required`. Each notifier is subscribed to a set of these. A run's
+progress is `run.step_started`, once per step that runs (about ten a run, so
+it's the `notify.Progress` set); a notifier subscribed to every event doesn't
+get it. Routed to `notify/ticket`, it follows the run on its ticket, one
+comment per step.
 
 ### Human actions
 

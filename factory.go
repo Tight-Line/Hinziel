@@ -155,7 +155,7 @@ type Deployer struct {
 
 // Notifier routes events to a notify.Notifier.
 type Notifier struct {
-	On       []notify.EventType // empty = every event
+	On       []notify.EventType // empty = every event but notify.Progress
 	Notifier notify.Notifier
 }
 

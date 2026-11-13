@@ -51,7 +51,7 @@ type Deployer struct {
 }
 
 type Notifier struct {
-	On       []notify.EventType // empty = every event
+	On       []notify.EventType // empty = every event but notify.Progress
 	Notifier notify.Notifier
 }
 

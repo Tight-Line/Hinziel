@@ -26,6 +26,10 @@ const (
 	EventRunAwaitingApproval EventType = "run.awaiting_approval"
 	EventRunActionRequired   EventType = "run.action_required" // one per human action; Event.Action says which
 	EventRunWaiting          EventType = "run.waiting"         // a step started waiting on something new
+	// EventRunStepStarted: a step of the pipeline started (Run.CurrentStep
+	// says which); not for skipped steps. Only notifiers that list it in
+	// their events get it, see Progress.
+	EventRunStepStarted EventType = "run.step_started"
 	// EventEnvironmentDestroyed: a ticket's environment was torn down. Event.Run
 	// is the ticket's latest run, with EnvironmentDestroyed set.
 	EventEnvironmentDestroyed EventType = "environment.destroyed"
@@ -35,6 +39,10 @@ const (
 var (
 	Finished = []EventType{EventRunSucceeded, EventRunFailed}
 	Problems = []EventType{EventRunFailed, EventRunNeedsInput, EventRunAwaitingApproval, EventRunActionRequired}
+	// Progress is a run's steps as they start, about ten per run. A notifier
+	// subscribed to every event (no events listed) doesn't get them: they
+	// would flood a chat channel.
+	Progress = []EventType{EventRunStepStarted}
 )
 
 type Event struct {

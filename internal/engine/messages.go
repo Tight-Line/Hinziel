@@ -203,6 +203,8 @@ func eventMessage(r *run.Run, typ notify.EventType) core.Message {
 			r.ID, r.WaitingFor, r.CurrentStep, r.WaitUntil.UTC().Format("2006-01-02 15:04 MST"), r.ID)}
 	case notify.EventRunNeedsInput:
 		return core.Message{Title: subject + ": needs input", Body: r.Error}
+	case notify.EventRunStepStarted:
+		return stepMessage(r, subject)
 	case notify.EventRunAwaitingApproval:
 		var b strings.Builder
 		fmt.Fprintf(&b, "Run `%s` is waiting before `%s`.", r.ID, r.CurrentStep)
@@ -218,6 +220,36 @@ func eventMessage(r *run.Run, typ notify.EventType) core.Message {
 		return core.Message{Title: subject + ": waiting for approval", Body: b.String()}
 	}
 	return core.Message{Title: subject + ": " + string(typ)}
+}
+
+// stepTitles say what each built-in step does, for people following a run
+// on its ticket. Other steps are named after themselves.
+var stepTitles = map[string]string{
+	StepFetchTicket:          "reading the ticket",
+	StepPrepareWorkspace:     "preparing the branch",
+	StepProvisionEnvironment: "creating the environment",
+	StepDeployBase:           "deploying the current version to the environment",
+	StepImplement:            "the agent is working on the change",
+	StepRetrieve:             "pulling changes made in the environment into git",
+	StepFinalizeBranch:       "finishing the branch",
+	StepOpenChangeRequest:    "opening the merge request",
+	StepDeploy:               "deploying the change to the environment",
+	StepPublish:              "reporting the result",
+}
+
+// stepMessage announces that r's current step started, with where it is in
+// the pipeline.
+func stepMessage(r *run.Run, subject string) core.Message {
+	step := r.CurrentStep
+	title, ok := stepTitles[step]
+	if !ok {
+		title = strings.ReplaceAll(step, "_", " ")
+	}
+	body := fmt.Sprintf("Step `%s` of run `%s`.", step, r.ID)
+	if i := slices.Index(Pipeline, step); i >= 0 {
+		body = fmt.Sprintf("Step %d of %d (`%s`) of run `%s`.", i+1, len(Pipeline), step, r.ID)
+	}
+	return core.Message{Title: subject + ": " + title, Body: body}
 }
 
 // subject names a run in notification titles: "<factory> <ticket key>".

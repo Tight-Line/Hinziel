@@ -492,6 +492,7 @@ func (x *execution) pipeline(ctx context.Context) error {
 			return err
 		}
 		x.logf(name, "started")
+		x.emit(ctx, notify.EventRunStepStarted)
 		err := x.attempt(ctx, name)
 		rec.Finished = x.e.opts.Now()
 		if err != nil {
@@ -674,6 +675,9 @@ func (x *execution) emitEvent(ctx context.Context, ev *notify.Event) {
 		return
 	}
 	for _, n := range x.p.Notifiers {
+		if len(n.On) == 0 && slices.Contains(notify.Progress, ev.Type) {
+			continue
+		}
 		if len(n.On) > 0 && !slices.Contains(n.On, ev.Type) {
 			continue
 		}
