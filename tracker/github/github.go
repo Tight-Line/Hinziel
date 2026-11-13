@@ -9,7 +9,8 @@
 // they aren't tickets.
 //
 // It implements StageMover (puts the label named for the stage on the issue,
-// and takes the other stages' labels off) and DoneChecker (the issue is
+// and takes the other stages' labels off; with a Project, it also moves the
+// issue to the stage's column on that board) and DoneChecker (the issue is
 // closed or deleted, or has StageDone's label). There is no Linker: the pull
 // request's description links the issue, and GitHub shows that on the issue.
 //
@@ -24,6 +25,8 @@
 //     its token. Comments appear under the token's user.
 //   - The labels Stages name must exist in the repository; nothing is
 //     created. `check` lists the repository's labels when one doesn't match.
+//   - With a Project, the token also needs access to it: see Project. Its
+//     columns must exist too, and `check` lists them when one doesn't match.
 package github
 
 import (
@@ -36,6 +39,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -51,6 +55,8 @@ type Options struct {
 	// Stages names the label each lifecycle stage puts on an issue.
 	// Unmapped stages are not reflected.
 	Stages map[tracker.Stage]string
+	// Project, optional: a board whose columns follow the stages too.
+	Project *Project
 	// BaseURL of the API; "" = https://api.github.com. For GitHub Enterprise
 	// Server it's https://<host>/api/v3.
 	BaseURL string
@@ -60,6 +66,10 @@ type Options struct {
 type Tracker struct {
 	opts Options
 	api  *apiclient.Client
+	gql  *apiclient.Client // the GraphQL API, for Project
+
+	boardMu  sync.Mutex
+	boardIDs *board // Project's IDs, once looked up
 }
 
 var (
@@ -76,19 +86,27 @@ func New(opts Options) *Tracker {
 	if base == "" {
 		base = "https://api.github.com"
 	}
-	return &Tracker{opts: opts, api: &apiclient.Client{
-		Name:    "github",
-		BaseURL: base,
-		Auth: func(r *http.Request) {
-			r.Header.Set("Authorization", "Bearer "+opts.Token)
-			r.Header.Set("Accept", "application/vnd.github+json")
-			r.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-		},
-	}}
+	auth := func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+opts.Token)
+		r.Header.Set("Accept", "application/vnd.github+json")
+		r.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	}
+	// GraphQL is at /graphql on github.com, and at /api/graphql next to
+	// Enterprise Server's /api/v3.
+	gqlBase := base
+	if strings.HasSuffix(base, "/api/v3") {
+		gqlBase = strings.TrimSuffix(base, "/v3")
+	}
+	return &Tracker{
+		opts: opts,
+		api:  &apiclient.Client{Name: "github", BaseURL: base, Auth: auth},
+		gql:  &apiclient.Client{Name: "github", BaseURL: gqlBase, Auth: auth},
+	}
 }
 
 type issue struct {
 	Number      int              `json:"number"`
+	NodeID      string           `json:"node_id"`
 	Title       string           `json:"title"`
 	Body        string           `json:"body"`
 	HTMLURL     string           `json:"html_url"`
@@ -227,14 +245,31 @@ func (t *Tracker) Comment(ctx context.Context, id string, msg core.Message) erro
 
 // MoveTo puts the stage's label on the issue and takes off the labels of
 // every other stage, so a "Blocked" label disappears once the run continues.
+// With a Project, it then moves the issue to the stage's column.
 func (t *Tracker) MoveTo(ctx context.Context, id string, stage tracker.Stage) error {
-	want, ok := t.opts.Stages[stage]
-	if !ok || want == "" {
+	want := t.opts.Stages[stage]
+	column := ""
+	if t.opts.Project != nil {
+		column = t.opts.Project.Columns[stage]
+	}
+	if want == "" && column == "" {
 		return nil
 	}
 	n, is, err := t.getIssue(ctx, id)
 	if err != nil {
 		return err
+	}
+	if err := t.moveLabel(ctx, n, is, want); err != nil {
+		return err
+	}
+	return t.moveOnBoard(ctx, n, is, stage)
+}
+
+// moveLabel puts the label want on the issue and takes the other stages'
+// off; "" leaves the labels alone.
+func (t *Tracker) moveLabel(ctx context.Context, n string, is *issue, want string) error {
+	if want == "" {
+		return nil
 	}
 	labels := t.repoPath() + "/issues/" + n + "/labels"
 	for _, l := range is.Labels {
@@ -294,6 +329,11 @@ func (t *Tracker) Check(ctx context.Context) error {
 	}
 	if !r.HasIssues {
 		return fmt.Errorf("repository %s has issues turned off (Settings → General → Features)", t.opts.Repo)
+	}
+	if t.opts.Project != nil {
+		if err := t.checkBoard(ctx); err != nil {
+			return err
+		}
 	}
 	if len(t.opts.Stages) == 0 {
 		return nil

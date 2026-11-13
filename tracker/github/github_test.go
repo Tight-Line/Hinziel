@@ -25,6 +25,11 @@ type fakeGitHub struct {
 	comments map[int][]map[string]any
 	labels   []string // the repository's
 	noIssues bool
+	// The project: acme's number 7, a Status field. items maps an issue's
+	// node ID to its item; status, an item to its option's name.
+	options []string
+	items   map[string]string
+	status  map[string]string
 }
 
 func newFakeGitHub() *fakeGitHub {
@@ -38,6 +43,12 @@ func newFakeGitHub() *fakeGitHub {
 		},
 		comments: map[int][]map[string]any{},
 		labels:   []string{"backend", "hinziel: working", "hinziel: review", "blocked", "done"},
+		options:  []string{"Backlog", "Ready", "In progress", "In review", "Done"},
+		items:    map[string]string{},
+		status:   map[string]string{},
+	}
+	for n, is := range f.issues {
+		is["node_id"] = "I_" + strconv.Itoa(n)
 	}
 	for i := range 150 {
 		f.comments[1] = append(f.comments[1], map[string]any{
@@ -66,6 +77,8 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch path := r.URL.Path; {
+	case path == "/graphql" && r.Method == "POST":
+		send(f.graphql(body))
 	case path == repo:
 		send(map[string]any{"has_issues": !f.noIssues})
 	case path == repo+"/issues" && r.Method == "GET":
@@ -118,6 +131,55 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// graphql answers the three operations project.go sends.
+func (f *fakeGitHub) graphql(body map[string]any) map[string]any {
+	q, _ := body["query"].(string)
+	vars, _ := body["variables"].(map[string]any)
+	fail := func(msg string) map[string]any {
+		return map[string]any{"errors": []any{map[string]any{"message": msg}}}
+	}
+	switch {
+	case strings.Contains(q, "repositoryOwner"):
+		if vars["owner"] != "acme" {
+			return fail("Could not resolve to a User with the login of '" + vars["owner"].(string) + "'.")
+		}
+		var project any // null: no such project
+		if vars["number"] == float64(7) {
+			field := map[string]any{}
+			if vars["field"] == "Status" {
+				var opts []any
+				for i, o := range f.options {
+					opts = append(opts, map[string]any{"id": "O_" + strconv.Itoa(i), "name": o})
+				}
+				field = map[string]any{"id": "F_status", "options": opts}
+			}
+			project = map[string]any{"id": "P_7", "field": field}
+		}
+		return map[string]any{"data": map[string]any{"repositoryOwner": map[string]any{"projectV2": project}}}
+	case strings.Contains(q, "addProjectV2ItemById"):
+		c := vars["content"].(string)
+		if _, ok := f.items[c]; !ok {
+			f.items[c] = "PVTI_" + c
+		}
+		return map[string]any{"data": map[string]any{"addProjectV2ItemById": map[string]any{"item": map[string]any{"id": f.items[c]}}}}
+	case strings.Contains(q, "updateProjectV2ItemFieldValue"):
+		i, _ := strconv.Atoi(strings.TrimPrefix(vars["option"].(string), "O_"))
+		if vars["project"] != "P_7" || vars["field"] != "F_status" || i >= len(f.options) {
+			return fail("bad update")
+		}
+		f.status[vars["item"].(string)] = f.options[i]
+		return map[string]any{"data": map[string]any{"updateProjectV2ItemFieldValue": map[string]any{"projectV2Item": map[string]any{"id": vars["item"]}}}}
+	}
+	return fail("unknown operation")
+}
+
+// column is the issue's column on the project, "" if it isn't on it.
+func (f *fakeGitHub) column(n int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.status[f.items["I_"+strconv.Itoa(n)]]
 }
 
 func (f *fakeGitHub) issueLabels(n int) []string {
@@ -216,6 +278,93 @@ func TestMoveTo(t *testing.T) {
 	}
 	if got := fake.issueLabels(1); len(got) != 2 {
 		t.Errorf("moving to the same stage again must not add a label: %q", got)
+	}
+}
+
+var columns = map[tracker.Stage]string{
+	tracker.StageInProgress: "in progress", // matched leniently
+	tracker.StageInReview:   "In review",
+}
+
+func TestMoveToMovesOnTheBoard(t *testing.T) {
+	tr, fake := newTestTracker(t, Options{Stages: stages, Project: &Project{Owner: "acme", Number: 7, Columns: columns}})
+	ctx := context.Background()
+	if err := tr.MoveTo(ctx, "1", tracker.StageInProgress); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.column(1); got != "In progress" {
+		t.Errorf("column %q after in_progress, want the issue added and in In progress", got)
+	}
+	if got := fake.issueLabels(1); !slices.Contains(got, "hinziel: working") {
+		t.Errorf("the label must still be set: %q", got)
+	}
+	if err := tr.MoveTo(ctx, "1", tracker.StageInReview); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.column(1); got != "In review" {
+		t.Errorf("column %q after in_review", got)
+	}
+	// A stage with a label but no column moves the label only.
+	if err := tr.MoveTo(ctx, "1", tracker.StageBlocked); err != nil {
+		t.Fatal(err)
+	}
+	if got, labels := fake.column(1), fake.issueLabels(1); got != "In review" || !slices.Contains(labels, "blocked") {
+		t.Errorf("after blocked: column %q, labels %q", got, labels)
+	}
+	if len(fake.items) != 1 {
+		t.Errorf("the issue must be added once: %v", fake.items)
+	}
+}
+
+func TestBoardOnlyWithoutLabels(t *testing.T) {
+	tr, fake := newTestTracker(t, Options{Project: &Project{Owner: "acme", Number: 7, Columns: columns}})
+	if err := tr.MoveTo(context.Background(), "1", tracker.StageInReview); err != nil {
+		t.Fatal(err)
+	}
+	if got, labels := fake.column(1), fake.issueLabels(1); got != "In review" || len(labels) != 1 {
+		t.Errorf("column %q, labels %q", got, labels)
+	}
+}
+
+func TestCheckBoard(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct {
+		p    Project
+		want string // in the error; "" = no error
+	}{
+		{Project{Owner: "acme", Number: 7, Columns: columns}, ""},
+		{Project{Owner: "acme", Number: 7, Columns: map[tracker.Stage]string{tracker.StageBlocked: "Stuck"}}, `no option "Stuck" (stage blocked) (it has: Backlog, Done, In progress, In review, Ready)`},
+		{Project{Owner: "acme", Number: 8, Columns: columns}, "no project 8 of acme"},
+		{Project{Owner: "acme", Number: 7, Field: "Phase", Columns: columns}, `no single-select field "Phase"`},
+		{Project{Owner: "nobody", Number: 7, Columns: columns}, "Could not resolve"},
+		{Project{Owner: "acme", Columns: columns}, "Owner and Number"},
+	} {
+		tr, _ := newTestTracker(t, Options{Project: &c.p})
+		err := tr.Check(ctx)
+		if c.want == "" && err != nil || c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)) {
+			t.Errorf("%+v: check = %v, want %q", c.p, err, c.want)
+		}
+		if c.want != "" {
+			stage := tracker.StageInReview
+			if _, ok := c.p.Columns[tracker.StageBlocked]; ok {
+				stage = tracker.StageBlocked
+			}
+			if err := tr.MoveTo(ctx, "1", stage); err == nil {
+				t.Errorf("%+v: MoveTo must fail too", c.p)
+			}
+		}
+	}
+}
+
+func TestEnterpriseGraphQLURL(t *testing.T) {
+	for base, want := range map[string]string{
+		"":                         "https://api.github.com",
+		"https://ghe.test/api/v3":  "https://ghe.test/api",
+		"https://ghe.test/api/v3/": "https://ghe.test/api",
+	} {
+		if got := New(Options{BaseURL: base}).gql.BaseURL; got != want {
+			t.Errorf("BaseURL %q: GraphQL at %q+/graphql, want %q", base, got, want)
+		}
 	}
 }
 
