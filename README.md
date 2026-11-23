@@ -124,7 +124,7 @@ There may be room later for **paid add-ons**: specific adapters or
 customizations that are hard to build and expensive to get wrong. None are
 planned yet. If they come, an add-on is a Go module like any other
 component, kept private and licensed: a factory imports it and wires it in.
-The core's licence is still to be chosen (§10, question 15).
+The core is MIT-licensed (§10, question 15).
 
 ---
 
@@ -1797,13 +1797,10 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
     outside the pod (a shared `run.Store`, see
     [Hosting a factory](#hosting-a-factory)). The socket is enough until a
     team asks.
-15. **The core's licence.** Permissive (MIT or Apache 2.0) is the easiest
-    to adopt, but lets anyone resell the core, for example as a hosted
-    service. AGPL or a source-available licence prevents that, at the cost
-    of some adoption. The choice also decides how easily someone else could
-    publish free copies of any paid add-ons, if there are ever any
-    ([Open core](#open-core)).
-    Needed before the first public release.
+15. **The core's licence.** *Decided: MIT*, the same as Tight Line's other
+    open-source projects. MIT lets anyone resell the core, for example as a
+    hosted service. We accept that: nothing in our plans depends on being
+    the only one who can sell Hinziel, and wider adoption is worth more.
 
 ### Per-environment certificates
 
