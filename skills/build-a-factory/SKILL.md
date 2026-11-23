@@ -1,30 +1,33 @@
 ---
 name: build-a-factory
-description: Find out, with a team, what it takes for someone to try a change nobody wrote by hand, much of which is in nobody's documentation, and then make that real with a Hinziel software factory that turns a ticket into a branch, a merge request and a change deployed where they can try it. Use when someone wants to install Hinziel on their project, set up a factory, have agents' changes deployed to their staging or to a preview per ticket, "make the agent implement tickets", or work out what previewing an agent's change would take for their team. Also use to resume an installation that is under way (look for a hinziel/ directory or a factory repository with SETUP.md).
+description: Find out, with a team, what it takes to completely deliver a safe change nobody wrote by hand (the checks it must pass, from unit tests to integration tests and synthetic checks, and where someone can try it), much of which is in nobody's documentation, and then make that real with a Hinziel software factory that turns a ticket into a branch, a merge request and a checked change deployed where they can try it. Use when someone wants to install Hinziel on their project, set up a factory, have agents' changes tested and deployed to their staging or to a preview per ticket, "make the agent implement tickets", or work out what delivering or previewing an agent's change would take for their team. Also use to resume an installation that is under way (look for a hinziel/ directory or a factory repository with SETUP.md).
 ---
 
 # Build a factory
 
-Your real job is to find out what it takes for this team to try a change
-nobody wrote by hand. An agent that turns a ticket into a diff is easy to
-come by now; a diff is worth something only once someone can try it, and
-where and how that happens is different for every team and mostly not
-written down. It lives in deploy scripts nobody reads, steps someone once
-did by hand, and the heads of the people who do the deploying. Drawing it
-out of the evidence and the people, one question at a time, is where this
-skill earns its keep.
+Your real job is to find out what it takes for this team to completely
+deliver a safe change nobody wrote by hand. An agent that turns a ticket
+into a diff is easy to come by now; a diff is worth something only once
+the team can trust it. That usually means two things: the change passes
+the team's checks (lint, unit tests, integration tests, CI, smoke and
+synthetic checks against a deployed copy), and someone can try it. Both
+are different for every team and mostly not written down. They live in
+CI configs, deploy scripts nobody reads, test suites run from someone's
+laptop, steps someone once did by hand, and the heads of the people who
+do the deploying. Drawing them out of the evidence and the people, one
+question at a time, is where this skill earns its keep.
 
-The answer might be the staging they already deploy branches to, a slot
-on shared infrastructure, or an environment of its own per ticket. Don't
-assume the last. Start from how they try changes today.
+Where to try a change might be the staging they already deploy branches
+to, a slot on shared infrastructure, or an environment of its own per
+ticket. Don't assume the last. Start from how they deliver changes today.
 
 Hinziel is the means: a factory is how the answer becomes something that
 runs for every ticket, and the factory's first run is how you find out
 whether the answer was right. At the end the team has a factory (a small
-Go program that takes a ticket, has an agent implement it on a branch,
-deploys the branch where they can try it and opens a merge request), and
-the first written description of how they try changes and how their app
-is deployed. That description is worth having even if they never run the
+Go program that takes a ticket, has an agent implement and check it on a
+branch, deploys the branch where they can try it and opens a merge
+request), and the first written description of what a delivered change
+is for them and how their app is deployed. That description is worth having even if they never run the
 factory.
 
 The library is in https://github.com/Tight-Line/hinziel. Its README is the
@@ -72,9 +75,10 @@ the person enjoyed. Keep to them.
 8. **Skipping is always allowed.** When the person wants to skip or defer a
    part (a notifier, a trigger, a dedicated OAuth client), say in one line
    what it costs, adjust the factory, and move on.
-9. **Write it down where the team can review it.** Progress, decisions and
-   what a preview is go into files in the factory repository
-   (`SETUP.md`, `ENVIRONMENT.md`), not only into this conversation. A new
+9. **Write it down where the team can review it.** Progress, decisions,
+   what a delivered change is and what a preview is go into files in the
+   factory repository (`SETUP.md`, `ENVIRONMENT.md`), not only into this
+   conversation. A new
    session must be able to pick up from those files alone.
 10. **Fix Hinziel, not just the factory.** When a run fails because of
    Hinziel itself (a component's check that should have caught it, a
@@ -92,34 +96,38 @@ the person enjoyed. Keep to them.
   command's environment with `set -a; . <file>; set +a`. Never commit it.
 - **`SETUP.md`** in the factory repository: the installation's progress, as
   a checklist with the decisions and why. Update it as you go.
-- **`ENVIRONMENT.md`** in the factory repository: what a preview is for
-  this team and the deployment it rests on (`templates/ENVIRONMENT.md`).
+- **`ENVIRONMENT.md`** in the factory repository: what a delivered change
+  is for this team (its checks and its preview) and the deployment it
+  rests on (`templates/ENVIRONMENT.md`).
 - **`README.md`** in the factory directory: the handover
   (`templates/FACTORY-README.md`).
 - **Commits:** ask how the team works before the first commit. Some want
   their own branch and to commit and push themselves; some want you to
   commit on a branch they make. Never push without being asked.
 
-## Phase 1: find out what a preview takes
+## Phase 1: find out what delivering a change takes
 
-Goal: the team and you agree, in `ENVIRONMENT.md`, on where someone will
-try an agent's change and everything that takes. This phase is most of
-the value, and it is mostly questions; follow `references/preview.md`.
+Goal: the team and you agree, in `ENVIRONMENT.md`, on what an agent's
+change must pass before it's done, where someone will try it, and
+everything that takes. This phase is most of the value, and it is mostly
+questions; follow `references/done.md` for the checks and
+`references/preview.md` for the preview.
 
 1. **Repositories.** One or several? Monorepo or not? With several, which
    repos make up the system, and is there one that knows how they run
    together (infra, deploy, platform)? Start there.
 2. **The team's process as written.** Read `CLAUDE.md`, contributing
    guides and recent history. Where do tickets live? What is the target
-   branch? How do changes get reviewed? What checks must pass before a
-   change is done (`./toolkit check`, `make lint test`)? Note every rule
+   branch? How do changes get reviewed? Which checks are written down
+   (`./toolkit check`, `make lint test`, required CI jobs)? Note every rule
    written for a person at a keyboard ("push to `vibe`", "ask before every
    git operation"): Hinziel's agent prompt overrides git, MR and
    confirmation rules, but the rest still applies.
-3. **How they try changes today.** Who tries a change before it's
-   merged, where, and what they must check. Have the person walk you
-   through a recent one. That's the baseline: a preview no less useful,
-   made without a person, may be all they need.
+3. **How they deliver changes today.** Have the person walk you through
+   a recent change from "the code is written" to "we trust it": every
+   check it passed, locally, in CI and against a deployed copy, who tried
+   it, where, and what they looked at. That's the baseline: checks and a
+   preview no less thorough, done without a person, may be all they need.
 4. **How the app is really deployed.** Dig through the evidence layer by
    layer and compare environments, to learn which previews are possible
    and what each would take.
@@ -134,15 +142,23 @@ the value, and it is mostly questions; follow `references/preview.md`.
    at all, how many tickets are in flight, what one per ticket would
    cost. Recommend a shape (their staging, a light copy, or a full
    environment per ticket), say what each gives up, and let them choose.
-7. **Write it down and have it reviewed.** `ENVIRONMENT.md`: the preview
-   and why, the details for that shape, the deployment it rests on, and
-   what's still unknown. Ask the person to review it before you plan the
+7. **Decide what a delivered change is.** List every check a change must
+   pass, wherever it lives (`references/done.md`): in the repository, in
+   CI, against the preview, in a monitoring service, in a person's head.
+   For each, agree how the factory makes it happen (the agent runs it, CI
+   runs it on the MR, or a person does) and say which can't run against
+   the chosen preview yet. Tell the person plainly that today the factory
+   asks the agent to run the checks and report them, but doesn't yet
+   refuse to call a change ready when one fails.
+8. **Write it down and have it reviewed.** `ENVIRONMENT.md`: the checks,
+   the preview and why, the details for that shape, the deployment it
+   rests on, and what's still unknown. Ask the person to review it before you plan the
    factory.
 
 ## Phase 2: plan the factory (no code yet)
 
-Goal: the person confirms a plan that makes the preview real, and knows
-everything they'll be asked for.
+Goal: the person confirms a plan that makes the checks and the preview
+real, and knows everything they'll be asked for.
 
 1. **What the team's agents can reach.** Ask what their agents use today:
    a read-only replica of production data, internal APIs, MCP servers,
@@ -215,8 +231,8 @@ everything they'll be asked for.
    `.env.example` and deploy scripts, and the human actions in
    `ENVIRONMENT.md`.
 7. **Confirm the plan** in one message: components, the sandbox and where
-   the factory runs, what a preview is and what it gives up (from
-   `ENVIRONMENT.md`), how runs start, who's notified, what you'll need from them,
+   the factory runs, the checks and who runs each, what a preview is and
+   what it gives up (from `ENVIRONMENT.md`), how runs start, who's notified, what you'll need from them,
    what runs will cost (a droplet per ticket, say, or nothing on their
    staging), and what you'll create or change where. Then ask: shall I
    build?
@@ -231,7 +247,10 @@ Write `SETUP.md` before asking, so the person can review it as a file.
    factory holds. Keep the app's own files (compose files, build scripts)
    unchanged; put what previews need differently in the factory (an
    override file, an env template). Take post-deploy commands from the
-   team's own deploy scripts, in their order.
+   team's own deploy scripts, in their order. Put every check the agent
+   runs into the factory's `Instructions`: the exact command, where it
+   runs (checkout or preview), how long it takes, and what to do about a
+   known flaky one.
 2. **Write the env file** with a placeholder and a comment for every value.
 3. **Collect credentials one at a time** with the loop in
    `references/credentials.md`. Verify each before the next. Then run the
@@ -240,10 +259,13 @@ Write `SETUP.md` before asking, so the person can review it as a file.
    first run's `deploy_base`), and check it's faithful, not just that it
    answers (`references/preview.md`): a new environment or a slot against
    the environment it copies; the team's staging against their own
-   deploy, at a moment agreed with the person first.
+   deploy, at a moment agreed with the person first. Then run the checks
+   that run against a deployed copy, yourself, against it.
 5. **Prove the whole flow** with a real ticket: `references/first-run.md`.
    Watch it, report each step to the person as it finishes, and fix what
-   fails. The first run is the last probe: expect it to find what nobody
+   fails. Check that the agent ran every check `ENVIRONMENT.md` gives it
+   and reported the result, and that CI ran on its MR as on a developer's.
+   The first run is the last probe: expect it to find what nobody
    mentioned. Each problem is the factory's, Hinziel's, or something
    about the team's process that wasn't written down; record the last
    kind in `ENVIRONMENT.md` and tell the person.
@@ -274,6 +296,8 @@ without its source means the source must be rewritten; a binary's strings
 
 ## References
 
+- `references/done.md`: finding every check a change must pass, and how
+  the factory makes each one happen.
 - `references/preview.md`: how changes get tried today, learning how the
   app is deployed, finding what isn't written down, deciding what a
   preview is, the details of each shape, checking it's faithful.

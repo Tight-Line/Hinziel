@@ -68,6 +68,12 @@ When the run succeeds, check with the person:
   actions shown as done), target branch;
 - the preview: each URL answers, the change is visible, login works or the
   reason it doesn't is known;
+- the checks: every check `ENVIRONMENT.md` gives the agent ran and the MR
+  says how it went; CI ran on the agent's MR as it would on a
+  developer's; the checks a person runs are named in the ticket or the
+  MR. A required check that failed while the run still finished
+  "ready for review" is expected today (nothing enforces checks yet), so
+  say it to the person rather than letting it pass unnoticed;
 - the ticket: moved to the in-progress stage, comment with the MR and the
   preview;
 - what the agent couldn't test, as it says in the MR (BlankTracker's
