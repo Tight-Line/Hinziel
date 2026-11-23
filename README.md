@@ -9,9 +9,9 @@ of its own, or wherever the team tries changes today. Hinziel comes in two parts
 
 1. **A Go library for building software factories**: the pipeline, run
    state, interfaces and ready-made components a factory is made of.
-2. **The build-a-factory skill**, which works out with a team what previewing
-   an autonomous change means for them, and then writes and tests the team's
-   factory with the library.
+2. **The build-a-factory skill**, which works out with a team what it takes
+   to deliver an autonomous change safely, and then writes and tests the
+   team's factory with the library.
 
 A team uses the skill; the skill uses the library. The library is still an
 ordinary Go library, open to any team that would rather write its factory by
@@ -65,17 +65,21 @@ run state, the interfaces, and a growing **library of ready-made components**.
 ### The skill
 
 **Hinziel's killer feature is working out, with the team, what it means to
-preview a change nobody wrote by hand.** An agent's change is worth something
-only once someone can try it, and "try it" means something different for
-every team: an environment of its own per ticket, a namespace in a preview
+completely deliver a safe change that nobody wrote by hand.** An agent's
+change is worth something only once the team can trust it, and what earns
+that trust is different for every team. It usually includes a place to try
+the change: an environment of its own per ticket, a namespace in a preview
 cluster, a scratch org, or simply a deploy to the one staging environment
-they have ([scenario E](#scenario-e-in-more-detail)). Which of these fits
-depends on how the app is really deployed, and that knowledge is tacit,
-scattered and often partly wrong. The **build-a-factory skill** (§5) goes
-into a team's repositories and running environments, works out how the app
-is really deployed, and then decides with the team what a preview is for
-them: what it must be faithful to, what it may share, what it must never
-touch, and what it may cost.
+they have ([scenario E](#scenario-e-in-more-detail)). It may also include
+unit tests, integration tests, synthetic checks against the deployed
+change, or whatever else the team runs before it calls a change done. Which
+of these fit depends on how the app is really built, tested and deployed,
+and that knowledge is tacit, scattered and often partly wrong. The
+**build-a-factory skill** (§5) goes into a team's repositories, pipelines
+and running environments, works out how changes really get delivered, and
+then decides with the team what a delivered change is for them: which
+checks it must pass, what its preview must be faithful to, what it may
+share, what it must never touch, and what it may cost.
 
 Where an environment per ticket is possible and worth it, the skill
 reproduces the team's deployment so that every ticket gets one, something
@@ -95,14 +99,13 @@ can't count on the client's tooling. A company may adopt Hinziel too, to
 replace or supplement a DevOps platform it already has, but the design
 decisions favour the person doing the work.
 
-The typical case is an independent Salesforce consultant
-([12.8](#128-an-independent-salesforce-consultant)). Every few months there's a
-new client. Some have Gearset or Copado, and most won't give a contractor a
-seat in it; some don't even have sandboxes, so every change is made in
-production. With Hinziel the consultant brings their own setup: a scratch
-org from their own Dev Hub with a copy of the client's org, where they or an
-agent make the change and test it, and a safe way to bring the change back
-to production.
+One example is an independent Salesforce consultant
+([12.8](#128-an-independent-salesforce-consultant)). Every few months there's
+a new client, and the client's tooling may not include the contractor, or
+may not exist at all. With Hinziel the consultant brings their own setup: a
+copy of the client's org where they or an agent make the change and test
+it. The same shape fits a contractor dropped into a client's web app,
+microservices or mobile product (§12).
 
 ### Open core
 
@@ -111,23 +114,17 @@ build-a-factory skill and the ready-made integrations (GitHub, GitLab, Jira,
 Trello, …). Integrations stay free on purpose. Each one makes the core useful
 to more people, and the skill writes a missing one cheaply anyway.
 
-**Paid add-ons** are built on top of the core: things that are hard to build
-and expensive to get wrong.
+Hinziel doesn't anonymize data itself. A factory can seed its environments
+however the team already does. For a team without a good way to get
+realistic, anonymized data, there's
+[Datadouble](https://github.com/datadouble/datadouble), a separate project,
+also by Tight Line and also mostly free.
 
-- **Converting an org into source quickly**, so a new client's org becomes a
-  repository and a working scratch org in hours, not days.
-- **Bringing changes back to production safely**: a validated deploy, the
-  tests production requires, a rollback plan, and step-by-step instructions
-  for what can't be deployed.
-- **Team features**: a shared Dev Hub and org pools, audit logs, single
-  sign-on.
-- **Realistic, anonymized data** in each environment, through our separate
-  anonymization product. Hinziel uses that product; it doesn't do the
-  anonymization itself.
-
-An add-on is a Go module like any other component, kept private and
-licensed: a factory imports it and wires it in. The core's licence is still
-to be chosen (§10, question 15).
+There may be room later for **paid add-ons**: specific adapters or
+customizations that are hard to build and expensive to get wrong. None are
+planned yet. If they come, an add-on is a Go module like any other
+component, kept private and licensed: a factory imports it and wires it in.
+The core's licence is still to be chosen (§10, question 15).
 
 ---
 
@@ -176,10 +173,10 @@ scope until we choose to revisit it.
 - Multi-tenant/public SaaS deployment.
 - Production rollout in the core. A factory's work ends at reviewed MRs and a
   working preview. Merging, canaries, feature flags and production deploys
-  stay the team's own pipeline ([Scenario D](#11-reference-scenarios)). For
-  Salesforce, bringing a change back to production is a paid add-on
-  ([Open core](#open-core), [12.8](#128-an-independent-salesforce-consultant)),
-  for consultants whose clients have no pipeline at all.
+  stay the team's own pipeline ([Scenario D](#11-reference-scenarios)).
+  Teams whose clients have no pipeline at all, such as the Salesforce
+  consultant in [12.8](#128-an-independent-salesforce-consultant), need a
+  separate, explicit step for that.
 
 ---
 
@@ -1286,10 +1283,10 @@ any other MCP client:
 | `retrieve` | changes made in an environment, pulled into a working tree, with the diff | new: today `retrieve` only runs inside a run |
 | `run`, `status`, `answer` | a ticket handed to the factory's agent, and following it | `run`, `status`, `answer` |
 
-Add-ons add their own tools, such as validating a change against
-production and deploying it there ([Open core](#open-core)). Tools that
-change anything outside the factory's own environments are marked as
-destructive, so the client asks the user before calling them.
+Components can add their own tools, such as validating a change against
+production and deploying it there. Tools that change anything outside the
+factory's own environments are marked as destructive, so the client asks
+the user before calling them.
 
 **The rules.**
 
@@ -1804,7 +1801,8 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
     to adopt, but lets anyone resell the core, for example as a hosted
     service. AGPL or a source-available licence prevents that, at the cost
     of some adoption. The choice also decides how easily someone else could
-    publish free copies of the paid add-ons ([Open core](#open-core)).
+    publish free copies of any paid add-ons, if there are ever any
+    ([Open core](#open-core)).
     Needed before the first public release.
 
 ### Per-environment certificates
@@ -2426,9 +2424,9 @@ to production. None of it needs anything from the client beyond the login.
 | Repository, forge | the consultant's own (`forge/github`), or the client's if it has one |
 | Tracker | the client's, or none: `env up` and working by hand need no tickets |
 | Environment, deployer | `deploy/scratchorg`, with the client's managed packages installed first |
-| Source | retrieved once from production, then pruned until a scratch org builds from it. Paid add-on: converting an org into source quickly |
-| Data | `Setup` seeds the scratch org. Paid add-on: a masked selection of production records, through the anonymization product |
-| Back to production | paid add-on: validate the deploy against production, run the tests it requires, deploy on the consultant's command, and write instructions for what can't be deployed |
+| Source | retrieved once from production, then pruned until a scratch org builds from it. Converting an unfamiliar org into source quickly is still unsolved |
+| Data | `Setup` seeds the scratch org, optionally with a masked selection of production records from Datadouble |
+| Back to production | a separate command: validate the deploy against production, run the tests it requires, deploy on the consultant's command, and write instructions for what can't be deployed |
 
 **What fits.** Everything up to the preview is Scenario C with a different
 Dev Hub: `scratchorg.Options.DevHub` is just an `sf` alias. Without tickets,
@@ -2456,7 +2454,7 @@ it would deploy to production".
   trial (its `FRICTION.md`). It happens on every new client, so it has to
   be fast.
 
-**Verdict: fits, with production as an add-on.** The pipeline and
+**Verdict: fits, with production as a separate step.** The pipeline and
 interfaces hold. The consultant's case adds the step every other case study
 leaves to the team, bringing a change back to production, and makes the
 one-time conversion of an org into source a repeated cost worth paying to
