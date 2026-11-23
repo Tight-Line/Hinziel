@@ -326,6 +326,27 @@ The environment comes first because the agent works in it. A consequence: if
 provisioning fails, the run fails before any code is written and no MR is
 opened.
 
+### Checks (planned)
+
+A delivered change has passed the team's checks, not just been deployed.
+Today the agent runs them during `implement` because the factory's
+`Instructions` tell it to (lint, unit tests, the team's end-to-end suite
+against the environment), and reports them in the MR. CI runs on the MR as
+it would for a developer. Nothing in the pipeline enforces any of it: a run
+whose agent skipped a required check, or whose MR's CI is red, still ends
+"ready for review" (Scenario D's D4).
+
+A `verify` step between `deploy` and `publish` will close that gap. It runs
+the factory's checks against the final commit and the deployed environment:
+commands in the workspace, the forge's CI status (D4's `forge.CheckReader`),
+suites against the environment's endpoints (integration, end-to-end,
+synthetic). A required check that fails sends the run back to the agent with
+the output, or ends it as `needs_input` once its retries are spent; a
+check still running makes the step [wait](#run-status). `publish` then
+reports every check's result on the MR and the ticket. The build-a-factory
+skill already records, for each check, whether it should move to this step
+(§5).
+
 ### Agent loop
 
 The agent tests its work in the environment many times during `implement`,
@@ -1047,9 +1068,10 @@ tests and hands over their factory. This section is the outline; the skill
 holds the method in full.
 The factory lives in a dedicated factory repository, or in the app's repository when it's a monorepo (§4).
 
-Two parts carry most of the friction. **Deciding what a preview is, and
-building it,** is the hardest part and the most valuable one, and it has its own section
-below ([Learning how the app is deployed](#learning-how-the-app-is-deployed)).
+Two parts carry most of the friction. **Deciding what a delivered change
+is, and building it,** is the hardest part and the most valuable one: the
+checks a change must pass, and where someone can try it. It has its own
+section below ([Learning how the app is deployed](#learning-how-the-app-is-deployed)).
 **Collecting credentials** is the most tedious part, and a missing one stalls
 everything after it. The skill settles both **before it writes any code**,
 and works in two phases.
@@ -1092,8 +1114,9 @@ and works in two phases.
      surprised by them later.
 4. **Ask for confirmation**, in this shape:
 
-   > Here's my plan: (components, the environment model, what a preview is
-   > for you and how it differs from your staging, what triggers runs, who gets notified). Here's what I need from you and how to get each
+   > Here's my plan: (components, the environment model, the checks a
+   > change must pass and who runs each, what a preview is for you and how
+   > it differs from your staging, what triggers runs, who gets notified). Here's what I need from you and how to get each
    > one: (the list). I'll write `~/.config/hinziel/<factory>.env` with a
    > commented placeholder for every value, so you only fill it in. Shall I
    > proceed to build?
@@ -1119,8 +1142,8 @@ and works in two phases.
    and iterate until it provisions, deploys and passes the
    [parity check](#learning-how-the-app-is-deployed).
 8. **Prove the whole flow.** Ask for a small test feature, run it as a real
-   ticket, and verify the result together: branch, MRs, a working environment
-   with the change, notifications. Fix and repeat until it works.
+   ticket, and verify the result together: branch, MRs, the checks and their
+   results, a working environment with the change, notifications. Fix and repeat until it works.
 9. **Hand over** the factory, with a short README of what was built, the
    environment model, every credential it uses and how to rotate it, and any
    components worth contributing upstream.
@@ -1128,8 +1151,8 @@ and works in two phases.
 ### Learning how the app is deployed
 
 Writing the tracker, forge and agent parts of a factory is mostly
-mechanical. Deciding where an autonomous change gets previewed is not, and
-neither is reproducing an environment: the knowledge of how the app
+mechanical. Deciding what an autonomous change must pass and where it gets
+previewed is not, and neither is reproducing an environment: the knowledge of how the app
 actually gets deployed is tacit, scattered and often partly wrong. BlankTracker
 is the easy case. Its deploy scripts are in the repository and its owner
 could explain the rest. Most teams have none of that written down, and this
@@ -1173,6 +1196,21 @@ cover, and says what each gives up:
   (scenario B) or a namespace (scenario D);
 - **a full environment per ticket** (scenarios A and C): the most faithful,
   and the most to build and pay for.
+
+**And decide what a delivered change is.** A preview is one part. The
+skill also finds every check the team's own changes pass on the way to
+being trusted: lint and unit tests, CI jobs and which ones are required,
+integration and end-to-end suites (often in another repository, or run by
+hand), synthetic checks in a monitoring service, a QA pass. It asks which
+of those the team would insist on for a change nobody wrote by hand, and
+what has got through anyway. For each check it records where it runs, who
+runs it, how long it takes, and how the factory makes it happen: the agent
+runs it, CI runs it on the MR, or a person does. Checks that can't run
+against the chosen preview yet (a synthetic suite hard-wired to staging)
+are written down as gaps, and checks with side effects are switched off
+for previews like any other. Until the planned [`verify` step](#checks-planned)
+exists, the skill tells the team plainly that the factory asks for the
+checks but doesn't enforce them.
 
 **Write the environment model before building the preview.** It is an inventory of
 every service, what it depends on, where each piece of its configuration
@@ -1696,6 +1734,7 @@ stopped the agent's dev stack with a `Cleanup` component; it is gone.)
 | M7 | Scenario C: `forge/github` ✅, `tracker/github` ✅ (issues), `trigger/githubcomments` ✅ (with answers), the Dev Hub login asked for on the ticket ✅, `deploy/scratchorg` ✅, `retrieve` step, browser tooling for `agent/claudecode` |
 | M8 | Scenario D: the core changes D2–D5 (D1, lazy branches, is done), `env/k8snamespace`, `deploy/helm` |
 | M9 | [MCP server and Claude plugin](#mcp-server-and-claude-plugin-planned): `<factory> mcp` with the tools above, `retrieve` outside a run, and a Claude Code plugin with the skills. Accepted when a consultant goes from "copy the org I have open" to a working scratch org from chat, on an org they haven't seen before |
+| M10 | [Checks](#checks-planned): the `verify` step, D4's `forge.CheckReader` for GitHub and GitLab, checks declared in the factory (workspace commands, CI status, suites against the environment), retries through the agent, and the results on the MR and the ticket. Accepted when BlankTracker's factory refuses to call a change ready while `./toolkit check` fails |
 
 ---
 

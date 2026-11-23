@@ -15,13 +15,14 @@ recorded with the reason and who made them.
 | | The factory runs on <host>, <N> runs at once | | |
 | | Commits: <who branches, commits and pushes> | | |
 
-## Phase 1: find out what a preview takes
+## Phase 1: find out what delivering a change takes
 
 - [ ] Repositories and the team's process as written
-- [ ] How changes get tried today
+- [ ] How changes get checked and tried today
 - [ ] How the app is deployed, from the evidence
 - [ ] Friction categories gone through (see `ENVIRONMENT.md`)
 - [ ] What a preview is, decided
+- [ ] What a delivered change is: every check, and who runs it
 - [ ] `ENVIRONMENT.md` reviewed by <person>
 
 ## Phase 2: plan the factory

@@ -153,6 +153,19 @@ and what BlankTracker showed.
   the droplet's metadata and the provider's API, so give it a read-only
   token.
 
+## Checks that live outside the repository
+
+- **Look for:** CI jobs that only run on the target branch or nightly,
+  required status checks, end-to-end suites in another repository,
+  synthetic checks in a monitoring service, a QA test plan in a wiki.
+- **Ask:** what happened to the last change between "written" and
+  "trusted", and which of those checks would you insist on for an agent's
+  change? Which ones point at fixed hostnames?
+- **Watch for:** an agent's MR that doesn't trigger the pipeline a
+  developer's does (bot accounts, branch name patterns, pipelines that
+  need approval to run), and suites with side effects (real emails, real
+  orders) that must not run against a preview. See `references/done.md`.
+
 ## The agent inherits the host's access
 
 - **Look for:** SSH config entries, cloud CLIs logged in, MCP servers,

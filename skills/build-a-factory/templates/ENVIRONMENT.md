@@ -1,10 +1,27 @@
-# What a preview is for <app>, and how it's deployed
+# What a delivered change is for <app>, and how it's deployed
 
-Where someone tries a change the factory made, why it's that, and the
-deployment it rests on: every environment of <app>, what it's made of, and
+What a change the factory made must pass before it's done, where someone
+tries it and why it's that, and the deployment it rests on: every environment of <app>, what it's made of, and
 where its configuration and data come from. Written by the
 build-a-factory skill from the evidence noted next to each fact (`infra`,
 `script`, `live`, or the person who said so).
+
+## A delivered change
+
+Decided with <person>. See the skill's `references/done.md`.
+
+- **Today:** <the checks the last change passed, from "written" to "trusted", and who ran each>
+- **Got through anyway:** <a change that passed everything and still broke something, and what would have caught it>
+
+| Check | Proves | Runs where | Run by | Takes | Required? | Under `verify` once it exists? |
+|---|---|---|---|---|---|---|
+| <`make lint test`> | <…> | <agent's sandbox> | <the agent> | <3 min> | <must pass> | <yes> |
+| <CI pipeline on the MR> | <…> | <CI> | <CI> | <12 min> | <must pass> | <yes, via CI status> |
+| <Playwright suite> | <…> | <against the preview> | <the agent> | <8 min> | <must pass> | <yes> |
+| <Checkly synthetics> | <…> | <monitoring, staging only> | <nobody for previews yet> | | <should pass> | <gap: hard-wired to staging> |
+
+- **Can't run yet, and what it would take:** <…>
+- **Must never run against a preview:** <checks with side effects, and how they're switched off>
 
 ## A preview
 
@@ -90,6 +107,7 @@ One line each, "not applicable" included (see the skill's
 | Hostnames baked into the app | |
 | Setup only a person can do | |
 | The agent's checks need tooling | |
+| Checks that live outside the repository | |
 | What the agent can reach | |
 | Plan, permission and policy limits | |
 | The machine the factory runs on | |

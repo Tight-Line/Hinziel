@@ -1,5 +1,10 @@
 # What a preview is, for this team
 
+A preview is the part of a delivered change where someone can try it.
+The checks a change must also pass are in `references/done.md`; settle
+both in Phase 1, since some checks run against the preview and constrain
+what it must be.
+
 An agent's change is worth something only once someone can try it. Where
 that is differs for every team: the staging they already deploy branches
 to, a slot on shared infrastructure, a scratch org, or an environment of
@@ -284,7 +289,9 @@ staging against how their own deploy of the target branch leaves it.
 - every endpoint responds as the original does (status codes, redirects);
 - a user can log in (or the reason they can't yet is a pending human
   action);
-- the team's smoke or end-to-end tests pass against it, if they have any;
+- the checks `ENVIRONMENT.md` runs against a deployed copy (smoke,
+  end-to-end, synthetic) pass against it, or the reason one can't run
+  yet is written down;
 - every background job and integration either works or is switched off on
   purpose, as the model says;
 - migrations ran and the data is what the model promised.

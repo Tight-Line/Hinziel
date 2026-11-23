@@ -2,11 +2,12 @@
 
 This directory is <app>'s software factory, built with
 [Hinziel](https://github.com/Tight-Line/hinziel). It takes a ticket from
-<tracker>, has <agent> implement it on a `hinziel/*` branch, deploys the
-branch to <a preview of its own | staging> and opens a merge request into
-<target branch>.
+<tracker>, has <agent> implement and check it on a `hinziel/*` branch,
+deploys the branch to <a preview of its own | staging> and opens a merge
+request into <target branch>.
 
-How the app is deployed, and how a preview differs: `ENVIRONMENT.md`.
+What a change must pass, how the app is deployed, and how a preview
+differs: `ENVIRONMENT.md`.
 How the factory was installed and why: `SETUP.md`.
 
 ## Running it
