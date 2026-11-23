@@ -1,0 +1,39 @@
+skills/build-a-factory/references/done.md
+  s_f943b75164e79d::t_d6e78c44114795 1-88,90-104
+  s_f943b75164e79d::t_9b788712c5d277 89
+skills/build-a-factory/references/first-run.md
+  s_f943b75164e79d::t_9b292de750be05 71-76
+skills/build-a-factory/references/preview.md
+  s_f943b75164e79d::t_9b292de750be05 3-7,292-294
+skills/build-a-factory/references/friction.md
+  s_f943b75164e79d::t_9b292de750be05 156-168
+skills/build-a-factory/templates/SETUP.md
+  s_f943b75164e79d::t_96dd26eea09644 18,21,25
+skills/build-a-factory/templates/FACTORY-README.md
+  s_f943b75164e79d::t_dfb801c33b9791 5-7,9-10
+README.md
+  s_f943b75164e79d::t_6fe5baf25724ed 1737
+  s_f943b75164e79d::t_45f9b0e09d4711 329-349,1071-1074,1117-1119,1145-1146,1154-1155,1200-1213
+  s_f943b75164e79d::t_9de017c5446dc0 1214
+skills/build-a-factory/templates/ENVIRONMENT.md
+  s_f943b75164e79d::t_9b292de750be05 1,3-4,9-25,110
+skills/build-a-factory/SKILL.md
+  s_f943b75164e79d::t_3018a71aad8ab3 3,8-18,20-22,27-30,78,99-101,108,110-114,121-122,126-130,145-155,160-161,234-235,250-253,262-263,266-268,299-300
+  s_f943b75164e79d::t_96dd26eea09644 79-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4728786e01e61e17c1c9392a03b6a0f4ae63a3fa",
+  "prompts": {},
+  "sessions": {
+    "s_f943b75164e79d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6253f9aa-271c-4624-a842-5225ceea0ecb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Nick Marden <nmarden@avvo.com>"
+    }
+  }
+}
