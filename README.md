@@ -118,7 +118,7 @@ Hinziel doesn't anonymize data itself. A factory can seed its environments
 however the team already does. For a team without a good way to get
 realistic, anonymized data, there's
 [Datadouble](https://github.com/datadouble/datadouble), a separate project,
-also by Tight Line and also mostly free.
+also by Tight Line and also open source.
 
 There may be room later for **paid add-ons**: specific adapters or
 customizations that are hard to build and expensive to get wrong. None are
